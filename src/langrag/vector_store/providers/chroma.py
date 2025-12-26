@@ -82,16 +82,11 @@ class ChromaVectorStore(BaseVectorStore):
 
         # Initialize client
         if persist_directory:
-            # Persistent mode
-            settings = Settings(
-                persist_directory=persist_directory,
-                anonymized_telemetry=False,
-                **(client_settings or {})
-            )
-            self._client = chromadb.Client(settings)
+            # Persistent mode - use PersistentClient
+            self._client = chromadb.PersistentClient(path=persist_directory, settings=client_settings)
             logger.info(f"Initialized Chroma in persistent mode: {persist_directory}")
         else:
-            # Ephemeral mode (in-memory)
+            # Ephemeral mode (in-memory) - use Client
             settings = Settings(
                 anonymized_telemetry=False,
                 **(client_settings or {})
@@ -193,7 +188,7 @@ class ChromaVectorStore(BaseVectorStore):
             query_embeddings=[query_vector],
             n_results=top_k,
             where=metadata_filter,
-            include=["documents", "metadatas", "distances", "embeddings"]
+            include=["documents", "metadatas", "distances"]
         )
 
         # Convert to SearchResult objects
@@ -208,18 +203,17 @@ class ChromaVectorStore(BaseVectorStore):
         documents = results['documents'][0]
         metadatas = results['metadatas'][0]
         distances = results['distances'][0]
-        embeddings = results.get('embeddings', [[]])[0]
 
         for i, chunk_id in enumerate(ids):
             # Extract metadata
             metadata = metadatas[i] if i < len(metadatas) else {}
             source_doc_id = metadata.pop("source_doc_id", "")
 
-            # Create Chunk
+            # Create Chunk (embeddings not needed in search results)
             chunk = Chunk(
                 id=chunk_id,
                 content=documents[i],
-                embedding=embeddings[i] if embeddings else None,
+                embedding=None,  # Not returned in search results
                 source_doc_id=source_doc_id,
                 metadata=metadata
             )

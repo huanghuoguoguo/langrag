@@ -278,7 +278,7 @@ class TestSeekDBVectorStore:
         reason="SeekDB not available (pyseekdb not installed)"
     )
     def test_seekdb_capabilities(self):
-        """SeekDB should support all search modes."""
+        """SeekDB should support vector search (current pyseekdb client limitations)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             store = VectorStoreFactory.create(
                 "seekdb",
@@ -290,19 +290,19 @@ class TestSeekDBVectorStore:
 
             caps = store.capabilities
             assert caps.supports_vector is True
-            assert caps.supports_fulltext is True
-            assert caps.supports_hybrid is True
+            assert caps.supports_fulltext is False  # Not supported by current pyseekdb client
+            assert caps.supports_hybrid is False    # Not supported by current pyseekdb client
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
         reason="SeekDB not available (pyseekdb not installed)"
     )
-    def test_seekdb_hybrid_search(self):
-        """Test SeekDB's native hybrid search."""
+    def test_seekdb_vector_search(self):
+        """Test SeekDB's vector search capabilities."""
         with tempfile.TemporaryDirectory() as tmpdir:
             store = VectorStoreFactory.create(
                 "seekdb",
-                collection_name="test_hybrid",
+                collection_name="test_vector",
                 dimension=3,
                 mode="embedded",
                 db_path=tmpdir
@@ -311,14 +311,14 @@ class TestSeekDBVectorStore:
             # Add test data
             chunks = [
                 Chunk(
-                    id="h1",
+                    id="v1",
                     content="Python programming language",
                     embedding=[1.0, 0.0, 0.0],
                     source_doc_id="doc1",
                     metadata={"lang": "python"}
                 ),
                 Chunk(
-                    id="h2",
+                    id="v2",
                     content="Machine learning with Python",
                     embedding=[0.8, 0.2, 0.0],
                     source_doc_id="doc2",
@@ -327,12 +327,10 @@ class TestSeekDBVectorStore:
             ]
             store.add(chunks)
 
-            # Perform hybrid search
-            results = store.search_hybrid(
+            # Perform vector search
+            results = store.search(
                 query_vector=[0.9, 0.1, 0.0],
-                query_text="Python",
-                top_k=2,
-                alpha=0.5
+                top_k=2
             )
 
             # Should return results
@@ -341,6 +339,12 @@ class TestSeekDBVectorStore:
 
             # Results should be SearchResult instances
             assert all(isinstance(r, SearchResult) for r in results)
+
+            # Check that results have proper chunk data
+            for result in results:
+                assert result.chunk.id in ["v1", "v2"]
+                assert result.score >= 0.0
+                assert result.score <= 1.0
 
 
 if __name__ == "__main__":
