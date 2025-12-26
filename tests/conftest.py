@@ -10,7 +10,8 @@ from langrag.core.document import Document
 
 # Import shared fixtures from fixtures module
 # Note: We also define our own minimal_rag_config and sample_chunks below with different configurations
-from tests.fixtures.common import (
+# The redefinitions are intentional for different test contexts
+from tests.fixtures.common import (  # noqa: F401
     duckdb_rag_config,
     sample_document_files,
     sample_documents_content,
@@ -212,7 +213,7 @@ def mock_vector_store(mocker):
 @pytest.fixture
 def large_document_file(temp_dir):
     """提供大型文档文件用于E2E测试
-    
+
     Returns:
         Path: 大型文档文件路径
     """
@@ -226,34 +227,34 @@ def large_document_file(temp_dir):
 @pytest.fixture
 def multilingual_document_files(temp_dir):
     """提供多语言文档文件
-    
+
     Returns:
         List[Path]: 多语言文档文件列表
     """
     files = []
-    
+
     # 英文文档
     en_file = temp_dir / "english.txt"
     en_file.write_text("This is an English document about Python programming.", encoding="utf-8")
     files.append(en_file)
-    
+
     # 中文文档
     zh_file = temp_dir / "chinese.txt"
     zh_file.write_text("这是一个关于Python编程的中文文档。", encoding="utf-8")
     files.append(zh_file)
-    
+
     # 日文文档
     ja_file = temp_dir / "japanese.txt"
     ja_file.write_text("これはPythonプログラミングについての日本語文書です。", encoding="utf-8")
     files.append(ja_file)
-    
+
     return files
 
 
 @pytest.fixture
 def special_chars_document_file(temp_dir):
     """提供包含特殊字符的文档文件
-    
+
     Returns:
         Path: 特殊字符文档文件路径
     """
