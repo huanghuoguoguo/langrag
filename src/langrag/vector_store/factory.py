@@ -14,6 +14,14 @@ except ImportError:
     SEEKDB_AVAILABLE = False
     logger.debug("SeekDB not available (pyseekdb not installed)")
 
+# Conditionally import Chroma if available
+try:
+    from .providers.chroma import ChromaVectorStore, CHROMA_AVAILABLE
+    CHROMA_VECTORSTORE_AVAILABLE = CHROMA_AVAILABLE
+except ImportError:
+    CHROMA_VECTORSTORE_AVAILABLE = False
+    logger.debug("Chroma not available (chromadb not installed)")
+
 
 class VectorStoreFactory:
     """Factory for creating vector store instances based on type.
@@ -29,6 +37,10 @@ class VectorStoreFactory:
     # Register SeekDB if available
     if SEEKDB_AVAILABLE:
         _registry["seekdb"] = SeekDBVectorStore
+
+    # Register Chroma if available
+    if CHROMA_VECTORSTORE_AVAILABLE:
+        _registry["chroma"] = ChromaVectorStore
 
     @classmethod
     def create(cls, store_type: str, **params: Any) -> BaseVectorStore:
