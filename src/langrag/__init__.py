@@ -17,7 +17,13 @@ from .core.search_result import SearchResult
 from .parser import BaseParser, SimpleTextParser, ParserFactory
 from .chunker import BaseChunker, FixedSizeChunker, RecursiveCharacterChunker, ChunkerFactory
 from .embedder import BaseEmbedder, MockEmbedder, EmbedderFactory
-from .vector_store import BaseVectorStore, InMemoryVectorStore, VectorStoreFactory
+from .vector_store import (
+    BaseVectorStore,
+    VectorStoreCapabilities,
+    SearchMode,
+    InMemoryVectorStore,
+    VectorStoreFactory
+)
 from .reranker import BaseReranker, NoOpReranker, RerankerFactory
 from .llm import BaseLLM, LLMFactory
 
@@ -31,6 +37,9 @@ from .pipeline.retrieval import RetrievalPipeline
 
 # Engine (high-level orchestrator)
 from .engine import RAGEngine
+
+# Utilities
+from .utils import cosine_similarity, reciprocal_rank_fusion, weighted_rrf
 
 __all__ = [
     # Version
@@ -55,6 +64,8 @@ __all__ = [
     "EmbedderFactory",
     # Vector Store
     "BaseVectorStore",
+    "VectorStoreCapabilities",
+    "SearchMode",
     "InMemoryVectorStore",
     "VectorStoreFactory",
     # Reranker
@@ -73,6 +84,10 @@ __all__ = [
     "RetrievalPipeline",
     # Engine
     "RAGEngine",
+    # Utilities
+    "cosine_similarity",
+    "reciprocal_rank_fusion",
+    "weighted_rrf",
 ]
 
 
