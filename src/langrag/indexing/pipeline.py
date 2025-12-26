@@ -1,15 +1,16 @@
 """Indexing pipeline for document processing."""
 
 from pathlib import Path
-from loguru import logger
 from typing import TYPE_CHECKING
 
-from ..parser import BaseParser
+from loguru import logger
+
 from ..chunker import BaseChunker
-from ..embedder import BaseEmbedder
-from ..vector_store import BaseVectorStore
 from ..config.models import StorageRole
+from ..embedder import BaseEmbedder
+from ..parser import BaseParser
 from ..utils.performance import timer
+from ..vector_store import BaseVectorStore
 
 if TYPE_CHECKING:
     pass
@@ -55,15 +56,16 @@ class IndexingPipeline:
         self.parser = parser
         self.chunker = chunker
         self.embedder = embedder
-        
+
         # 统一处理为列表格式
         if isinstance(vector_stores, BaseVectorStore):
             # 向后兼容：单一存储，默认为 PRIMARY 角色
             from ..config.models import StorageRole
+
             self.vector_stores = [(vector_stores, StorageRole.PRIMARY)]
         else:
             self.vector_stores = vector_stores
-        
+
         logger.info(
             f"IndexingPipeline initialized with {len(self.vector_stores)} store(s): "
             f"{[(s.__class__.__name__, r.value) for s, r in self.vector_stores]}"
@@ -135,7 +137,7 @@ class IndexingPipeline:
                 )
 
             # Attach embeddings to chunks
-            for chunk, embedding in zip(chunks, embeddings):
+            for chunk, embedding in zip(chunks, embeddings, strict=True):
                 chunk.embedding = embedding
 
         except Exception as e:
@@ -153,26 +155,26 @@ class IndexingPipeline:
 
         logger.info(f"Successfully indexed {len(chunks)} chunks from {file_path}")
         return len(chunks)
-    
+
     def _store_chunks(self, chunks):
         """将 chunks 写入所有配置的存储
-        
+
         根据存储角色决定写入策略：
         - PRIMARY / BACKUP: 写入完整数据
         - VECTOR_ONLY: 只需要 embedding（文本也会写，但主要用于向量检索）
         - FULLTEXT_ONLY: 只需要文本内容（不需要 embedding）
-        
+
         Args:
             chunks: 要存储的 chunk 列表
         """
         from ..config.models import StorageRole
-        
+
         for store, role in self.vector_stores:
             logger.debug(f"Storing to {store.__class__.__name__} (role={role.value})")
-            
+
             # 检查存储能力
             caps = store.capabilities
-            
+
             # 根据角色和能力决定是否写入
             if role == StorageRole.FULLTEXT_ONLY:
                 # 全文存储：检查是否支持全文
@@ -184,7 +186,7 @@ class IndexingPipeline:
                     continue
                 # 全文存储也需要完整 chunks（因为 add 方法需要）
                 # VDB 内部会根据自己的能力决定存储什么
-                
+
             elif role == StorageRole.VECTOR_ONLY:
                 # 向量存储：检查是否支持向量
                 if not caps.supports_vector:
@@ -195,20 +197,19 @@ class IndexingPipeline:
                     continue
                 # 确保所有 chunks 都有 embedding
                 if any(c.embedding is None for c in chunks):
-                    logger.error(f"Some chunks lack embeddings, cannot store to {store.__class__.__name__}")
+                    logger.error(
+                        f"Some chunks lack embeddings, cannot store to {store.__class__.__name__}"
+                    )
                     continue
-            
+
             # 写入存储
             try:
                 store.add(chunks)
                 logger.info(
-                    f"✓ Stored {len(chunks)} chunks to "
-                    f"{store.__class__.__name__} ({role.value})"
+                    f"✓ Stored {len(chunks)} chunks to {store.__class__.__name__} ({role.value})"
                 )
             except Exception as e:
-                logger.error(
-                    f"✗ Failed to store chunks to {store.__class__.__name__}: {e}"
-                )
+                logger.error(f"✗ Failed to store chunks to {store.__class__.__name__}: {e}")
                 # 继续写入其他存储，不中断流程
                 continue
 
@@ -252,8 +253,6 @@ class IndexingPipeline:
         )
 
         if failed:
-            logger.warning(
-                f"Failed files: {[str(path) for path, _ in failed]}"
-            )
+            logger.warning(f"Failed files: {[str(path) for path, _ in failed]}")
 
         return total

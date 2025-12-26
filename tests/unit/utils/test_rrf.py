@@ -7,6 +7,7 @@
 """
 
 import pytest
+
 from langrag import Chunk, SearchResult, reciprocal_rank_fusion, weighted_rrf
 
 
@@ -18,11 +19,36 @@ class TestRRFFusion:
     def sample_chunks(self):
         """Create sample chunks for testing."""
         return [
-            Chunk(id="chunk1", content="Python programming", embedding=[1.0, 0.0, 0.0], source_doc_id="doc1"),
-            Chunk(id="chunk2", content="Java development", embedding=[0.0, 1.0, 0.0], source_doc_id="doc1"),
-            Chunk(id="chunk3", content="Python data science", embedding=[0.8, 0.2, 0.0], source_doc_id="doc2"),
-            Chunk(id="chunk4", content="Machine learning", embedding=[0.0, 0.0, 1.0], source_doc_id="doc2"),
-            Chunk(id="chunk5", content="Python web framework", embedding=[0.9, 0.0, 0.1], source_doc_id="doc3"),
+            Chunk(
+                id="chunk1",
+                content="Python programming",
+                embedding=[1.0, 0.0, 0.0],
+                source_doc_id="doc1",
+            ),
+            Chunk(
+                id="chunk2",
+                content="Java development",
+                embedding=[0.0, 1.0, 0.0],
+                source_doc_id="doc1",
+            ),
+            Chunk(
+                id="chunk3",
+                content="Python data science",
+                embedding=[0.8, 0.2, 0.0],
+                source_doc_id="doc2",
+            ),
+            Chunk(
+                id="chunk4",
+                content="Machine learning",
+                embedding=[0.0, 0.0, 1.0],
+                source_doc_id="doc2",
+            ),
+            Chunk(
+                id="chunk5",
+                content="Python web framework",
+                embedding=[0.9, 0.0, 0.1],
+                source_doc_id="doc3",
+            ),
         ]
 
     def test_basic_rrf(self, sample_chunks):
@@ -58,10 +84,12 @@ class TestRRFFusion:
 
         # Lists with empty sublists
         list1 = []
-        list2 = [SearchResult(
-            chunk=Chunk(id="c1", content="test", embedding=[1.0], source_doc_id="doc1"),
-            score=0.9
-        )]
+        list2 = [
+            SearchResult(
+                chunk=Chunk(id="c1", content="test", embedding=[1.0], source_doc_id="doc1"),
+                score=0.9,
+            )
+        ]
         fused = reciprocal_rank_fusion([list1, list2])
         assert len(fused) == 1
 
@@ -107,7 +135,7 @@ class TestRRFFusion:
 
         # RRF score should be 1/(60 + 1) = 1/61 ≈ 0.01639
         assert len(fused) == 1
-        assert abs(fused[0].score - 1/61) < 0.0001
+        assert abs(fused[0].score - 1 / 61) < 0.0001
 
         # Same chunk in two lists
         list2 = [SearchResult(chunk=chunk, score=0.9)]
@@ -115,6 +143,4 @@ class TestRRFFusion:
 
         # RRF score should be 1/61 + 1/61 = 2/61 ≈ 0.03279
         assert len(fused) == 1
-        assert abs(fused[0].score - 2/61) < 0.0001
-
-
+        assert abs(fused[0].score - 2 / 61) < 0.0001

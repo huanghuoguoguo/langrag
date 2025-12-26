@@ -1,9 +1,11 @@
 """Performance monitoring utilities."""
 
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Callable, Any
+from typing import Any
+
 from loguru import logger
 
 
@@ -43,6 +45,7 @@ def timed(operation: str = None, threshold_ms: float = 100):
         ... def embed_texts(texts):
         ...     return embedder.embed(texts)
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -57,9 +60,10 @@ def timed(operation: str = None, threshold_ms: float = 100):
 
                 if elapsed_ms >= threshold_ms:
                     if elapsed_ms > 1000:
-                        logger.info(f"{op_name} took {elapsed_ms/1000:.2f}s")
+                        logger.info(f"{op_name} took {elapsed_ms / 1000:.2f}s")
                     else:
                         logger.debug(f"{op_name} took {elapsed_ms:.2f}ms")
 
         return wrapper
+
     return decorator

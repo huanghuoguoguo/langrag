@@ -7,7 +7,8 @@
 """
 
 import pytest
-from langrag import Document, Chunk, SearchResult
+
+from langrag import Chunk, Document, SearchResult
 
 
 @pytest.mark.unit
@@ -16,10 +17,7 @@ class TestDocument:
 
     def test_create_document(self):
         """Document can be created with required fields."""
-        doc = Document(
-            content="Test content",
-            metadata={"source": "test.txt"}
-        )
+        doc = Document(content="Test content", metadata={"source": "test.txt"})
 
         assert doc.content == "Test content"
         assert doc.metadata["source"] == "test.txt"
@@ -27,11 +25,7 @@ class TestDocument:
 
     def test_document_with_custom_id(self):
         """Document can be created with custom ID."""
-        doc = Document(
-            id="custom-123",
-            content="Test content",
-            metadata={}
-        )
+        doc = Document(id="custom-123", content="Test content", metadata={})
 
         assert doc.id == "custom-123"
 
@@ -51,7 +45,7 @@ class TestChunk:
             content="Chunk content",
             embedding=[0.1, 0.2, 0.3],
             source_doc_id="doc-123",
-            metadata={"page": 1}
+            metadata={"page": 1},
         )
 
         assert chunk.content == "Chunk content"
@@ -63,12 +57,7 @@ class TestChunk:
     def test_chunk_empty_content(self):
         """Chunk validates non-empty content."""
         with pytest.raises(ValueError):
-            Chunk(
-                content="",
-                embedding=[0.1],
-                source_doc_id="doc-1",
-                metadata={}
-            )
+            Chunk(content="", embedding=[0.1], source_doc_id="doc-1", metadata={})
 
 
 @pytest.mark.unit
@@ -77,12 +66,7 @@ class TestSearchResult:
 
     def test_create_search_result(self):
         """SearchResult can be created with chunk and score."""
-        chunk = Chunk(
-            content="Result content",
-            embedding=[0.5],
-            source_doc_id="doc-1",
-            metadata={}
-        )
+        chunk = Chunk(content="Result content", embedding=[0.5], source_doc_id="doc-1", metadata={})
 
         result = SearchResult(chunk=chunk, score=0.95)
 
@@ -91,12 +75,7 @@ class TestSearchResult:
 
     def test_search_result_score_validation(self):
         """SearchResult validates score is between 0 and 1."""
-        chunk = Chunk(
-            content="Content",
-            embedding=[0.1],
-            source_doc_id="doc-1",
-            metadata={}
-        )
+        chunk = Chunk(content="Content", embedding=[0.1], source_doc_id="doc-1", metadata={})
 
         # Valid scores
         SearchResult(chunk=chunk, score=0.0)

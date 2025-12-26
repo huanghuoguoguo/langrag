@@ -12,6 +12,7 @@ class SearchMode(str, Enum):
         FULLTEXT: Pure full-text keyword search
         HYBRID: Combined vector + text search (either native or via RRF)
     """
+
     VECTOR = "vector"
     FULLTEXT = "fulltext"
     HYBRID = "hybrid"
@@ -35,6 +36,7 @@ class VectorStoreCapabilities:
         SeekDB: VectorStoreCapabilities(vector=True, fulltext=True, hybrid=True)
         Chroma: VectorStoreCapabilities(vector=True, fulltext=False, hybrid=False)
     """
+
     supports_vector: bool = True
     supports_fulltext: bool = False
     supports_hybrid: bool = False

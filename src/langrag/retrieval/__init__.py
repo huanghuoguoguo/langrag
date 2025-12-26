@@ -4,18 +4,17 @@
 """
 
 from .base import BaseRetrievalProvider
-from .providers.vector import VectorSearchProvider
+from .factory import ProviderFactory
 from .providers.fulltext import FullTextSearchProvider
 from .providers.hybrid import HybridSearchProvider
-from .factory import ProviderFactory
+from .providers.vector import VectorSearchProvider
 from .retriever import Retriever
 
 __all__ = [
     "BaseRetrievalProvider",
-    "VectorSearchProvider", 
+    "VectorSearchProvider",
     "FullTextSearchProvider",
     "HybridSearchProvider",
     "ProviderFactory",
     "Retriever",
 ]
-

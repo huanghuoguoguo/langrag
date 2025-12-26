@@ -1,6 +1,7 @@
 """LLM factory for creating LLM instances."""
 
 from typing import Any
+
 from loguru import logger
 
 from .base import BaseLLM
@@ -36,10 +37,7 @@ class LLMFactory:
         """
         if llm_type not in cls._registry:
             available = ", ".join(cls._registry.keys()) if cls._registry else "none"
-            raise ValueError(
-                f"Unknown LLM type: '{llm_type}'. "
-                f"Available types: {available}"
-            )
+            raise ValueError(f"Unknown LLM type: '{llm_type}'. Available types: {available}")
 
         llm_class = cls._registry[llm_type]
         logger.debug(f"Creating {llm_class.__name__} with params: {params}")
@@ -58,9 +56,7 @@ class LLMFactory:
             TypeError: If llm_class is not a subclass of BaseLLM
         """
         if not issubclass(llm_class, BaseLLM):
-            raise TypeError(
-                f"{llm_class.__name__} must be a subclass of BaseLLM"
-            )
+            raise TypeError(f"{llm_class.__name__} must be a subclass of BaseLLM")
 
         cls._registry[llm_type] = llm_class
         logger.info(f"Registered LLM type '{llm_type}': {llm_class.__name__}")

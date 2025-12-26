@@ -1,12 +1,13 @@
 """Tests for DuckDB vector store."""
 
 import tempfile
-import pytest
 from pathlib import Path
 
-from langrag.vector_store.factory import VectorStoreFactory
+import pytest
+
 from langrag.core.chunk import Chunk
 from langrag.core.search_result import SearchResult
+from langrag.vector_store.factory import VectorStoreFactory
 
 try:
     from langrag.vector_store.providers.duckdb import DUCKDB_AVAILABLE
@@ -33,7 +34,7 @@ class TestDuckDBVectorStore:
         """Test creating DuckDB store with persistent database."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
-            store = VectorStoreFactory.create("duckdb", database_path=str(db_path))
+            _ = VectorStoreFactory.create("duckdb", database_path=str(db_path))
             assert db_path.exists()
 
     def test_duckdb_add_and_search(self):
@@ -49,22 +50,22 @@ class TestDuckDBVectorStore:
                 content="Python is a programming language",
                 embedding=[1.0, 0.0, 0.0],  # Unit vector in x direction
                 source_doc_id="source1",
-                metadata={"type": "programming"}
+                metadata={"type": "programming"},
             ),
             Chunk(
                 id="doc2",
                 content="Machine learning with Python",
                 embedding=[0.0, 1.0, 0.0],  # Unit vector in y direction
                 source_doc_id="source2",
-                metadata={"type": "ml"}
+                metadata={"type": "ml"},
             ),
             Chunk(
                 id="doc3",
                 content="Data science fundamentals",
                 embedding=[0.0, 0.0, 1.0],  # Unit vector in z direction
                 source_doc_id="source3",
-                metadata={"type": "data_science"}
-            )
+                metadata={"type": "data_science"},
+            ),
         ]
 
         # Add chunks
@@ -90,20 +91,20 @@ class TestDuckDBVectorStore:
                 id="doc1",
                 content="Python is a high-level programming language",
                 embedding=[1.0, 0.0, 0.0],
-                source_doc_id="source1"
+                source_doc_id="source1",
             ),
             Chunk(
                 id="doc2",
                 content="Machine learning algorithms are powerful",
                 embedding=[0.0, 1.0, 0.0],
-                source_doc_id="source2"
+                source_doc_id="source2",
             ),
             Chunk(
                 id="doc3",
                 content="Data structures in computer science",
                 embedding=[0.0, 0.0, 1.0],
-                source_doc_id="source3"
-            )
+                source_doc_id="source3",
+            ),
         ]
 
         # Add chunks
@@ -127,8 +128,12 @@ class TestDuckDBVectorStore:
 
         # Add chunks
         chunks = [
-            Chunk(id="doc1", content="Test content 1", embedding=[1.0, 0.0, 0.0], source_doc_id="src1"),
-            Chunk(id="doc2", content="Test content 2", embedding=[0.0, 1.0, 0.0], source_doc_id="src2")
+            Chunk(
+                id="doc1", content="Test content 1", embedding=[1.0, 0.0, 0.0], source_doc_id="src1"
+            ),
+            Chunk(
+                id="doc2", content="Test content 2", embedding=[0.0, 1.0, 0.0], source_doc_id="src2"
+            ),
         ]
         store.add(chunks)
 
@@ -151,8 +156,12 @@ class TestDuckDBVectorStore:
 
             # Create and populate store
             dim = 3
-            store1 = VectorStoreFactory.create("duckdb", database_path=str(db_path), vector_dimension=dim)
-            chunk = Chunk(id="doc1", content="Test content", embedding=[1.0, 0.0, 0.0], source_doc_id="src1")
+            store1 = VectorStoreFactory.create(
+                "duckdb", database_path=str(db_path), vector_dimension=dim
+            )
+            chunk = Chunk(
+                id="doc1", content="Test content", embedding=[1.0, 0.0, 0.0], source_doc_id="src1"
+            )
             store1.add([chunk])
 
             # Persist (checkpoint)
@@ -179,7 +188,7 @@ class TestDuckDBVectorStore:
             content="Test content",
             embedding=[1.0, 0.0, 0.0],
             source_doc_id="src1",
-            metadata=metadata
+            metadata=metadata,
         )
         store.add([chunk])
 

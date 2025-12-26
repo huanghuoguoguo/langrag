@@ -3,9 +3,11 @@
 """
 
 import tempfile
-import pytest
 from pathlib import Path
-from langrag import RAGEngine, RAGConfig
+
+import pytest
+
+from langrag import RAGConfig, RAGEngine
 
 
 class TestRAGIntegration:
@@ -15,28 +17,13 @@ class TestRAGIntegration:
     def config(self) -> RAGConfig:
         """创建测试配置"""
         return RAGConfig(
-            parser={
-                "type": "simple_text",
-                "params": {"encoding": "utf-8"}
-            },
-            chunker={
-                "type": "fixed_size",
-                "params": {"chunk_size": 200, "overlap": 50}
-            },
-            embedder={
-                "type": "mock",
-                "params": {"dimension": 384, "seed": 42}
-            },
-            vector_store={
-                "type": "in_memory",
-                "params": {}
-            },
-            reranker={
-                "type": "noop",
-                "params": {}
-            },
+            parser={"type": "simple_text", "params": {"encoding": "utf-8"}},
+            chunker={"type": "fixed_size", "params": {"chunk_size": 200, "overlap": 50}},
+            embedder={"type": "mock", "params": {"dimension": 384, "seed": 42}},
+            vector_store={"type": "in_memory", "params": {}},
+            reranker={"type": "noop", "params": {}},
             retrieval_top_k=5,
-            rerank_top_k=3
+            rerank_top_k=3,
         )
 
     @pytest.fixture
@@ -55,7 +42,7 @@ class TestRAGIntegration:
         机器翻译和问答系统等任务。"""
 
         doc1_path = tmp_path / "ml_intro.txt"
-        doc1_path.write_text(doc1_content, encoding='utf-8')
+        doc1_path.write_text(doc1_content, encoding="utf-8")
         docs.append(doc1_path)
 
         # 文档2：关于检索增强生成的介绍
@@ -70,7 +57,7 @@ class TestRAGIntegration:
         向量存储的搜索算法，以及可选的重排序机制。"""
 
         doc2_path = tmp_path / "rag_intro.txt"
-        doc2_path.write_text(doc2_content, encoding='utf-8')
+        doc2_path.write_text(doc2_content, encoding="utf-8")
         docs.append(doc2_path)
 
         return docs
@@ -109,14 +96,14 @@ class TestRAGIntegration:
 
         # 验证结果结构
         for result in results:
-            assert hasattr(result, 'chunk')
-            assert hasattr(result, 'score')
+            assert hasattr(result, "chunk")
+            assert hasattr(result, "score")
             assert result.score >= 0.0
             assert result.score <= 1.0
             assert result.chunk.content is not None
             assert len(result.chunk.content) > 0
             assert result.chunk.metadata is not None
-            assert 'filename' in result.chunk.metadata
+            assert "filename" in result.chunk.metadata
 
         # 由于mock embedder的随机性，我们不严格检查排序
         # 但验证所有分数都在合理范围内
@@ -142,11 +129,14 @@ class TestRAGIntegration:
                 primary_store = store
                 break
 
-        if primary_store and hasattr(primary_store, '_chunks'):
+        if primary_store and hasattr(primary_store, "_chunks"):
             for doc_path in sample_documents:
                 # 检查是否有来自该文档的块
-                doc_chunks = [chunk for chunk in primary_store._chunks.values()
-                             if chunk.metadata.get('filename') == doc_path.name]
+                doc_chunks = [
+                    chunk
+                    for chunk in primary_store._chunks.values()
+                    if chunk.metadata.get("filename") == doc_path.name
+                ]
                 assert len(doc_chunks) > 0, f"文档 {doc_path.name} 没有被正确索引"
 
     def test_retrieval_relevance(self, config: RAGConfig, sample_documents: list[Path]):
@@ -158,12 +148,7 @@ class TestRAGIntegration:
 
         # 使用更简单的测试，由于mock embedder的随机性，我们主要验证检索能正常工作
         # 而不是严格的相关性匹配
-        queries = [
-            "机器学习",
-            "RAG",
-            "深度学习",
-            "自然语言处理"
-        ]
+        queries = ["机器学习", "RAG", "深度学习", "自然语言处理"]
 
         for query in queries:
             results = engine.retrieve(query)
@@ -188,7 +173,7 @@ class TestRAGIntegration:
         assert original_chunks > 0
 
         # 保存索引
-        with tempfile.NamedTemporaryFile(suffix='.pkl', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
             save_path = f.name
 
         try:
@@ -209,7 +194,7 @@ class TestRAGIntegration:
             assert len(original_results) == len(loaded_results)
 
             # 结果应该相同（或至少相似）
-            for orig, loaded in zip(original_results, loaded_results):
+            for orig, loaded in zip(original_results, loaded_results, strict=True):
                 assert orig.chunk.id == loaded.chunk.id
                 assert abs(orig.score - loaded.score) < 0.001  # 分数应该非常接近
 
@@ -243,11 +228,11 @@ class TestRAGIntegration:
 
         for result in results:
             metadata = result.chunk.metadata
-            assert 'filename' in metadata
-            assert metadata['filename'] == doc_path.name  # 应该是文件名而不是完整路径
-            assert 'chunk_index' in metadata
-            assert isinstance(metadata['chunk_index'], int)
-            assert metadata['chunk_index'] >= 0
+            assert "filename" in metadata
+            assert metadata["filename"] == doc_path.name  # 应该是文件名而不是完整路径
+            assert "chunk_index" in metadata
+            assert isinstance(metadata["chunk_index"], int)
+            assert metadata["chunk_index"] >= 0
 
     def test_query_method(self, config: RAGConfig, sample_documents: list[Path]):
         """测试query方法（不使用LLM）"""
@@ -265,5 +250,5 @@ class TestRAGIntegration:
         assert len(result) > 0
 
         for item in result:
-            assert hasattr(item, 'chunk')
-            assert hasattr(item, 'score')
+            assert hasattr(item, "chunk")
+            assert hasattr(item, "score")

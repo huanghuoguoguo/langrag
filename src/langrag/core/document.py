@@ -1,8 +1,9 @@
 """Document entity representing a source document."""
 
 from typing import Any
-from pydantic import BaseModel, Field
 from uuid import uuid4
+
+from pydantic import BaseModel, Field
 
 
 class Document(BaseModel):

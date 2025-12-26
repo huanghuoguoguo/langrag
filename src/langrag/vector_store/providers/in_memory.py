@@ -2,13 +2,14 @@
 
 import pickle
 from pathlib import Path
+
 from loguru import logger
 
-from ..base import BaseVectorStore
-from ..capabilities import VectorStoreCapabilities
 from ...core.chunk import Chunk
 from ...core.search_result import SearchResult
 from ...utils.similarity import cosine_similarity
+from ..base import BaseVectorStore
+from ..capabilities import VectorStoreCapabilities
 
 
 class InMemoryVectorStore(BaseVectorStore):
@@ -26,9 +27,7 @@ class InMemoryVectorStore(BaseVectorStore):
         """Initialize an empty vector store."""
         self._chunks: dict[str, Chunk] = {}
         self._capabilities = VectorStoreCapabilities(
-            supports_vector=True,
-            supports_fulltext=False,
-            supports_hybrid=False
+            supports_vector=True, supports_fulltext=False, supports_hybrid=False
         )
         logger.info("Initialized InMemoryVectorStore")
 
@@ -57,11 +56,7 @@ class InMemoryVectorStore(BaseVectorStore):
 
         logger.info(f"Added {len(chunks)} chunks to store (total: {len(self._chunks)})")
 
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int = 5
-    ) -> list[SearchResult]:
+    def search(self, query_vector: list[float], top_k: int = 5) -> list[SearchResult]:
         """Search using cosine similarity.
 
         Args:
@@ -81,11 +76,9 @@ class InMemoryVectorStore(BaseVectorStore):
             results.append(SearchResult(chunk=chunk, score=score))
 
         # Sort by score descending
-        results.sort(reverse=True)
+        results.sort(key=lambda x: x.score, reverse=True)
 
-        logger.debug(
-            f"Found {len(results)} results, returning top {top_k}"
-        )
+        logger.debug(f"Found {len(results)} results, returning top {top_k}")
         return results[:top_k]
 
     def delete(self, chunk_ids: list[str]) -> None:

@@ -7,12 +7,8 @@
 """
 
 import pytest
-from langrag import (
-    Chunk,
-    VectorStoreCapabilities,
-    SearchMode,
-    InMemoryVectorStore
-)
+
+from langrag import Chunk, InMemoryVectorStore, SearchMode, VectorStoreCapabilities
 
 
 @pytest.mark.unit
@@ -31,9 +27,7 @@ class TestVectorStoreCapabilities:
     def test_capability_validation(self):
         """Capability validation should raise for unsupported modes."""
         caps = VectorStoreCapabilities(
-            supports_vector=True,
-            supports_fulltext=False,
-            supports_hybrid=False
+            supports_vector=True, supports_fulltext=False, supports_hybrid=False
         )
 
         # Should not raise for supported mode
@@ -53,10 +47,7 @@ class TestVectorStoreCapabilities:
         # Add some test data
         chunks = [
             Chunk(
-                content="Test content",
-                embedding=[0.1, 0.2, 0.3],
-                source_doc_id="doc1",
-                metadata={}
+                content="Test content", embedding=[0.1, 0.2, 0.3], source_doc_id="doc1", metadata={}
             )
         ]
         store.add(chunks)
@@ -67,9 +58,4 @@ class TestVectorStoreCapabilities:
 
         # Hybrid search should raise
         with pytest.raises(NotImplementedError, match="does not support native hybrid search"):
-            store.search_hybrid(
-                query_vector=[0.1, 0.2, 0.3],
-                query_text="test query"
-            )
-
-
+            store.search_hybrid(query_vector=[0.1, 0.2, 0.3], query_text="test query")

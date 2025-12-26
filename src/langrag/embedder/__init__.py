@@ -5,7 +5,7 @@ implementations and a factory for creating embedders.
 """
 
 from .base import BaseEmbedder
-from .providers.mock import MockEmbedder
 from .factory import EmbedderFactory
+from .providers.mock import MockEmbedder
 
 __all__ = ["BaseEmbedder", "MockEmbedder", "EmbedderFactory"]

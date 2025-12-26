@@ -1,8 +1,9 @@
 """Base chunker interface."""
 
 from abc import ABC, abstractmethod
-from ..core.document import Document
+
 from ..core.chunk import Chunk
+from ..core.document import Document
 
 
 class BaseChunker(ABC):

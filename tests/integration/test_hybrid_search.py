@@ -6,16 +6,16 @@
 - 测试SeekDB混合搜索
 """
 
-import pytest
-from pathlib import Path
 import tempfile
+
+import pytest
 
 from langrag import (
     Chunk,
-    SearchResult,
     InMemoryVectorStore,
+    SearchResult,
     VectorStoreFactory,
-    reciprocal_rank_fusion
+    reciprocal_rank_fusion,
 )
 
 
@@ -35,21 +35,21 @@ class TestMultiStoreHybridSearch:
                 content="Python is a programming language",
                 embedding=[1.0, 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={"topic": "programming"}
+                metadata={"topic": "programming"},
             ),
             Chunk(
                 id="c2",
                 content="Java is also a programming language",
                 embedding=[0.9, 0.1, 0.0],
                 source_doc_id="doc1",
-                metadata={"topic": "programming"}
+                metadata={"topic": "programming"},
             ),
             Chunk(
                 id="c3",
                 content="Python is popular for data science",
                 embedding=[0.8, 0.0, 0.2],
                 source_doc_id="doc2",
-                metadata={"topic": "data science"}
+                metadata={"topic": "data science"},
             ),
         ]
         vector_store.add(chunks)
@@ -63,14 +63,11 @@ class TestMultiStoreHybridSearch:
         text_results = [
             SearchResult(chunk=chunks[0], score=0.9),  # Python mentioned
             SearchResult(chunk=chunks[2], score=0.85),  # Python mentioned
-            SearchResult(chunk=chunks[1], score=0.3),   # No Python
+            SearchResult(chunk=chunks[1], score=0.3),  # No Python
         ]
 
         # Fuse with RRF
-        hybrid_results = reciprocal_rank_fusion(
-            [vector_results, text_results],
-            top_k=3
-        )
+        hybrid_results = reciprocal_rank_fusion([vector_results, text_results], top_k=3)
 
         # Should have at most 3 results
         assert len(hybrid_results) <= 3
@@ -87,11 +84,9 @@ class TestSeekDBVectorStore:
     @staticmethod
     def seekdb_available():
         """Check if pyseekdb is actually importable."""
-        try:
-            import pyseekdb
-            return True
-        except ImportError:
-            return False
+        import importlib.util
+
+        return importlib.util.find_spec("pyseekdb") is not None
 
     def test_seekdb_registration(self):
         """SeekDB should be registered if pyseekdb is available."""
@@ -106,8 +101,7 @@ class TestSeekDBVectorStore:
             assert "seekdb" in available_types
 
     @pytest.mark.skipif(
-        not seekdb_available.__func__(),
-        reason="SeekDB not available (pyseekdb not installed)"
+        not seekdb_available.__func__(), reason="SeekDB not available (pyseekdb not installed)"
     )
     def test_seekdb_capabilities(self):
         """SeekDB should support vector search (current pyseekdb client limitations)."""
@@ -117,17 +111,16 @@ class TestSeekDBVectorStore:
                 collection_name="test_collection",
                 dimension=3,
                 mode="embedded",
-                db_path=tmpdir
+                db_path=tmpdir,
             )
 
             caps = store.capabilities
             assert caps.supports_vector is True
             assert caps.supports_fulltext is False  # Not supported by current pyseekdb client
-            assert caps.supports_hybrid is False    # Not supported by current pyseekdb client
+            assert caps.supports_hybrid is False  # Not supported by current pyseekdb client
 
     @pytest.mark.skipif(
-        not seekdb_available.__func__(),
-        reason="SeekDB not available (pyseekdb not installed)"
+        not seekdb_available.__func__(), reason="SeekDB not available (pyseekdb not installed)"
     )
     def test_seekdb_vector_search(self):
         """Test SeekDB's vector search capabilities."""
@@ -137,7 +130,7 @@ class TestSeekDBVectorStore:
                 collection_name="test_vector",
                 dimension=3,
                 mode="embedded",
-                db_path=tmpdir
+                db_path=tmpdir,
             )
 
             # Add test data
@@ -147,23 +140,20 @@ class TestSeekDBVectorStore:
                     content="Python programming language",
                     embedding=[1.0, 0.0, 0.0],
                     source_doc_id="doc1",
-                    metadata={"lang": "python"}
+                    metadata={"lang": "python"},
                 ),
                 Chunk(
                     id="v2",
                     content="Machine learning with Python",
                     embedding=[0.8, 0.2, 0.0],
                     source_doc_id="doc2",
-                    metadata={"lang": "python"}
+                    metadata={"lang": "python"},
                 ),
             ]
             store.add(chunks)
 
             # Perform vector search
-            results = store.search(
-                query_vector=[0.9, 0.1, 0.0],
-                top_k=2
-            )
+            results = store.search(query_vector=[0.9, 0.1, 0.0], top_k=2)
 
             # Should return results
             assert len(results) > 0

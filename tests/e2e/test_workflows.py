@@ -8,9 +8,8 @@
 """
 
 import pytest
-from pathlib import Path
 
-from langrag import RAGEngine, RAGConfig, ComponentConfig
+from langrag import ComponentConfig, RAGConfig, RAGEngine
 from langrag.config.models import VectorStoreConfig
 
 
@@ -30,7 +29,7 @@ class TestBasicRAGWorkflow:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 100}),
             embedder=ComponentConfig(type="mock", params={"dimension": 384, "seed": 42}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine = RAGEngine(config)
 
@@ -55,7 +54,7 @@ class TestBasicRAGWorkflow:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 150}),
             embedder=ComponentConfig(type="mock", params={"dimension": 256, "seed": 42}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine = RAGEngine(config)
 
@@ -87,16 +86,17 @@ class TestMultiVectorStoreWorkflow:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 100}),
             embedder=ComponentConfig(type="mock", params={"dimension": 128, "seed": 42}),
             vector_store=VectorStoreConfig(
-                type="duckdb",
-                params={"database_path": str(db_file), "vector_dimension": 128}
+                type="duckdb", params={"database_path": str(db_file), "vector_dimension": 128}
             ),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine1 = RAGEngine(config1)
 
         # 索引文档
         doc_file = tmp_path / "doc.txt"
-        doc_file.write_text("Python is used for data science and machine learning.", encoding="utf-8")
+        doc_file.write_text(
+            "Python is used for data science and machine learning.", encoding="utf-8"
+        )
         num_chunks = engine1.index(doc_file)
         assert num_chunks > 0
 
@@ -106,10 +106,9 @@ class TestMultiVectorStoreWorkflow:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 100}),
             embedder=ComponentConfig(type="mock", params={"dimension": 128, "seed": 42}),
             vector_store=VectorStoreConfig(
-                type="duckdb",
-                params={"database_path": str(db_file), "vector_dimension": 128}
+                type="duckdb", params={"database_path": str(db_file), "vector_dimension": 128}
             ),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine2 = RAGEngine(config2)
 
@@ -129,7 +128,7 @@ class TestLargeScaleIndexing:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200, "overlap": 50}),
             embedder=ComponentConfig(type="mock", params={"dimension": 256, "seed": 42}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine = RAGEngine(config)
 
@@ -151,7 +150,7 @@ class TestLargeScaleIndexing:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 150}),
             embedder=ComponentConfig(type="mock", params={"dimension": 384, "seed": 42}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine = RAGEngine(config)
 
@@ -212,7 +211,7 @@ class TestRetrievalQuality:
         docs = [
             ("python.txt", "Python is a programming language used for web development."),
             ("java.txt", "Java is a programming language used for enterprise applications."),
-            ("ml.txt", "Machine learning is a field of artificial intelligence.")
+            ("ml.txt", "Machine learning is a field of artificial intelligence."),
         ]
 
         for filename, content in docs:
@@ -224,7 +223,7 @@ class TestRetrievalQuality:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200}),
             embedder=ComponentConfig(type="mock", params={"dimension": 128, "seed": 42}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
         engine = RAGEngine(config)
 

@@ -5,22 +5,24 @@ vector similarity search. It does not support full-text or hybrid
 search natively, but can be combined with other stores using RRF.
 """
 
-from typing import Optional, Any, Dict
+from typing import Any
+
 from loguru import logger
 
 try:
     import chromadb
     from chromadb.config import Settings
+
     CHROMA_AVAILABLE = True
     logger.info("ChromaDB available - ChromaVectorStore ready")
 except ImportError as e:
     CHROMA_AVAILABLE = False
     logger.warning(f"chromadb not installed - ChromaVectorStore unavailable: {e}")
 
-from ..base import BaseVectorStore
-from ..capabilities import VectorStoreCapabilities
 from ...core.chunk import Chunk
 from ...core.search_result import SearchResult
+from ..base import BaseVectorStore
+from ..capabilities import VectorStoreCapabilities
 
 
 class ChromaVectorStore(BaseVectorStore):
@@ -47,9 +49,9 @@ class ChromaVectorStore(BaseVectorStore):
     def __init__(
         self,
         collection_name: str = "langrag_chunks",
-        persist_directory: Optional[str] = None,
+        persist_directory: str | None = None,
         distance_metric: str = "cosine",
-        client_settings: Optional[Dict[str, Any]] = None,
+        client_settings: dict[str, Any] | None = None,
     ):
         """Initialize Chroma vector store.
 
@@ -65,8 +67,7 @@ class ChromaVectorStore(BaseVectorStore):
         """
         if not CHROMA_AVAILABLE:
             raise ImportError(
-                "chromadb is required for ChromaVectorStore. "
-                "Install with: pip install chromadb"
+                "chromadb is required for ChromaVectorStore. Install with: pip install chromadb"
             )
 
         valid_metrics = {"l2", "ip", "cosine"}
@@ -83,21 +84,19 @@ class ChromaVectorStore(BaseVectorStore):
         # Initialize client
         if persist_directory:
             # Persistent mode - use PersistentClient
-            self._client = chromadb.PersistentClient(path=persist_directory, settings=client_settings)
+            self._client = chromadb.PersistentClient(
+                path=persist_directory, settings=client_settings
+            )
             logger.info(f"Initialized Chroma in persistent mode: {persist_directory}")
         else:
             # Ephemeral mode (in-memory) - use Client
-            settings = Settings(
-                anonymized_telemetry=False,
-                **(client_settings or {})
-            )
+            settings = Settings(anonymized_telemetry=False, **(client_settings or {}))
             self._client = chromadb.Client(settings)
             logger.info("Initialized Chroma in ephemeral mode (in-memory)")
 
         # Get or create collection
         self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": distance_metric}
+            name=collection_name, metadata={"hnsw:space": distance_metric}
         )
 
         logger.info(
@@ -108,9 +107,7 @@ class ChromaVectorStore(BaseVectorStore):
 
         # Declare capabilities (vector only, no full-text or hybrid)
         self._capabilities = VectorStoreCapabilities(
-            supports_vector=True,
-            supports_fulltext=False,
-            supports_hybrid=False
+            supports_vector=True, supports_fulltext=False, supports_hybrid=False
         )
 
     @property
@@ -150,16 +147,13 @@ class ChromaVectorStore(BaseVectorStore):
             metadata = {
                 "source_doc_id": chunk.source_doc_id or "",
                 # Convert all metadata values to strings for Chroma compatibility
-                **{k: str(v) for k, v in chunk.metadata.items()}
+                **{k: str(v) for k, v in chunk.metadata.items()},
             }
             metadatas.append(metadata)
 
         # Add to collection
         self._collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=documents,
-            metadatas=metadatas
+            ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
         )
 
         logger.info(
@@ -171,7 +165,7 @@ class ChromaVectorStore(BaseVectorStore):
         self,
         query_vector: list[float],
         top_k: int = 5,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
         """Search using vector similarity.
 
@@ -188,21 +182,21 @@ class ChromaVectorStore(BaseVectorStore):
             query_embeddings=[query_vector],
             n_results=top_k,
             where=metadata_filter,
-            include=["documents", "metadatas", "distances"]
+            include=["documents", "metadatas", "distances"],
         )
 
         # Convert to SearchResult objects
         search_results = []
 
-        if not results['ids'] or not results['ids'][0]:
+        if not results["ids"] or not results["ids"][0]:
             logger.debug("No results found")
             return []
 
         # Chroma returns nested lists (one per query)
-        ids = results['ids'][0]
-        documents = results['documents'][0]
-        metadatas = results['metadatas'][0]
-        distances = results['distances'][0]
+        ids = results["ids"][0]
+        documents = results["documents"][0]
+        metadatas = results["metadatas"][0]
+        distances = results["distances"][0]
 
         for i, chunk_id in enumerate(ids):
             # Extract metadata
@@ -215,7 +209,7 @@ class ChromaVectorStore(BaseVectorStore):
                 content=documents[i],
                 embedding=None,  # Not returned in search results
                 source_doc_id=source_doc_id,
-                metadata=metadata
+                metadata=metadata,
             )
 
             # Convert distance to similarity score [0, 1]
@@ -241,8 +235,7 @@ class ChromaVectorStore(BaseVectorStore):
             search_results.append(SearchResult(chunk=chunk, score=score))
 
         logger.debug(
-            f"Chroma search returned {len(search_results)} results "
-            f"(requested top_k={top_k})"
+            f"Chroma search returned {len(search_results)} results (requested top_k={top_k})"
         )
 
         return search_results
@@ -270,11 +263,11 @@ class ChromaVectorStore(BaseVectorStore):
         """
         return self._collection.count()
 
-    def persist(self, path: str) -> None:
+    def persist(self, _path: str) -> None:
         """Persist is automatic in Chroma persistent mode.
 
         Args:
-            path: Ignored (Chroma manages persistence automatically)
+            _path: Ignored (Chroma manages persistence automatically)
         """
         if self.persist_directory:
             # In persistent mode, data is automatically saved
@@ -288,11 +281,11 @@ class ChromaVectorStore(BaseVectorStore):
                 "Data will be lost on exit. Use persist_directory for persistence."
             )
 
-    def load(self, path: str) -> None:
+    def load(self, _path: str) -> None:
         """Load is automatic in Chroma persistent mode.
 
         Args:
-            path: Ignored (Chroma loads on initialization)
+            _path: Ignored (Chroma loads on initialization)
 
         Raises:
             FileNotFoundError: Never raised (for interface compatibility)
@@ -303,10 +296,7 @@ class ChromaVectorStore(BaseVectorStore):
                 f"{self.persist_directory} ({self._collection.count()} chunks)"
             )
         else:
-            logger.info(
-                f"Collection {self.collection_name} is ephemeral. "
-                "No data to load."
-            )
+            logger.info(f"Collection {self.collection_name} is ephemeral. No data to load.")
 
     def clear(self) -> None:
         """Clear all chunks from the collection.
@@ -315,16 +305,8 @@ class ChromaVectorStore(BaseVectorStore):
         """
         # Get all IDs
         all_results = self._collection.get()
-        if all_results['ids']:
-            self._collection.delete(ids=all_results['ids'])
+        if all_results["ids"]:
+            self._collection.delete(ids=all_results["ids"])
             logger.info(f"Cleared all chunks from collection {self.collection_name}")
         else:
             logger.debug(f"Collection {self.collection_name} already empty")
-
-    def count(self) -> int:
-        """Get the number of chunks in the collection.
-
-        Returns:
-            Number of chunks stored
-        """
-        return self._collection.count()

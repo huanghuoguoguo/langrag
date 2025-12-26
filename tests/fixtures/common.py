@@ -3,41 +3,33 @@
 这个模块提供可在所有测试中重复使用的fixtures。
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from typing import List
 
-from langrag import (
-    Document,
-    Chunk,
-    SearchResult,
-    RAGConfig,
-    ComponentConfig
-)
+import pytest
+
+from langrag import Chunk, ComponentConfig, RAGConfig, SearchResult
 from langrag.config.models import VectorStoreConfig
 
 
 @pytest.fixture
-def sample_documents_content() -> List[str]:
+def sample_documents_content() -> list[str]:
     """提供示例文档内容列表"""
     return [
         "Machine learning is a subset of artificial intelligence. "
         "It focuses on teaching computers to learn from data. "
         "Common algorithms include neural networks, decision trees, and support vector machines.",
-
         "Python is a high-level programming language. "
         "It is widely used in data science, web development, and automation. "
         "Python has a simple syntax that makes it easy to learn.",
-
         "Natural language processing (NLP) is a field of AI. "
         "It deals with the interaction between computers and human language. "
-        "Applications include chatbots, translation, and sentiment analysis."
+        "Applications include chatbots, translation, and sentiment analysis.",
     ]
 
 
 @pytest.fixture
-def sample_document_files(tmp_path, sample_documents_content) -> List[Path]:
+def sample_document_files(tmp_path, sample_documents_content) -> list[Path]:
     """创建包含示例内容的临时文件"""
     files = []
     for i, content in enumerate(sample_documents_content):
@@ -48,7 +40,7 @@ def sample_document_files(tmp_path, sample_documents_content) -> List[Path]:
 
 
 @pytest.fixture
-def sample_chunks() -> List[Chunk]:
+def sample_chunks() -> list[Chunk]:
     """提供示例Chunk列表用于测试"""
     return [
         Chunk(
@@ -56,27 +48,27 @@ def sample_chunks() -> List[Chunk]:
             content="Python is a programming language",
             embedding=[1.0, 0.0, 0.0],
             source_doc_id="doc_1",
-            metadata={"topic": "python", "page": 1}
+            metadata={"topic": "python", "page": 1},
         ),
         Chunk(
             id="chunk_2",
             content="Machine learning uses algorithms",
             embedding=[0.0, 1.0, 0.0],
             source_doc_id="doc_2",
-            metadata={"topic": "ml", "page": 1}
+            metadata={"topic": "ml", "page": 1},
         ),
         Chunk(
             id="chunk_3",
             content="Natural language processing is AI",
             embedding=[0.0, 0.0, 1.0],
             source_doc_id="doc_3",
-            metadata={"topic": "nlp", "page": 1}
+            metadata={"topic": "nlp", "page": 1},
         ),
     ]
 
 
 @pytest.fixture
-def sample_search_results(sample_chunks) -> List[SearchResult]:
+def sample_search_results(sample_chunks) -> list[SearchResult]:
     """提供示例SearchResult列表"""
     return [
         SearchResult(chunk=sample_chunks[0], score=0.95),
@@ -93,7 +85,7 @@ def minimal_rag_config() -> RAGConfig:
         chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200, "overlap": 50}),
         embedder=ComponentConfig(type="mock", params={"dimension": 384, "seed": 42}),
         vector_store=VectorStoreConfig(type="in_memory"),
-        reranker=ComponentConfig(type="noop")
+        reranker=ComponentConfig(type="noop"),
     )
 
 
@@ -106,10 +98,9 @@ def duckdb_rag_config(tmp_path) -> RAGConfig:
         chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200}),
         embedder=ComponentConfig(type="mock", params={"dimension": 128, "seed": 42}),
         vector_store=VectorStoreConfig(
-            type="duckdb",
-            params={"database_path": str(db_path), "vector_dimension": 128}
+            type="duckdb", params={"database_path": str(db_path), "vector_dimension": 128}
         ),
-        reranker=ComponentConfig(type="noop")
+        reranker=ComponentConfig(type="noop"),
     )
 
 
@@ -135,7 +126,7 @@ def large_document_file(tmp_path) -> Path:
 
 
 @pytest.fixture
-def multilingual_document_files(tmp_path) -> List[Path]:
+def multilingual_document_files(tmp_path) -> list[Path]:
     """创建多语言文档用于测试"""
     files = []
 
@@ -143,23 +134,21 @@ def multilingual_document_files(tmp_path) -> List[Path]:
     en_file = tmp_path / "english.txt"
     en_file.write_text(
         "This is an English document about artificial intelligence and machine learning.",
-        encoding="utf-8"
+        encoding="utf-8",
     )
     files.append(en_file)
 
     # 中文文档
     zh_file = tmp_path / "chinese.txt"
     zh_file.write_text(
-        "这是一个关于人工智能和机器学习的中文文档。深度学习是人工智能的重要分支。",
-        encoding="utf-8"
+        "这是一个关于人工智能和机器学习的中文文档。深度学习是人工智能的重要分支。", encoding="utf-8"
     )
     files.append(zh_file)
 
     # 混合文档
     mixed_file = tmp_path / "mixed.txt"
     mixed_file.write_text(
-        "Machine Learning (机器学习) is a subset of AI (人工智能).",
-        encoding="utf-8"
+        "Machine Learning (机器学习) is a subset of AI (人工智能).", encoding="utf-8"
     )
     files.append(mixed_file)
 

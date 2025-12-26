@@ -1,7 +1,7 @@
 """Core data entities for LangRAG."""
 
-from .document import Document
 from .chunk import Chunk
+from .document import Document
 from .query import Query
 from .search_result import SearchResult
 

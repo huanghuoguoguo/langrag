@@ -19,7 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 # 文档解析扩展
 parsers = [
-    "PyPDF2>=3.0.0",          # PDF 支持
+    "pypdf>=3.0.0",           # PDF 支持
     "python-docx>=1.0.0",     # DOCX 支持
     "markdown>=3.5.0",         # Markdown 支持
     "beautifulsoup4>=4.12.0", # HTML/Markdown 支持
@@ -33,7 +33,7 @@ reranker = [
 
 # 完整安装（所有扩展）
 all = [
-    "PyPDF2>=3.0.0",
+    "pypdf>=3.0.0",
     "python-docx>=1.0.0",
     "markdown>=3.5.0",
     "beautifulsoup4>=4.12.0",
@@ -41,12 +41,65 @@ all = [
     "httpx>=0.25.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+# 开发依赖（供 pip 使用）
+dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+# Ruff 配置
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# 启用的规则集
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+# 忽略的规则
+ignore = [
+    "E501",  # 行长度由 formatter 处理
+    "B008",  # 函数调用中的默认参数
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # 允许 __init__.py 中未使用的导入
+"tests/**/*.py" = ["ARG", "SIM"]  # 测试文件宽松要求
+"tests/conftest.py" = ["F811"]  # 允许 conftest.py 中的 fixture 重复定义（为不同测试上下文）
+
+# Mypy 配置
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false  # 暂时关闭返回 Any 警告
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+strict_optional = false  # 暂时关闭严格 Optional 检查
+warn_redundant_casts = false  # 关闭冗余转换警告
+warn_unused_ignores = false  # 关闭未使用忽略警告
+check_untyped_defs = false  # 暂时不检查未类型化的函数
+no_implicit_optional = false  # 允许隐式 Optional
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]

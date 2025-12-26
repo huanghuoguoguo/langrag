@@ -1,13 +1,13 @@
 """Test Chroma vector store."""
 
-import pytest
 import tempfile
-from pathlib import Path
+
+import pytest
 
 from langrag import (
-    VectorStoreFactory,
     Chunk,
     SearchResult,
+    VectorStoreFactory,
 )
 
 
@@ -17,11 +17,9 @@ class TestChromaVectorStore:
     @staticmethod
     def chroma_available():
         """Check if chromadb is available."""
-        try:
-            import chromadb
-            return True
-        except ImportError:
-            return False
+        import importlib.util
+
+        return importlib.util.find_spec("chromadb") is not None
 
     def test_chroma_registration(self):
         """Chroma should be registered if chromadb is available."""
@@ -37,15 +35,11 @@ class TestChromaVectorStore:
             assert "chroma" not in available
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_ephemeral_mode(self):
         """Test Chroma in ephemeral (in-memory) mode."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_ephemeral"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_ephemeral")
 
         # Check capabilities
         caps = store.capabilities
@@ -57,16 +51,13 @@ class TestChromaVectorStore:
         assert store.count() == 0
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_persistent_mode(self):
         """Test Chroma in persistent mode."""
         with tempfile.TemporaryDirectory() as tmpdir:
             store = VectorStoreFactory.create(
-                "chroma",
-                collection_name="test_persistent",
-                persist_directory=tmpdir
+                "chroma", collection_name="test_persistent", persist_directory=tmpdir
             )
 
             # Add some data
@@ -76,14 +67,14 @@ class TestChromaVectorStore:
                     content="Test content 1",
                     embedding=[1.0, 0.0, 0.0],
                     source_doc_id="doc1",
-                    metadata={"index": 0}
+                    metadata={"index": 0},
                 ),
                 Chunk(
                     id="c2",
                     content="Test content 2",
                     embedding=[0.0, 1.0, 0.0],
                     source_doc_id="doc1",
-                    metadata={"index": 1}
+                    metadata={"index": 1},
                 ),
             ]
             store.add(chunks)
@@ -91,24 +82,18 @@ class TestChromaVectorStore:
 
             # Create new store instance with same persist_directory
             store2 = VectorStoreFactory.create(
-                "chroma",
-                collection_name="test_persistent",
-                persist_directory=tmpdir
+                "chroma", collection_name="test_persistent", persist_directory=tmpdir
             )
 
             # Should load existing data
             assert store2.count() == 2
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_add_and_search(self):
         """Test adding chunks and searching."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_add_search"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_add_search")
 
         # Add chunks
         chunks = [
@@ -117,21 +102,21 @@ class TestChromaVectorStore:
                 content="Python programming language",
                 embedding=[1.0, 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={"topic": "programming"}
+                metadata={"topic": "programming"},
             ),
             Chunk(
                 id="c2",
                 content="Java development guide",
                 embedding=[0.9, 0.1, 0.0],
                 source_doc_id="doc2",
-                metadata={"topic": "programming"}
+                metadata={"topic": "programming"},
             ),
             Chunk(
                 id="c3",
                 content="Machine learning basics",
                 embedding=[0.0, 0.0, 1.0],
                 source_doc_id="doc3",
-                metadata={"topic": "ml"}
+                metadata={"topic": "ml"},
             ),
         ]
         store.add(chunks)
@@ -149,15 +134,11 @@ class TestChromaVectorStore:
         assert results[0].score > results[1].score
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_metadata_filter(self):
         """Test metadata filtering in search."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_metadata_filter"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_metadata_filter")
 
         # Add chunks with different metadata
         chunks = [
@@ -166,32 +147,28 @@ class TestChromaVectorStore:
                 content="Python tutorial",
                 embedding=[1.0, 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={"category": "programming", "language": "python"}
+                metadata={"category": "programming", "language": "python"},
             ),
             Chunk(
                 id="prog2",
                 content="Java tutorial",
                 embedding=[0.9, 0.1, 0.0],
                 source_doc_id="doc2",
-                metadata={"category": "programming", "language": "java"}
+                metadata={"category": "programming", "language": "java"},
             ),
             Chunk(
                 id="ml1",
                 content="ML with Python",
                 embedding=[0.8, 0.0, 0.2],
                 source_doc_id="doc3",
-                metadata={"category": "ml", "language": "python"}
+                metadata={"category": "ml", "language": "python"},
             ),
         ]
         store.add(chunks)
 
         # Search only for programming category
         query_vector = [1.0, 0.0, 0.0]
-        results = store.search(
-            query_vector,
-            top_k=10,
-            metadata_filter={"category": "programming"}
-        )
+        results = store.search(query_vector, top_k=10, metadata_filter={"category": "programming"})
 
         # Should only get prog1 and prog2
         assert len(results) == 2
@@ -199,15 +176,11 @@ class TestChromaVectorStore:
         assert result_ids == {"prog1", "prog2"}
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_delete(self):
         """Test deleting chunks."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_delete"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_delete")
 
         # Add chunks
         chunks = [
@@ -216,7 +189,7 @@ class TestChromaVectorStore:
                 content=f"Content {i}",
                 embedding=[float(i), 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={}
+                metadata={},
             )
             for i in range(5)
         ]
@@ -234,15 +207,11 @@ class TestChromaVectorStore:
         assert "c3" not in result_ids
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_clear(self):
         """Test clearing all chunks."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_clear"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_clear")
 
         # Add chunks
         chunks = [
@@ -251,7 +220,7 @@ class TestChromaVectorStore:
                 content=f"Content {i}",
                 embedding=[float(i), 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={}
+                metadata={},
             )
             for i in range(3)
         ]
@@ -263,8 +232,7 @@ class TestChromaVectorStore:
         assert store.count() == 0
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_distance_metrics(self):
         """Test different distance metrics."""
@@ -272,9 +240,7 @@ class TestChromaVectorStore:
 
         for metric in metrics:
             store = VectorStoreFactory.create(
-                "chroma",
-                collection_name=f"test_{metric}",
-                distance_metric=metric
+                "chroma", collection_name=f"test_{metric}", distance_metric=metric
             )
 
             # Add test data
@@ -284,14 +250,14 @@ class TestChromaVectorStore:
                     content="Test 1",
                     embedding=[1.0, 0.0, 0.0],
                     source_doc_id="doc1",
-                    metadata={}
+                    metadata={},
                 ),
                 Chunk(
                     id="c2",
                     content="Test 2",
                     embedding=[0.0, 1.0, 0.0],
                     source_doc_id="doc1",
-                    metadata={}
+                    metadata={},
                 ),
             ]
             store.add(chunks)
@@ -302,15 +268,11 @@ class TestChromaVectorStore:
             assert all(r.score >= 0 for r in results)
 
     @pytest.mark.skipif(
-        not chroma_available.__func__(),
-        reason="Chroma not available (chromadb not installed)"
+        not chroma_available.__func__(), reason="Chroma not available (chromadb not installed)"
     )
     def test_chroma_missing_embedding_error(self):
         """Test that missing embeddings raise ValueError."""
-        store = VectorStoreFactory.create(
-            "chroma",
-            collection_name="test_missing_embedding"
-        )
+        store = VectorStoreFactory.create("chroma", collection_name="test_missing_embedding")
 
         # Try to add chunk without embedding
         chunk = Chunk(
@@ -318,7 +280,7 @@ class TestChromaVectorStore:
             content="Test",
             embedding=None,  # Missing!
             source_doc_id="doc1",
-            metadata={}
+            metadata={},
         )
 
         with pytest.raises(ValueError, match="missing embedding"):

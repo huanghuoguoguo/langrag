@@ -5,24 +5,26 @@ but does not support native hybrid search. Hybrid search can be achieved by
 combining results from both modes using RRF fusion.
 """
 
-import asyncio
+import contextlib
 import json
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from loguru import logger
 
 try:
     import duckdb
+
     DUCKDB_AVAILABLE = True
     logger.info("DuckDB available - DuckDBVectorStore ready")
 except ImportError as e:
     DUCKDB_AVAILABLE = False
     logger.warning(f"duckdb not installed - DuckDBVectorStore unavailable: {e}")
 
-from ..base import BaseVectorStore
-from ..capabilities import VectorStoreCapabilities
 from ...core.chunk import Chunk
 from ...core.search_result import SearchResult
+from ..base import BaseVectorStore
+from ..capabilities import VectorStoreCapabilities
 
 
 class DuckDBVectorStore(BaseVectorStore):
@@ -40,7 +42,7 @@ class DuckDBVectorStore(BaseVectorStore):
         self,
         database_path: str = ":memory:",
         table_name: str = "chunks",
-        vector_dimension: int = 384
+        vector_dimension: int = 384,
     ):
         """Initialize DuckDB vector store.
 
@@ -61,7 +63,7 @@ class DuckDBVectorStore(BaseVectorStore):
         self._capabilities = VectorStoreCapabilities(
             supports_vector=True,
             supports_fulltext=True,
-            supports_hybrid=False  # DuckDB doesn't support native hybrid
+            supports_hybrid=False,  # DuckDB doesn't support native hybrid
         )
 
         # Connect and initialize
@@ -114,13 +116,13 @@ class DuckDBVectorStore(BaseVectorStore):
         """Get capabilities - supports vector and full-text search."""
         return self._capabilities
 
-    def _clean_metadata(self, metadata: Dict[str, Any]) -> str:
+    def _clean_metadata(self, metadata: dict[str, Any]) -> str:
         """Convert metadata dict to JSON string for storage."""
         if metadata is None:
             return "{}"
         return json.dumps(metadata, ensure_ascii=False)
 
-    def _parse_metadata(self, metadata_json: str) -> Dict[str, Any]:
+    def _parse_metadata(self, metadata_json: str) -> dict[str, Any]:
         """Parse metadata JSON string back to dict."""
         if not metadata_json or metadata_json == "{}":
             return {}
@@ -150,13 +152,15 @@ class DuckDBVectorStore(BaseVectorStore):
         # Prepare data for insertion
         data = []
         for chunk in chunks:
-            data.append((
-                chunk.id,
-                chunk.content,
-                chunk.embedding,
-                chunk.source_doc_id or "",
-                self._clean_metadata(chunk.metadata)
-            ))
+            data.append(
+                (
+                    chunk.id,
+                    chunk.content,
+                    chunk.embedding,
+                    chunk.source_doc_id or "",
+                    self._clean_metadata(chunk.metadata),
+                )
+            )
 
         # Insert chunks
         insert_sql = f"""
@@ -202,7 +206,6 @@ class DuckDBVectorStore(BaseVectorStore):
         try:
             # Create FTS index on content column
             # DuckDB creates a table named fts_main_{table_name}
-            fts_table = f"fts_main_{self.table_name}"
             index_sql = f"""
             PRAGMA create_fts_index(
                 '{self.table_name}',
@@ -216,11 +219,7 @@ class DuckDBVectorStore(BaseVectorStore):
         except Exception as e:
             logger.warning(f"Failed to create full-text index: {e}")
 
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int = 5
-    ) -> list[SearchResult]:
+    def search(self, query_vector: list[float], top_k: int = 5) -> list[SearchResult]:
         """Search using vector similarity (VSS).
 
         Args:
@@ -254,7 +253,7 @@ class DuckDBVectorStore(BaseVectorStore):
                     content=content,
                     embedding=embedding,
                     source_doc_id=source_doc_id,
-                    metadata=metadata
+                    metadata=metadata,
                 )
 
                 # Convert distance to similarity score (cosine distance to similarity)
@@ -270,11 +269,7 @@ class DuckDBVectorStore(BaseVectorStore):
             logger.error(f"DuckDB vector search failed: {e}")
             return []
 
-    def search_fulltext(
-        self,
-        query_text: str,
-        top_k: int = 5
-    ) -> list[SearchResult]:
+    def search_fulltext(self, query_text: str, top_k: int = 5) -> list[SearchResult]:
         """Search using full-text search (FTS) with BM25.
 
         Args:
@@ -333,7 +328,7 @@ class DuckDBVectorStore(BaseVectorStore):
                     content=content,
                     embedding=embedding,
                     source_doc_id=source_doc_id,
-                    metadata=metadata
+                    metadata=metadata,
                 )
 
                 # Normalize score: divide by max to get [0, 1] range while preserving relative order
@@ -381,9 +376,7 @@ class DuckDBVectorStore(BaseVectorStore):
             Number of chunks currently stored
         """
         try:
-            result = self._connection.execute(
-                f"SELECT COUNT(*) FROM {self.table_name}"
-            ).fetchone()
+            result = self._connection.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()
             return result[0] if result else 0
 
         except Exception as e:
@@ -442,7 +435,7 @@ class DuckDBVectorStore(BaseVectorStore):
             """).fetchone()
             if result:
                 self.vector_dimension = result[0]
-        except:
+        except Exception:
             # If detection fails, keep current dimension
             pass
         temp_conn.close()
@@ -456,7 +449,5 @@ class DuckDBVectorStore(BaseVectorStore):
     def __del__(self):
         """Cleanup connection on destruction."""
         if self._connection:
-            try:
+            with contextlib.suppress(Exception):
                 self._connection.close()
-            except:
-                pass  # Ignore errors during cleanup

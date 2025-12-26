@@ -1,6 +1,7 @@
 """Mock embedder for testing (no external API)."""
 
 import random
+
 from loguru import logger
 
 from ..base import BaseEmbedder
@@ -62,10 +63,7 @@ class MockEmbedder(BaseEmbedder):
 
             # Normalize to unit length
             magnitude = sum(x**2 for x in vec) ** 0.5
-            if magnitude > 0:
-                vec = [x / magnitude for x in vec]
-            else:
-                vec = [0.0] * self._dimension
+            vec = [x / magnitude for x in vec] if magnitude > 0 else [0.0] * self._dimension
 
             embeddings.append(vec)
 

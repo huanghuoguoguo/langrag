@@ -1,10 +1,10 @@
 """Base vector store interface."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+
 from ..core.chunk import Chunk
 from ..core.search_result import SearchResult
-from .capabilities import VectorStoreCapabilities, SearchMode
+from .capabilities import VectorStoreCapabilities
 
 
 class BaseVectorStore(ABC):
@@ -39,11 +39,7 @@ class BaseVectorStore(ABC):
         pass
 
     @abstractmethod
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int = 5
-    ) -> list[SearchResult]:
+    def search(self, query_vector: list[float], top_k: int = 5) -> list[SearchResult]:
         """Search for similar chunks using vector similarity.
 
         Args:
@@ -58,11 +54,7 @@ class BaseVectorStore(ABC):
         """
         pass
 
-    def search_fulltext(
-        self,
-        query_text: str,
-        top_k: int = 5
-    ) -> list[SearchResult]:
+    def search_fulltext(self, query_text: str, top_k: int = 5) -> list[SearchResult]:
         """Search for chunks using full-text keyword matching.
 
         Default implementation raises NotImplementedError. Override this
@@ -78,16 +70,10 @@ class BaseVectorStore(ABC):
         Raises:
             NotImplementedError: If full-text search is not supported
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support full-text search"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not support full-text search")
 
     def search_hybrid(
-        self,
-        query_vector: list[float],
-        query_text: str,
-        top_k: int = 5,
-        alpha: float = 0.5
+        self, query_vector: list[float], query_text: str, top_k: int = 5, alpha: float = 0.5
     ) -> list[SearchResult]:
         """Search using hybrid mode (vector + text).
 

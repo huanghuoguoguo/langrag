@@ -5,10 +5,10 @@ implementations and a factory for creating vector stores.
 """
 
 from .base import BaseVectorStore
-from .capabilities import VectorStoreCapabilities, SearchMode
-from .providers.in_memory import InMemoryVectorStore
+from .capabilities import SearchMode, VectorStoreCapabilities
 from .factory import VectorStoreFactory
 from .manager import VectorStoreManager
+from .providers.in_memory import InMemoryVectorStore
 
 __all__ = [
     "BaseVectorStore",
@@ -16,5 +16,5 @@ __all__ = [
     "SearchMode",
     "InMemoryVectorStore",
     "VectorStoreFactory",
-    "VectorStoreManager"
+    "VectorStoreManager",
 ]

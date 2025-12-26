@@ -2,13 +2,13 @@
 
 from loguru import logger
 
+from ..chunker import BaseChunker, ChunkerFactory
+from ..embedder import BaseEmbedder, EmbedderFactory
+from ..llm import BaseLLM, LLMFactory
+from ..parser import BaseParser, ParserFactory
+from ..reranker import BaseReranker, RerankerFactory
+from ..vector_store import BaseVectorStore, VectorStoreFactory
 from .models import ComponentConfig
-from ..parser import ParserFactory, BaseParser
-from ..chunker import ChunkerFactory, BaseChunker
-from ..embedder import EmbedderFactory, BaseEmbedder
-from ..vector_store import VectorStoreFactory, BaseVectorStore
-from ..reranker import RerankerFactory, BaseReranker
-from ..llm import LLMFactory, BaseLLM
 
 
 class ComponentFactory:

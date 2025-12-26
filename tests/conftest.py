@@ -2,32 +2,24 @@
 
 import tempfile
 from pathlib import Path
-from typing import List
+
 import pytest
 
-from langrag.core.document import Document
 from langrag.core.chunk import Chunk
-from langrag import RAGConfig, ComponentConfig
-from langrag.config.models import VectorStoreConfig
-
+from langrag.core.document import Document
 
 # Import shared fixtures from fixtures module
-from tests.fixtures.common import (
-    sample_documents_content,
-    sample_document_files,
-    sample_chunks,
-    sample_search_results,
-    minimal_rag_config,
+# Note: We also define our own minimal_rag_config and sample_chunks below with different configurations
+# The redefinitions are intentional for different test contexts
+from tests.fixtures.common import (  # noqa: F401
     duckdb_rag_config,
-    large_document_file,
-    multilingual_document_files,
-    empty_document_file,
-    special_chars_document_file,
-    temp_workspace
+    sample_document_files,
+    sample_documents_content,
+    sample_search_results,
 )
 
-
 # ==================== 临时目录夹具 ====================
+
 
 @pytest.fixture
 def temp_dir():
@@ -54,6 +46,7 @@ def temp_file(temp_dir):
 
 # ==================== 示例数据夹具 ====================
 
+
 @pytest.fixture
 def sample_text():
     """提供示例文本数据
@@ -73,7 +66,7 @@ def sample_text():
 
 
 @pytest.fixture
-def sample_documents() -> List[Document]:
+def sample_documents() -> list[Document]:
     """提供示例文档列表
 
     Returns:
@@ -82,21 +75,21 @@ def sample_documents() -> List[Document]:
     return [
         Document(
             content="RAG combines retrieval and generation for better AI responses.",
-            metadata={"source": "doc1.txt", "author": "Alice"}
+            metadata={"source": "doc1.txt", "author": "Alice"},
         ),
         Document(
             content="Vector databases enable semantic search in RAG systems.",
-            metadata={"source": "doc2.txt", "author": "Bob"}
+            metadata={"source": "doc2.txt", "author": "Bob"},
         ),
         Document(
             content="Embedding models convert text into numerical vectors.",
-            metadata={"source": "doc3.txt", "author": "Charlie"}
+            metadata={"source": "doc3.txt", "author": "Charlie"},
         ),
     ]
 
 
 @pytest.fixture
-def sample_chunks() -> List[Chunk]:
+def sample_chunks() -> list[Chunk]:
     """提供示例 chunk 列表（带 embedding）
 
     Returns:
@@ -108,26 +101,27 @@ def sample_chunks() -> List[Chunk]:
             content="RAG combines retrieval and generation.",
             embedding=[0.1] * 384,
             source_doc_id="doc1.txt",
-            metadata={"position": 0}
+            metadata={"position": 0},
         ),
         Chunk(
             id="chunk-2",
             content="Vector databases enable semantic search.",
             embedding=[0.2] * 384,
             source_doc_id="doc2.txt",
-            metadata={"position": 0}
+            metadata={"position": 0},
         ),
         Chunk(
             id="chunk-3",
             content="Embedding models convert text to vectors.",
             embedding=[0.3] * 384,
             source_doc_id="doc3.txt",
-            metadata={"position": 0}
+            metadata={"position": 0},
         ),
     ]
 
 
 # ==================== 组件夹具 ====================
+
 
 @pytest.fixture
 def simple_embedder():
@@ -137,6 +131,7 @@ def simple_embedder():
         BaseEmbedder: 简单嵌入器实例
     """
     from langrag.embedder import SimpleEmbedder
+
     return SimpleEmbedder(dimension=384)
 
 
@@ -148,6 +143,7 @@ def recursive_chunker():
         RecursiveCharacterChunker: 分块器实例
     """
     from langrag.chunker.providers.recursive_character import RecursiveCharacterChunker
+
     return RecursiveCharacterChunker(chunk_size=500, chunk_overlap=50)
 
 
@@ -159,6 +155,7 @@ def simple_text_parser():
         SimpleTextParser: 解析器实例
     """
     from langrag.parser import SimpleTextParser
+
     return SimpleTextParser()
 
 
@@ -170,10 +167,12 @@ def in_memory_vector_store():
         InMemoryVectorStore: 向量存储实例
     """
     from langrag.vector_store import InMemoryVectorStore
+
     return InMemoryVectorStore()
 
 
 # ==================== Mock 夹具 ====================
+
 
 @pytest.fixture
 def mock_embedder(mocker):
@@ -183,6 +182,7 @@ def mock_embedder(mocker):
         Mock: Mock 嵌入器对象
     """
     from langrag.embedder import BaseEmbedder
+
     mock = mocker.Mock(spec=BaseEmbedder)
     mock.embed.return_value = [[0.1] * 384]
     mock.dimension = 384
@@ -201,15 +201,78 @@ def mock_vector_store(mocker):
 
     mock = mocker.Mock(spec=BaseVectorStore)
     mock.capabilities = VectorStoreCapabilities(
-        supports_vector=True,
-        supports_fulltext=False,
-        supports_hybrid=False
+        supports_vector=True, supports_fulltext=False, supports_hybrid=False
     )
     mock.count.return_value = 0
     return mock
 
 
+# ==================== E2E 测试专用夹具 ====================
+
+
+@pytest.fixture
+def large_document_file(temp_dir):
+    """提供大型文档文件用于E2E测试
+
+    Returns:
+        Path: 大型文档文件路径
+    """
+    file_path = temp_dir / "large_doc.txt"
+    # 生成一个较大的文档（约10KB）
+    content = "This is a large document for testing purposes. " * 200
+    file_path.write_text(content, encoding="utf-8")
+    return file_path
+
+
+@pytest.fixture
+def multilingual_document_files(temp_dir):
+    """提供多语言文档文件
+
+    Returns:
+        List[Path]: 多语言文档文件列表
+    """
+    files = []
+
+    # 英文文档
+    en_file = temp_dir / "english.txt"
+    en_file.write_text("This is an English document about Python programming.", encoding="utf-8")
+    files.append(en_file)
+
+    # 中文文档
+    zh_file = temp_dir / "chinese.txt"
+    zh_file.write_text("这是一个关于Python编程的中文文档。", encoding="utf-8")
+    files.append(zh_file)
+
+    # 日文文档
+    ja_file = temp_dir / "japanese.txt"
+    ja_file.write_text("これはPythonプログラミングについての日本語文書です。", encoding="utf-8")
+    files.append(ja_file)
+
+    return files
+
+
+@pytest.fixture
+def special_chars_document_file(temp_dir):
+    """提供包含特殊字符的文档文件
+
+    Returns:
+        Path: 特殊字符文档文件路径
+    """
+    file_path = temp_dir / "special_chars.txt"
+    content = """
+    Document with special characters:
+    - Emojis: 🎉 🚀 💻 🔥
+    - Symbols: © ® ™ € £ ¥
+    - Accents: café naïve résumé
+    - Math: x² + y³ = z⁴
+    - Quotes: "double" 'single' „German" «French»
+    """
+    file_path.write_text(content, encoding="utf-8")
+    return file_path
+
+
 # ==================== RAG 引擎夹具 ====================
+
 
 @pytest.fixture
 def minimal_rag_config():
@@ -218,13 +281,14 @@ def minimal_rag_config():
     Returns:
         RAGConfig: RAG 配置对象
     """
-    from langrag.config.models import RAGConfig, ComponentConfig
+    from langrag.config.models import ComponentConfig, RAGConfig, VectorStoreConfig
 
     return RAGConfig(
         parser=ComponentConfig(type="simple_text", params={}),
-        chunker=ComponentConfig(type="recursive", params={"chunk_size": 500}),
-        embedder=ComponentConfig(type="simple", params={"dimension": 384}),
-        vector_store=ComponentConfig(type="in_memory", params={}),
+        chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200}),
+        embedder=ComponentConfig(type="mock", params={"dimension": 384, "seed": 42}),
+        vector_store=VectorStoreConfig(type="in_memory"),
+        reranker=ComponentConfig(type="noop"),
     )
 
 
@@ -236,28 +300,20 @@ def rag_engine(minimal_rag_config):
         RAGEngine: RAG 引擎实例
     """
     from langrag.engine import RAGEngine
+
     return RAGEngine(minimal_rag_config)
 
 
 # ==================== 测试标记处理 ====================
 
+
 def pytest_configure(config):
     """配置 pytest，添加自定义标记"""
-    config.addinivalue_line(
-        "markers", "unit: Unit tests - 快速、隔离的单元测试"
-    )
-    config.addinivalue_line(
-        "markers", "integration: Integration tests - 组件间协作测试"
-    )
-    config.addinivalue_line(
-        "markers", "e2e: End-to-end tests - 完整业务流程测试"
-    )
-    config.addinivalue_line(
-        "markers", "smoke: Smoke tests - 快速验证核心功能"
-    )
-    config.addinivalue_line(
-        "markers", "slow: Slow tests - 执行时间 > 1s 的测试"
-    )
+    config.addinivalue_line("markers", "unit: Unit tests - 快速、隔离的单元测试")
+    config.addinivalue_line("markers", "integration: Integration tests - 组件间协作测试")
+    config.addinivalue_line("markers", "e2e: End-to-end tests - 完整业务流程测试")
+    config.addinivalue_line("markers", "smoke: Smoke tests - 快速验证核心功能")
+    config.addinivalue_line("markers", "slow: Slow tests - 执行时间 > 1s 的测试")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -279,18 +335,19 @@ def pytest_collection_modifyitems(config, items):
 
 # ==================== 测试会话钩子 ====================
 
+
 def pytest_sessionstart(session):
     """测试会话开始时的钩子"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("🧪 Starting LangRAG Test Suite")
-    print("="*70)
+    print("=" * 70)
 
 
 def pytest_sessionfinish(session, exitstatus):
     """测试会话结束时的钩子"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     if exitstatus == 0:
         print("✅ All tests passed!")
     else:
         print("❌ Some tests failed")
-    print("="*70)
+    print("=" * 70)
