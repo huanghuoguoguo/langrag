@@ -1,0 +1,18 @@
+[project]
+name = "langrag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "youhuanghe", email = "1051233107@qq.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "loguru>=0.7.3",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
