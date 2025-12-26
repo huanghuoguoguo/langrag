@@ -8,11 +8,13 @@ from .base import BaseVectorStore
 from .capabilities import VectorStoreCapabilities, SearchMode
 from .providers.in_memory import InMemoryVectorStore
 from .factory import VectorStoreFactory
+from .manager import VectorStoreManager
 
 __all__ = [
     "BaseVectorStore",
     "VectorStoreCapabilities",
     "SearchMode",
     "InMemoryVectorStore",
-    "VectorStoreFactory"
+    "VectorStoreFactory",
+    "VectorStoreManager"
 ]

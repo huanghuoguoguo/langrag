@@ -22,6 +22,14 @@ except ImportError:
     CHROMA_VECTORSTORE_AVAILABLE = False
     logger.debug("Chroma not available (chromadb not installed)")
 
+# Conditionally import DuckDB if available
+try:
+    from .providers.duckdb import DuckDBVectorStore, DUCKDB_AVAILABLE
+    DUCKDB_VECTORSTORE_AVAILABLE = DUCKDB_AVAILABLE
+except ImportError:
+    DUCKDB_VECTORSTORE_AVAILABLE = False
+    logger.debug("DuckDB not available (duckdb not installed)")
+
 
 class VectorStoreFactory:
     """Factory for creating vector store instances based on type.
@@ -41,6 +49,10 @@ class VectorStoreFactory:
     # Register Chroma if available
     if CHROMA_VECTORSTORE_AVAILABLE:
         _registry["chroma"] = ChromaVectorStore
+
+    # Register DuckDB if available
+    if DUCKDB_VECTORSTORE_AVAILABLE:
+        _registry["duckdb"] = DuckDBVectorStore
 
     @classmethod
     def create(cls, store_type: str, **params: Any) -> BaseVectorStore:

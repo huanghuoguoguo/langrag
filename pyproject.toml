@@ -9,10 +9,36 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "chromadb>=1.4.0",
+    "duckdb>=1.0.0",
     "loguru>=0.7.3",
     "pydantic>=2.12.5",
     "pyseekdb>=1.0.0b6",
     "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+# 文档解析扩展
+parsers = [
+    "PyPDF2>=3.0.0",          # PDF 支持
+    "python-docx>=1.0.0",     # DOCX 支持
+    "markdown>=3.5.0",         # Markdown 支持
+    "beautifulsoup4>=4.12.0", # HTML/Markdown 支持
+    "chardet>=5.0.0",         # 编码检测
+]
+
+# Reranker 扩展
+reranker = [
+    "httpx>=0.25.0",          # Qwen Reranker API 调用
+]
+
+# 完整安装（所有扩展）
+all = [
+    "PyPDF2>=3.0.0",
+    "python-docx>=1.0.0",
+    "markdown>=3.5.0",
+    "beautifulsoup4>=4.12.0",
+    "chardet>=5.0.0",
+    "httpx>=0.25.0",
 ]
 
 [tool.uv]

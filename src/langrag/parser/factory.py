@@ -6,20 +6,69 @@ from loguru import logger
 from .base import BaseParser
 from .providers.simple_text import SimpleTextParser
 
+# 可选依赖的 parsers
+try:
+    from .providers.pdf import PdfParser
+    PDF_PARSER_AVAILABLE = True
+except ImportError:
+    PDF_PARSER_AVAILABLE = False
+
+try:
+    from .providers.docx import DocxParser
+    DOCX_PARSER_AVAILABLE = True
+except ImportError:
+    DOCX_PARSER_AVAILABLE = False
+
+try:
+    from .providers.markdown import MarkdownParser
+    MARKDOWN_PARSER_AVAILABLE = True
+except ImportError:
+    MARKDOWN_PARSER_AVAILABLE = False
+
+try:
+    from .providers.html import HtmlParser
+    HTML_PARSER_AVAILABLE = True
+except ImportError:
+    HTML_PARSER_AVAILABLE = False
+
 
 class ParserFactory:
-    """Factory for creating parser instances based on type.
-
-    This factory maintains a registry of available parser types
-    and creates instances based on string identifiers.
+    """Parser 工厂
+    
+    根据类型创建 parser 实例。
+    支持的格式取决于已安装的依赖。
+    
+    基础支持（无额外依赖）：
+    - simple_text: 纯文本文件
+    
+    扩展支持（需要安装依赖）：
+    - pdf: PDF 文件（需要 PyPDF2）
+    - docx: Word 文档（需要 python-docx）
+    - markdown: Markdown 文件（需要 markdown, beautifulsoup4）
+    - html: HTML 文件（需要 beautifulsoup4）
     """
 
     _registry: dict[str, type[BaseParser]] = {
         "simple_text": SimpleTextParser,
-        # Future parsers can be registered here:
-        # "pdf": PdfParser,
-        # "markdown": MarkdownParser,
+        "text": SimpleTextParser,  # 别名
+        "txt": SimpleTextParser,   # 别名
     }
+    
+    # 动态注册可用的 parsers
+    if PDF_PARSER_AVAILABLE:
+        _registry["pdf"] = PdfParser
+    
+    if DOCX_PARSER_AVAILABLE:
+        _registry["docx"] = DocxParser
+        _registry["doc"] = DocxParser  # 别名（虽然不完全支持 .doc）
+    
+    if MARKDOWN_PARSER_AVAILABLE:
+        _registry["markdown"] = MarkdownParser
+        _registry["md"] = MarkdownParser  # 别名
+    
+    if HTML_PARSER_AVAILABLE:
+        _registry["html"] = HtmlParser
+        _registry["htm"] = HtmlParser  # 别名
 
     @classmethod
     def create(cls, parser_type: str, **params: Any) -> BaseParser:

@@ -224,11 +224,19 @@ class ChromaVectorStore(BaseVectorStore):
             # For IP: distance is negative dot product
             distance = distances[i]
             if self.distance_metric == "cosine":
-                score = 1.0 - distance  # Cosine distance → similarity
+                # Cosine distance: range [-1, 1] → similarity [0, 1]
+                # distance = 1 - cosine_similarity, so cosine_similarity = 1 - distance
+                # But cosine similarity can be negative, so clamp it
+                cosine_sim = 1.0 - distance
+                score = max(0.0, min(1.0, (cosine_sim + 1.0) / 2.0))  # Normalize to [0, 1]
             elif self.distance_metric == "l2":
-                score = 1.0 / (1.0 + distance)  # L2 distance → similarity
+                # L2 distance: always >= 0, convert to similarity
+                score = 1.0 / (1.0 + distance)  # Range: (0, 1]
+                score = max(0.0, min(1.0, score))  # Ensure [0, 1]
             else:  # ip (inner product)
-                score = max(0.0, distance)  # IP can be negative
+                # IP distance can be negative, normalize to [0, 1]
+                # Simple approach: use sigmoid-like function
+                score = max(0.0, min(1.0, 1.0 / (1.0 + abs(distance))))
 
             search_results.append(SearchResult(chunk=chunk, score=score))
 

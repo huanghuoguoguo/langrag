@@ -22,18 +22,30 @@ from .vector_store import (
     VectorStoreCapabilities,
     SearchMode,
     InMemoryVectorStore,
-    VectorStoreFactory
+    VectorStoreFactory,
+    VectorStoreManager
 )
 from .reranker import BaseReranker, NoOpReranker, RerankerFactory
 from .llm import BaseLLM, LLMFactory
 
 # Configuration
-from .config.models import RAGConfig, ComponentConfig
+from .config.models import RAGConfig, ComponentConfig, StorageRole
 from .config.factory import ComponentFactory
 
+# Knowledge base management
+from .knowledge import KnowledgeBase, KnowledgeBaseManager
+
 # Pipelines
-from .pipeline.indexing import IndexingPipeline
-from .pipeline.retrieval import RetrievalPipeline
+from .indexing import IndexingPipeline
+
+# Retrieval system
+from .retrieval import (
+    Retriever,
+    BaseRetrievalProvider,
+    VectorSearchProvider,
+    FullTextSearchProvider,
+    HybridSearchProvider
+)
 
 # Engine (high-level orchestrator)
 from .engine import RAGEngine
@@ -68,6 +80,7 @@ __all__ = [
     "SearchMode",
     "InMemoryVectorStore",
     "VectorStoreFactory",
+    "VectorStoreManager",
     # Reranker
     "BaseReranker",
     "NoOpReranker",
@@ -78,10 +91,19 @@ __all__ = [
     # Config
     "RAGConfig",
     "ComponentConfig",
+    "StorageRole",
     "ComponentFactory",
+    # Knowledge Base
+    "KnowledgeBase",
+    "KnowledgeBaseManager",
     # Pipelines
     "IndexingPipeline",
-    "RetrievalPipeline",
+    # Retrieval system
+    "Retriever",
+    "BaseRetrievalProvider",
+    "VectorSearchProvider",
+    "FullTextSearchProvider",
+    "HybridSearchProvider",
     # Engine
     "RAGEngine",
     # Utilities
