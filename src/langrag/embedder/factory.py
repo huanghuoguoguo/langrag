@@ -6,6 +6,14 @@ from loguru import logger
 from .base import BaseEmbedder
 from .providers.mock import MockEmbedder
 
+# Conditionally import SeekDB embedder if available
+try:
+    from .providers.seekdb_embedder import SeekDBEmbedder, SEEKDB_AVAILABLE
+    SEEKDB_EMBEDDER_AVAILABLE = SEEKDB_AVAILABLE
+except ImportError:
+    SEEKDB_EMBEDDER_AVAILABLE = False
+    logger.debug("SeekDB embedder not available (pyseekdb not installed)")
+
 
 class EmbedderFactory:
     """Factory for creating embedder instances based on type.
@@ -16,11 +24,11 @@ class EmbedderFactory:
 
     _registry: dict[str, type[BaseEmbedder]] = {
         "mock": MockEmbedder,
-        # Future embedders can be registered here:
-        # "openai": OpenAIEmbedder,
-        # "huggingface": HuggingFaceEmbedder,
-        # "cohere": CohereEmbedder,
     }
+
+    # Register SeekDB embedder only if pyseekdb is actually available
+    if SEEKDB_EMBEDDER_AVAILABLE:
+        _registry["seekdb"] = SeekDBEmbedder
 
     @classmethod
     def create(cls, embedder_type: str, **params: Any) -> BaseEmbedder:
