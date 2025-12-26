@@ -1,21 +1,23 @@
 """检索协调器 - 管理多个检索 Provider 并融合结果"""
 
 from __future__ import annotations
+
 import asyncio
 from typing import TYPE_CHECKING
+
 from loguru import logger
 
+from ..utils.performance import timer
+from ..utils.rrf import reciprocal_rank_fusion, weighted_rrf
 from .base import BaseRetrievalProvider
 from .factory import ProviderFactory
-from ..utils.rrf import reciprocal_rank_fusion, weighted_rrf
-from ..utils.performance import timer
 
 if TYPE_CHECKING:
-    from ..embedder import BaseEmbedder
-    from ..vector_store import BaseVectorStore
-    from ..core.search_result import SearchResult
     from ..config.models import StorageRole
+    from ..core.search_result import SearchResult
+    from ..embedder import BaseEmbedder
     from ..reranker import BaseReranker
+    from ..vector_store import BaseVectorStore
 
 
 class Retriever:
@@ -40,7 +42,7 @@ class Retriever:
         reranker: BaseReranker | None = None,
         fusion_strategy: str = "rrf",
         fusion_weights: list[float] | None = None,
-        rrf_k: int = 60
+        rrf_k: int = 60,
     ):
         """初始化检索协调器
 
@@ -74,7 +76,7 @@ class Retriever:
 
     def add_provider(self, provider: BaseRetrievalProvider) -> None:
         """添加一个检索 Provider
-        
+
         Args:
             provider: 检索 Provider 实例
         """
@@ -87,7 +89,7 @@ class Retriever:
         embedder: BaseEmbedder,
         vector_store: BaseVectorStore,
         storage_role: StorageRole = None,
-        reranker: BaseReranker | None = None
+        reranker: BaseReranker | None = None,
     ) -> Retriever:
         """从单个向量存储创建 Retriever（能力自适应）
 
@@ -112,7 +114,7 @@ class Retriever:
         stores_config: list[tuple[BaseVectorStore, StorageRole]],
         reranker: BaseReranker | None = None,
         fusion_strategy: str = "rrf",
-        fusion_weights: list[float] | None = None
+        fusion_weights: list[float] | None = None,
     ) -> Retriever:
         """从多个向量存储创建 Retriever（角色分工）
 
@@ -147,14 +149,11 @@ class Retriever:
             providers=providers,
             reranker=reranker,
             fusion_strategy=fusion_strategy,
-            fusion_weights=fusion_weights
+            fusion_weights=fusion_weights,
         )
 
     async def retrieve(
-        self,
-        query: str,
-        top_k: int,
-        rerank_top_k: int | None = None
+        self, query: str, top_k: int, rerank_top_k: int | None = None
     ) -> list[SearchResult]:
         """执行检索（包含可选的重排序）
 
@@ -191,57 +190,38 @@ class Retriever:
         if self.reranker is not None:
             with timer(f"Reranking {len(results)} results", threshold_ms=100):
                 from ..core.query import Query
+
                 query_obj = Query(text=query, vector=None)  # Reranker 通常不需要 vector
-                results = self.reranker.rerank(
-                    query=query_obj,
-                    results=results,
-                    top_k=rerank_top_k
-            )
+                results = self.reranker.rerank(query=query_obj, results=results, top_k=rerank_top_k)
             logger.debug(f"Reranking returned {len(results)} results")
 
         return results
 
-    async def _multi_provider_retrieve(
-        self,
-        query: str,
-        top_k: int
-    ) -> list[SearchResult]:
+    async def _multi_provider_retrieve(self, query: str, top_k: int) -> list[SearchResult]:
         """多 Provider 并行检索并融合"""
         # 每个 Provider 多检索一些候选
         candidate_k = max(top_k * 2, 20)
-        
+
         logger.info(
-            f"Parallel retrieval from {len(self.providers)} providers "
-            f"(candidate_k={candidate_k})"
+            f"Parallel retrieval from {len(self.providers)} providers (candidate_k={candidate_k})"
         )
-        
+
         # 并行检索
         tasks = [p.retrieve(query, candidate_k) for p in self.providers]
         results_list = await asyncio.gather(*tasks)
-        
+
         # 打印每个 Provider 的结果数
         for i, results in enumerate(results_list):
-            logger.debug(
-                f"  Provider {i} ({self.providers[i].name}): "
-                f"{len(results)} results"
-            )
-        
+            logger.debug(f"  Provider {i} ({self.providers[i].name}): {len(results)} results")
+
         # 融合结果
         if self.fusion_strategy == "weighted_rrf" and self.fusion_weights:
             fused = weighted_rrf(
-                results_list,
-                weights=self.fusion_weights,
-                k=self.rrf_k,
-                top_k=top_k
+                results_list, weights=self.fusion_weights, k=self.rrf_k, top_k=top_k
             )
             logger.info(f"Weighted RRF fusion: {len(fused)} results")
         else:
-            fused = reciprocal_rank_fusion(
-                results_list,
-                k=self.rrf_k,
-                top_k=top_k
-            )
+            fused = reciprocal_rank_fusion(results_list, k=self.rrf_k, top_k=top_k)
             logger.info(f"Standard RRF fusion: {len(fused)} results")
-        
-        return fused
 
+        return fused

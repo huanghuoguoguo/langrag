@@ -1,9 +1,10 @@
 """Test builders - 使用构建器模式创建测试对象"""
 
 from pathlib import Path
-from langrag.config.models import RAGConfig, ComponentConfig
-from langrag.core.document import Document
+
+from langrag.config.models import ComponentConfig, RAGConfig
 from langrag.core.chunk import Chunk
+from langrag.core.document import Document
 
 
 class RAGConfigBuilder:
@@ -12,8 +13,7 @@ class RAGConfigBuilder:
     def __init__(self):
         self._parser = ComponentConfig(type="simple_text", params={})
         self._chunker = ComponentConfig(
-            type="recursive",
-            params={"chunk_size": 500, "chunk_overlap": 50}
+            type="recursive", params={"chunk_size": 500, "chunk_overlap": 50}
         )
         self._embedder = ComponentConfig(type="simple", params={"dimension": 384})
         self._vector_store = ComponentConfig(type="in_memory", params={})
@@ -58,7 +58,7 @@ class RAGConfigBuilder:
             embedder=self._embedder,
             vector_store=self._vector_store,
             reranker=self._reranker,
-            llm=self._llm
+            llm=self._llm,
         )
 
 
@@ -131,7 +131,7 @@ class ChunkBuilder:
             content=self._content,
             embedding=self._embedding,
             source_doc_id=self._source_doc_id,
-            metadata=self._metadata
+            metadata=self._metadata,
         )
 
 

@@ -1,6 +1,6 @@
 """Configuration system for LangRAG."""
 
-from .models import ComponentConfig, RAGConfig
 from .factory import ComponentFactory
+from .models import ComponentConfig, RAGConfig
 
 __all__ = ["ComponentConfig", "RAGConfig", "ComponentFactory"]

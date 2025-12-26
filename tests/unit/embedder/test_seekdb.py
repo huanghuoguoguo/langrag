@@ -1,6 +1,7 @@
 """Test SeekDB embedder."""
 
 import pytest
+
 from langrag import EmbedderFactory
 
 
@@ -10,11 +11,9 @@ class TestSeekDBEmbedder:
     @staticmethod
     def seekdb_available():
         """Check if pyseekdb is available."""
-        try:
-            import pyseekdb
-            return True
-        except ImportError:
-            return False
+        import importlib.util
+
+        return importlib.util.find_spec("pyseekdb") is not None
 
     def test_seekdb_embedder_registration(self):
         """SeekDB embedder should be registered if pyseekdb is available."""
@@ -31,7 +30,7 @@ class TestSeekDBEmbedder:
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
-        reason="SeekDB embedder not available (pyseekdb not installed)"
+        reason="SeekDB embedder not available (pyseekdb not installed)",
     )
     def test_seekdb_embedder_creation(self):
         """Test creating SeekDB embedder."""
@@ -42,18 +41,14 @@ class TestSeekDBEmbedder:
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
-        reason="SeekDB embedder not available (pyseekdb not installed)"
+        reason="SeekDB embedder not available (pyseekdb not installed)",
     )
     def test_seekdb_embedder_embed(self):
         """Test embedding generation with SeekDB."""
         embedder = EmbedderFactory.create("seekdb")
 
         # Generate embeddings
-        texts = [
-            "Hello world",
-            "Machine learning is fascinating",
-            "Python programming language"
-        ]
+        texts = ["Hello world", "Machine learning is fascinating", "Python programming language"]
 
         embeddings = embedder.embed(texts)
 
@@ -69,7 +64,7 @@ class TestSeekDBEmbedder:
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
-        reason="SeekDB embedder not available (pyseekdb not installed)"
+        reason="SeekDB embedder not available (pyseekdb not installed)",
     )
     def test_seekdb_embedder_deterministic(self):
         """Test that SeekDB embeddings are deterministic."""
@@ -86,7 +81,7 @@ class TestSeekDBEmbedder:
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
-        reason="SeekDB embedder not available (pyseekdb not installed)"
+        reason="SeekDB embedder not available (pyseekdb not installed)",
     )
     def test_seekdb_embedder_empty_input(self):
         """Test that empty input raises ValueError."""
@@ -97,7 +92,7 @@ class TestSeekDBEmbedder:
 
     @pytest.mark.skipif(
         not seekdb_available.__func__(),
-        reason="SeekDB embedder not available (pyseekdb not installed)"
+        reason="SeekDB embedder not available (pyseekdb not installed)",
     )
     def test_seekdb_embedder_batch(self):
         """Test batch embedding generation."""

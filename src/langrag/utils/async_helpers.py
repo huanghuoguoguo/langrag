@@ -15,10 +15,12 @@ Examples:
 
 import asyncio
 import concurrent.futures
-from typing import TypeVar, Coroutine
+from collections.abc import Coroutine
+from typing import TypeVar
+
 from loguru import logger
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def run_async_in_sync_context(coro: Coroutine[None, None, T]) -> T:
@@ -64,6 +66,7 @@ def run_async_in_sync_context(coro: Coroutine[None, None, T]) -> T:
         # 尝试使用 nest_asyncio 处理嵌套循环
         try:
             import nest_asyncio
+
             nest_asyncio.apply()
             return loop.run_until_complete(coro)
 

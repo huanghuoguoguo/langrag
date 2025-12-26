@@ -1,6 +1,7 @@
 """Reranker factory for creating reranker instances."""
 
 from typing import Any
+
 from loguru import logger
 
 from .base import BaseReranker
@@ -40,8 +41,7 @@ class RerankerFactory:
         if reranker_type not in cls._registry:
             available = ", ".join(cls._registry.keys())
             raise ValueError(
-                f"Unknown reranker type: '{reranker_type}'. "
-                f"Available types: {available}"
+                f"Unknown reranker type: '{reranker_type}'. Available types: {available}"
             )
 
         reranker_class = cls._registry[reranker_type]
@@ -61,9 +61,7 @@ class RerankerFactory:
             TypeError: If reranker_class is not a subclass of BaseReranker
         """
         if not issubclass(reranker_class, BaseReranker):
-            raise TypeError(
-                f"{reranker_class.__name__} must be a subclass of BaseReranker"
-            )
+            raise TypeError(f"{reranker_class.__name__} must be a subclass of BaseReranker")
 
         cls._registry[reranker_type] = reranker_class
         logger.info(f"Registered reranker type '{reranker_type}': {reranker_class.__name__}")

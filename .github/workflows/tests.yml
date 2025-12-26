@@ -8,9 +8,46 @@ on:
   workflow_dispatch:
 
 jobs:
-  # 第一阶段：冒烟测试（最快失败）
+  # 第一阶段：代码质量检查（最快失败）
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Ruff linter
+        run: |
+          ruff check src/ tests/
+        continue-on-error: false
+
+      - name: Run Ruff formatter check
+        run: |
+          ruff format --check src/ tests/
+        continue-on-error: false
+
+      - name: Run MyPy type checker
+        run: |
+          mypy src/
+        continue-on-error: true  # 暂时允许类型检查失败
+
+  # 第二阶段：冒烟测试
   smoke:
     name: Smoke Tests
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -34,7 +71,7 @@ jobs:
           pytest -m smoke -v --maxfail=1
         continue-on-error: false
 
-  # 第二阶段：单元测试
+  # 第三阶段：单元测试
   unit:
     name: Unit Tests
     needs: smoke
@@ -75,7 +112,7 @@ jobs:
           flags: unittests
           name: codecov-umbrella
 
-  # 第三阶段：集成测试
+  # 第四阶段：集成测试
   integration:
     name: Integration Tests
     needs: unit
@@ -101,7 +138,7 @@ jobs:
         run: |
           pytest tests/integration/ -v --tb=short
 
-  # 第四阶段：端到端测试
+  # 第五阶段：端到端测试
   e2e:
     name: E2E Tests
     needs: integration

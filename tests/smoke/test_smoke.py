@@ -7,11 +7,12 @@
 - 适合 CI/CD 快速失败
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from langrag import RAGEngine, RAGConfig, ComponentConfig
+import pytest
+
+from langrag import ComponentConfig, RAGConfig, RAGEngine
 from langrag.config.models import VectorStoreConfig
 
 
@@ -26,7 +27,7 @@ class TestCoreSmoke:
             chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 200}),
             embedder=ComponentConfig(type="mock", params={"dimension": 384}),
             vector_store=VectorStoreConfig(type="in_memory"),
-            reranker=ComponentConfig(type="noop")
+            reranker=ComponentConfig(type="noop"),
         )
 
         engine = RAGEngine(config)
@@ -50,7 +51,7 @@ class TestCoreSmoke:
                 chunker=ComponentConfig(type="fixed_size", params={"chunk_size": 100}),
                 embedder=ComponentConfig(type="mock", params={"dimension": 128, "seed": 42}),
                 vector_store=VectorStoreConfig(type="in_memory"),
-                reranker=ComponentConfig(type="noop")
+                reranker=ComponentConfig(type="noop"),
             )
             engine = RAGEngine(config)
 
@@ -112,11 +113,9 @@ class TestComponentFactories:
 
 def _chroma_available():
     """检查ChromaDB是否可用"""
-    try:
-        import chromadb
-        return True
-    except ImportError:
-        return False
+    import importlib.util
+
+    return importlib.util.find_spec("chromadb") is not None
 
 
 @pytest.mark.smoke
@@ -125,16 +124,13 @@ class TestVectorStoreSmoke:
 
     def test_in_memory_vector_store_basic_flow(self):
         """InMemoryVectorStore基本流程"""
-        from langrag import InMemoryVectorStore, Chunk
+        from langrag import Chunk, InMemoryVectorStore
 
         store = InMemoryVectorStore()
 
         # 添加chunk
         chunk = Chunk(
-            content="Test content",
-            embedding=[0.1, 0.2, 0.3],
-            source_doc_id="doc1",
-            metadata={}
+            content="Test content", embedding=[0.1, 0.2, 0.3], source_doc_id="doc1", metadata={}
         )
         store.add([chunk])
 
@@ -151,17 +147,10 @@ class TestVectorStoreSmoke:
         assert "duckdb" in types
 
         # 能够创建DuckDB store
-        store = VectorStoreFactory.create(
-            "duckdb",
-            database_path=":memory:",
-            vector_dimension=128
-        )
+        store = VectorStoreFactory.create("duckdb", database_path=":memory:", vector_dimension=128)
         assert store is not None
 
-    @pytest.mark.skipif(
-        not _chroma_available(),
-        reason="ChromaDB not available"
-    )
+    @pytest.mark.skipif(not _chroma_available(), reason="ChromaDB not available")
     def test_chroma_vector_store_available(self):
         """ChromaDB向量存储可用（如果已安装）"""
         from langrag import VectorStoreFactory
@@ -176,8 +165,8 @@ class TestIndexingSmoke:
 
     def test_indexing_pipeline_works(self):
         """索引流程正常工作"""
+        from langrag import ChunkerFactory, EmbedderFactory, ParserFactory, VectorStoreFactory
         from langrag.indexing.pipeline import IndexingPipeline
-        from langrag import ParserFactory, ChunkerFactory, EmbedderFactory, VectorStoreFactory
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.txt"
@@ -191,11 +180,12 @@ class TestIndexingSmoke:
 
             # 创建索引流程
             from langrag.config.models import StorageRole
+
             pipeline = IndexingPipeline(
                 parser=parser,
                 chunker=chunker,
                 embedder=embedder,
-                vector_stores=[(vector_store, StorageRole.PRIMARY)]
+                vector_stores=[(vector_store, StorageRole.PRIMARY)],
             )
 
             # 索引文件
@@ -209,9 +199,9 @@ class TestRetrievalSmoke:
 
     def test_retrieval_works(self):
         """检索流程正常工作"""
-        from langrag import InMemoryVectorStore, Chunk, EmbedderFactory
-        from langrag.retrieval.retriever import Retriever
+        from langrag import Chunk, EmbedderFactory, InMemoryVectorStore
         from langrag.config.models import StorageRole
+        from langrag.retrieval.retriever import Retriever
 
         # 准备数据
         store = InMemoryVectorStore()
@@ -221,14 +211,14 @@ class TestRetrievalSmoke:
                 content="Python programming",
                 embedding=[1.0, 0.0, 0.0],
                 source_doc_id="doc1",
-                metadata={}
+                metadata={},
             ),
             Chunk(
                 id="c2",
                 content="Java development",
                 embedding=[0.0, 1.0, 0.0],
                 source_doc_id="doc1",
-                metadata={}
+                metadata={},
             ),
         ]
         store.add(chunks)
@@ -236,13 +226,12 @@ class TestRetrievalSmoke:
         # 创建检索器
         embedder = EmbedderFactory.create("mock", dimension=3, seed=42)
         retriever = Retriever.from_single_store(
-            embedder=embedder,
-            vector_store=store,
-            storage_role=StorageRole.PRIMARY
+            embedder=embedder, vector_store=store, storage_role=StorageRole.PRIMARY
         )
 
         # 执行检索
         import asyncio
+
         results = asyncio.run(retriever.retrieve("Python", top_k=2))
 
         assert len(results) > 0

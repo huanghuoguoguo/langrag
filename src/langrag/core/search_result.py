@@ -1,6 +1,7 @@
 """SearchResult entity representing a retrieval result."""
 
 from pydantic import BaseModel, Field
+
 from .chunk import Chunk
 
 

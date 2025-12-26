@@ -4,15 +4,13 @@ RRF is a simple but effective method for fusing ranked lists from
 multiple retrieval systems without requiring score normalization.
 """
 
-from typing import Dict
 from loguru import logger
+
 from ..core.search_result import SearchResult
 
 
 def reciprocal_rank_fusion(
-    result_lists: list[list[SearchResult]],
-    k: int = 60,
-    top_k: int = 5
+    result_lists: list[list[SearchResult]], k: int = 60, top_k: int = 5
 ) -> list[SearchResult]:
     """Combine multiple ranked result lists using RRF.
 
@@ -46,8 +44,8 @@ def reciprocal_rank_fusion(
         return []
 
     # Calculate RRF scores
-    rrf_scores: Dict[str, float] = {}  # chunk_id -> RRF score
-    chunk_map: Dict[str, SearchResult] = {}  # chunk_id -> SearchResult
+    rrf_scores: dict[str, float] = {}  # chunk_id -> RRF score
+    chunk_map: dict[str, SearchResult] = {}  # chunk_id -> SearchResult
 
     for result_list in result_lists:
         for rank, search_result in enumerate(result_list, start=1):
@@ -80,10 +78,7 @@ def reciprocal_rank_fusion(
 
 
 def weighted_rrf(
-    result_lists: list[list[SearchResult]],
-    weights: list[float],
-    k: int = 60,
-    top_k: int = 5
+    result_lists: list[list[SearchResult]], weights: list[float], k: int = 60, top_k: int = 5
 ) -> list[SearchResult]:
     """RRF with weighted contributions from each result list.
 
@@ -117,8 +112,7 @@ def weighted_rrf(
     # Validate weights
     if len(weights) != len(result_lists):
         raise ValueError(
-            f"Weights length ({len(weights)}) must match "
-            f"result_lists length ({len(result_lists)})"
+            f"Weights length ({len(weights)}) must match result_lists length ({len(result_lists)})"
         )
 
     # Normalize weights to sum to 1.0
@@ -130,7 +124,7 @@ def weighted_rrf(
     # Filter out empty lists and corresponding weights
     filtered_lists = []
     filtered_weights = []
-    for lst, weight in zip(result_lists, normalized_weights):
+    for lst, weight in zip(result_lists, normalized_weights, strict=True):
         if lst:
             filtered_lists.append(lst)
             filtered_weights.append(weight)
@@ -139,10 +133,10 @@ def weighted_rrf(
         return []
 
     # Calculate weighted RRF scores
-    rrf_scores: Dict[str, float] = {}
-    chunk_map: Dict[str, SearchResult] = {}
+    rrf_scores: dict[str, float] = {}
+    chunk_map: dict[str, SearchResult] = {}
 
-    for result_list, weight in zip(filtered_lists, filtered_weights):
+    for result_list, weight in zip(filtered_lists, filtered_weights, strict=True):
         for rank, search_result in enumerate(result_list, start=1):
             chunk_id = search_result.chunk.id
 

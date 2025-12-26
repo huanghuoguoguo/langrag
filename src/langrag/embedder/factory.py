@@ -1,6 +1,7 @@
 """Embedder factory for creating embedder instances."""
 
 from typing import Any
+
 from loguru import logger
 
 from .base import BaseEmbedder
@@ -8,7 +9,8 @@ from .providers.mock import MockEmbedder
 
 # Conditionally import SeekDB embedder if available
 try:
-    from .providers.seekdb_embedder import SeekDBEmbedder, SEEKDB_AVAILABLE
+    from .providers.seekdb_embedder import SEEKDB_AVAILABLE, SeekDBEmbedder
+
     SEEKDB_EMBEDDER_AVAILABLE = SEEKDB_AVAILABLE
 except ImportError:
     SEEKDB_EMBEDDER_AVAILABLE = False
@@ -47,8 +49,7 @@ class EmbedderFactory:
         if embedder_type not in cls._registry:
             available = ", ".join(cls._registry.keys())
             raise ValueError(
-                f"Unknown embedder type: '{embedder_type}'. "
-                f"Available types: {available}"
+                f"Unknown embedder type: '{embedder_type}'. Available types: {available}"
             )
 
         embedder_class = cls._registry[embedder_type]
@@ -68,9 +69,7 @@ class EmbedderFactory:
             TypeError: If embedder_class is not a subclass of BaseEmbedder
         """
         if not issubclass(embedder_class, BaseEmbedder):
-            raise TypeError(
-                f"{embedder_class.__name__} must be a subclass of BaseEmbedder"
-            )
+            raise TypeError(f"{embedder_class.__name__} must be a subclass of BaseEmbedder")
 
         cls._registry[embedder_type] = embedder_class
         logger.info(f"Registered embedder type '{embedder_type}': {embedder_class.__name__}")

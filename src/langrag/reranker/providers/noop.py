@@ -2,9 +2,9 @@
 
 from loguru import logger
 
-from ..base import BaseReranker
 from ...core.query import Query
 from ...core.search_result import SearchResult
+from ..base import BaseReranker
 
 
 class NoOpReranker(BaseReranker):
@@ -15,15 +15,12 @@ class NoOpReranker(BaseReranker):
     """
 
     def rerank(
-        self,
-        query: Query,
-        results: list[SearchResult],
-        top_k: int | None = None
+        self, query: Query, results: list[SearchResult], top_k: int | None = None  # noqa: ARG002
     ) -> list[SearchResult]:
         """Return results unchanged.
 
         Args:
-            query: Original query (unused)
+            query: Original query (unused, but kept for interface compatibility)
             results: Initial search results
             top_k: Number of results to return (None = all)
 

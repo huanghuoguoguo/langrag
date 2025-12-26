@@ -5,11 +5,9 @@ produces semantically coherent chunks.
 """
 
 from pathlib import Path
-import tempfile
 
-from langrag.chunker import RecursiveCharacterChunker, FixedSizeChunker
+from langrag.chunker import FixedSizeChunker, RecursiveCharacterChunker
 from langrag.core.document import Document
-
 
 # Sample technical content (DGA/RAG related)
 SAMPLE_TECH_DOCUMENT = """Retrieval-Augmented Generation: A Comprehensive Overview
@@ -60,54 +58,62 @@ def test_recursive_chunker_vs_fixed_size():
 
     # Create a document
     doc = Document(
-        content=SAMPLE_TECH_DOCUMENT,
-        metadata={"title": "RAG Overview", "type": "technical"}
+        content=SAMPLE_TECH_DOCUMENT, metadata={"title": "RAG Overview", "type": "technical"}
     )
 
     # Test RecursiveCharacterChunker
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("RECURSIVE CHARACTER CHUNKER (chunk_size=500, overlap=50)")
-    print("="*80)
+    print("=" * 80)
 
-    recursive_chunker = RecursiveCharacterChunker(
-        chunk_size=500,
-        chunk_overlap=50
-    )
+    recursive_chunker = RecursiveCharacterChunker(chunk_size=500, chunk_overlap=50)
     recursive_chunks = recursive_chunker.split([doc])
 
     print(f"\nTotal chunks: {len(recursive_chunks)}")
-    print(f"Average chunk size: {sum(len(c.content) for c in recursive_chunks) / len(recursive_chunks):.1f} chars")
+    print(
+        f"Average chunk size: {sum(len(c.content) for c in recursive_chunks) / len(recursive_chunks):.1f} chars"
+    )
 
     for i, chunk in enumerate(recursive_chunks[:5], 1):  # Show first 5 chunks
         print(f"\n--- Chunk {i} ({len(chunk.content)} chars) ---")
         # Show first 200 chars and last 100 chars to see boundaries
-        preview = chunk.content[:200] + "\n...\n" + chunk.content[-100:] if len(chunk.content) > 300 else chunk.content
+        preview = (
+            chunk.content[:200] + "\n...\n" + chunk.content[-100:]
+            if len(chunk.content) > 300
+            else chunk.content
+        )
         print(preview)
         print(f"Metadata: {chunk.metadata.get('chunking_method', 'N/A')}")
 
     # Test FixedSizeChunker for comparison
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("FIXED SIZE CHUNKER (chunk_size=500, overlap=50)")
-    print("="*80)
+    print("=" * 80)
 
     fixed_chunker = FixedSizeChunker(
         chunk_size=500,
-        overlap=50  # Note: FixedSizeChunker uses 'overlap', not 'chunk_overlap'
+        overlap=50,  # Note: FixedSizeChunker uses 'overlap', not 'chunk_overlap'
     )
     fixed_chunks = fixed_chunker.split([doc])
 
     print(f"\nTotal chunks: {len(fixed_chunks)}")
-    print(f"Average chunk size: {sum(len(c.content) for c in fixed_chunks) / len(fixed_chunks):.1f} chars")
+    print(
+        f"Average chunk size: {sum(len(c.content) for c in fixed_chunks) / len(fixed_chunks):.1f} chars"
+    )
 
     for i, chunk in enumerate(fixed_chunks[:3], 1):  # Show first 3 chunks
         print(f"\n--- Chunk {i} ({len(chunk.content)} chars) ---")
-        preview = chunk.content[:200] + "\n...\n" + chunk.content[-100:] if len(chunk.content) > 300 else chunk.content
+        preview = (
+            chunk.content[:200] + "\n...\n" + chunk.content[-100:]
+            if len(chunk.content) > 300
+            else chunk.content
+        )
         print(preview)
 
     # Analyze semantic coherence
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("SEMANTIC COHERENCE ANALYSIS")
-    print("="*80)
+    print("=" * 80)
 
     def analyze_chunk_boundaries(chunks, name):
         print(f"\n{name} - Chunk boundaries:")
@@ -116,15 +122,19 @@ def test_recursive_chunker_vs_fixed_size():
 
         for i, chunk in enumerate(chunks, 1):
             content = chunk.content.rstrip()
-            ends_with_period = any(content.endswith(punct) for punct in ['.', '。', '!', '?', ';', '；'])
-            ends_with_para = content.endswith('\n\n')
-            ends_with_newline = content.endswith('\n')
+            ends_with_period = any(
+                content.endswith(punct) for punct in [".", "。", "!", "?", ";", "；"]
+            )
+            ends_with_para = content.endswith("\n\n")
+            ends_with_newline = content.endswith("\n")
             is_semantic = ends_with_period or ends_with_para or ends_with_newline
 
             if is_semantic:
                 semantic_splits += 1
 
-            print(f"  Chunk {i}: semantic_boundary={is_semantic} (period={ends_with_period}, para={ends_with_para}, line={ends_with_newline})")
+            print(
+                f"  Chunk {i}: semantic_boundary={is_semantic} (period={ends_with_period}, para={ends_with_para}, line={ends_with_newline})"
+            )
 
         semantic_ratio = semantic_splits / total_chunks if total_chunks > 0 else 0
         print(".2f")
@@ -134,12 +144,14 @@ def test_recursive_chunker_vs_fixed_size():
     fixed_semantic_ratio = analyze_chunk_boundaries(fixed_chunks, "Fixed Chunker")
 
     # Test assertions
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST VALIDATION")
-    print("="*80)
+    print("=" * 80)
 
     # Recursive chunker should have higher semantic coherence
-    assert recursive_semantic_ratio > fixed_semantic_ratio, f"Recursive chunker should have better semantic boundaries: {recursive_semantic_ratio} vs {fixed_semantic_ratio}"
+    assert recursive_semantic_ratio > fixed_semantic_ratio, (
+        f"Recursive chunker should have better semantic boundaries: {recursive_semantic_ratio} vs {fixed_semantic_ratio}"
+    )
 
     # Both should produce reasonable chunk sizes
     recursive_avg_size = sum(len(c.content) for c in recursive_chunks) / len(recursive_chunks)
@@ -150,14 +162,22 @@ def test_recursive_chunker_vs_fixed_size():
 
     # Chunks should not be too small (avoid excessive splitting)
     min_reasonable_size = 50  # Allow some small chunks but not too many
-    recursive_small_chunks = sum(1 for c in recursive_chunks if len(c.content) < min_reasonable_size)
+    recursive_small_chunks = sum(
+        1 for c in recursive_chunks if len(c.content) < min_reasonable_size
+    )
     fixed_small_chunks = sum(1 for c in fixed_chunks if len(c.content) < min_reasonable_size)
 
-    print(f"Recursive chunker small chunks (<{min_reasonable_size} chars): {recursive_small_chunks}/{len(recursive_chunks)}")
-    print(f"Fixed chunker small chunks (<{min_reasonable_size} chars): {fixed_small_chunks}/{len(fixed_chunks)}")
+    print(
+        f"Recursive chunker small chunks (<{min_reasonable_size} chars): {recursive_small_chunks}/{len(recursive_chunks)}"
+    )
+    print(
+        f"Fixed chunker small chunks (<{min_reasonable_size} chars): {fixed_small_chunks}/{len(fixed_chunks)}"
+    )
 
     # Recursive chunker should not produce excessively small chunks
-    assert recursive_small_chunks <= len(recursive_chunks) * 0.3, f"Too many small chunks in recursive splitter: {recursive_small_chunks}/{len(recursive_chunks)}"
+    assert recursive_small_chunks <= len(recursive_chunks) * 0.3, (
+        f"Too many small chunks in recursive splitter: {recursive_small_chunks}/{len(recursive_chunks)}"
+    )
 
     print("\n✅ All validation tests passed!")
 
@@ -172,15 +192,12 @@ def test_with_custom_file():
         print("\nNo test_document.txt found. Skipping custom file test.")
         return
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TESTING WITH CUSTOM FILE: test_document.txt")
-    print("="*80)
+    print("=" * 80)
 
     content = test_file.read_text(encoding="utf-8")
-    doc = Document(
-        content=content,
-        metadata={"source": str(test_file.absolute())}
-    )
+    doc = Document(content=content, metadata={"source": str(test_file.absolute())})
 
     chunker = RecursiveCharacterChunker(chunk_size=500, chunk_overlap=50)
     chunks = chunker.split([doc])
@@ -198,9 +215,9 @@ if __name__ == "__main__":
     recursive_chunks, fixed_chunks = test_recursive_chunker_vs_fixed_size()
     test_with_custom_file()
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TESTS COMPLETE")
-    print("="*80)
+    print("=" * 80)
     print(f"\nRecursive chunker created {len(recursive_chunks)} chunks")
     print(f"Fixed chunker created {len(fixed_chunks)} chunks")
     print("\nRecursive chunker should show better semantic boundaries!")

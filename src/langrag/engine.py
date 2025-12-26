@@ -1,13 +1,14 @@
 """RAG Engine - High-level orchestrator for RAG operations."""
 
 from pathlib import Path
+
 from loguru import logger
 
-from .config.models import RAGConfig, StorageRole
 from .config.factory import ComponentFactory
+from .config.models import RAGConfig, StorageRole
+from .core.search_result import SearchResult
 from .indexing import IndexingPipeline
 from .retrieval import Retriever
-from .core.search_result import SearchResult
 from .utils import run_async_in_sync_context
 
 
@@ -89,12 +90,13 @@ class RAGEngine:
             raise ValueError(f"Invalid retrieval mode: {retrieval_config.mode}")
 
         # Check fusion weights
-        if retrieval_config.fusion_weights:
-            if len(retrieval_config.fusion_weights) != len(vector_stores):
-                raise ValueError(
-                    f"Fusion weights count ({len(retrieval_config.fusion_weights)}) "
-                    f"must match vector stores count ({len(vector_stores)})"
-                )
+        if retrieval_config.fusion_weights and len(retrieval_config.fusion_weights) != len(
+            vector_stores
+        ):
+            raise ValueError(
+                f"Fusion weights count ({len(retrieval_config.fusion_weights)}) "
+                f"must match vector stores count ({len(vector_stores)})"
+            )
 
         logger.debug("Configuration validation passed")
 
@@ -105,26 +107,24 @@ class RAGEngine:
         self.parser = ComponentFactory.create_parser(self.config.parser)
         self.chunker = ComponentFactory.create_chunker(self.config.chunker)
         self.embedder = ComponentFactory.create_embedder(self.config.embedder)
-        
+
         # 创建向量存储（支持单一或多个）
         vector_store_configs = self.config.get_vector_stores()
-        
+
         if not vector_store_configs:
             raise ValueError("No vector store configured")
-        
+
         self.vector_stores = []
         for vs_config in vector_store_configs:
             store = ComponentFactory.create_vector_store(vs_config)
-            role = vs_config.role if hasattr(vs_config, 'role') else StorageRole.PRIMARY
+            role = vs_config.role if hasattr(vs_config, "role") else StorageRole.PRIMARY
             self.vector_stores.append((store, role))
             logger.info(f"Created vector store: {store.__class__.__name__} (role={role.value})")
 
         # Optional components
         self.reranker = None
         if self.config.reranker:
-            self.reranker = ComponentFactory.create_reranker(
-                self.config.reranker
-            )
+            self.reranker = ComponentFactory.create_reranker(self.config.reranker)
 
         self.llm = None
         if self.config.llm:
@@ -195,15 +195,13 @@ class RAGEngine:
             Configured Retriever instance
         """
         vector_store, storage_role = self.vector_stores[0]
-        logger.info(
-            f"Using single-store retrieval mode: {vector_store.__class__.__name__}"
-        )
+        logger.info(f"Using single-store retrieval mode: {vector_store.__class__.__name__}")
 
         return Retriever.from_single_store(
             embedder=self.embedder,
             vector_store=vector_store,
             storage_role=storage_role,
-            reranker=self.reranker
+            reranker=self.reranker,
         )
 
     def _create_multi_store_retriever(self, retrieval_config) -> Retriever:
@@ -215,9 +213,7 @@ class RAGEngine:
         Returns:
             Configured Retriever instance
         """
-        logger.info(
-            f"Using multi-store retrieval mode with {len(self.vector_stores)} stores"
-        )
+        logger.info(f"Using multi-store retrieval mode with {len(self.vector_stores)} stores")
 
         return Retriever.from_multi_stores(
             embedder=self.embedder,
@@ -265,7 +261,7 @@ class RAGEngine:
 
         return self.indexing_pipeline.index_files(file_paths)
 
-    def retrieve(self, query: str) -> list[SearchResult]:
+    def retrieve(self, query: str, top_k: int | None = None) -> list[SearchResult]:
         """Retrieve relevant chunks for a query.
 
         This is a synchronous wrapper around retrieve_async().
@@ -273,6 +269,7 @@ class RAGEngine:
 
         Args:
             query: Query string
+            top_k: Number of results to return (overrides config default if provided)
 
         Returns:
             List of search results, sorted by relevance
@@ -283,15 +280,16 @@ class RAGEngine:
         if not query or not query.strip():
             raise ValueError("query cannot be empty")
 
-        return run_async_in_sync_context(self.retrieve_async(query))
+        return run_async_in_sync_context(self.retrieve_async(query, top_k=top_k))
 
-    async def retrieve_async(self, query: str) -> list[SearchResult]:
+    async def retrieve_async(self, query: str, top_k: int | None = None) -> list[SearchResult]:
         """Retrieve relevant chunks for a query (async version).
 
         This is the recommended method for async environments.
 
         Args:
             query: Query string
+            top_k: Number of results to return (overrides config default if provided)
 
         Returns:
             List of search results, sorted by relevance
@@ -302,10 +300,11 @@ class RAGEngine:
         if not query or not query.strip():
             raise ValueError("query cannot be empty")
 
+        # Use provided top_k or fall back to config default
+        effective_top_k = top_k if top_k is not None else self._retrieval_top_k
+
         return await self.retriever.retrieve(
-            query=query,
-            top_k=self._retrieval_top_k,
-            rerank_top_k=self._rerank_top_k
+            query=query, top_k=effective_top_k, rerank_top_k=self._rerank_top_k
         )
 
     def query(self, query: str, use_llm: bool = True) -> str | list[SearchResult]:

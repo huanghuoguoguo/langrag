@@ -1,6 +1,7 @@
 """Vector store factory for creating vector store instances."""
 
 from typing import Any
+
 from loguru import logger
 
 from .base import BaseVectorStore
@@ -9,6 +10,7 @@ from .providers.in_memory import InMemoryVectorStore
 # Conditionally import SeekDB if available
 try:
     from .providers.seekdb import SeekDBVectorStore
+
     SEEKDB_AVAILABLE = True
 except ImportError:
     SEEKDB_AVAILABLE = False
@@ -16,7 +18,8 @@ except ImportError:
 
 # Conditionally import Chroma if available
 try:
-    from .providers.chroma import ChromaVectorStore, CHROMA_AVAILABLE
+    from .providers.chroma import CHROMA_AVAILABLE, ChromaVectorStore
+
     CHROMA_VECTORSTORE_AVAILABLE = CHROMA_AVAILABLE
 except ImportError:
     CHROMA_VECTORSTORE_AVAILABLE = False
@@ -24,7 +27,8 @@ except ImportError:
 
 # Conditionally import DuckDB if available
 try:
-    from .providers.duckdb import DuckDBVectorStore, DUCKDB_AVAILABLE
+    from .providers.duckdb import DUCKDB_AVAILABLE, DuckDBVectorStore
+
     DUCKDB_VECTORSTORE_AVAILABLE = DUCKDB_AVAILABLE
 except ImportError:
     DUCKDB_VECTORSTORE_AVAILABLE = False
@@ -71,8 +75,7 @@ class VectorStoreFactory:
         if store_type not in cls._registry:
             available = ", ".join(cls._registry.keys())
             raise ValueError(
-                f"Unknown vector store type: '{store_type}'. "
-                f"Available types: {available}"
+                f"Unknown vector store type: '{store_type}'. Available types: {available}"
             )
 
         store_class = cls._registry[store_type]
@@ -92,9 +95,7 @@ class VectorStoreFactory:
             TypeError: If store_class is not a subclass of BaseVectorStore
         """
         if not issubclass(store_class, BaseVectorStore):
-            raise TypeError(
-                f"{store_class.__name__} must be a subclass of BaseVectorStore"
-            )
+            raise TypeError(f"{store_class.__name__} must be a subclass of BaseVectorStore")
 
         cls._registry[store_type] = store_class
         logger.info(f"Registered vector store type '{store_type}': {store_class.__name__}")

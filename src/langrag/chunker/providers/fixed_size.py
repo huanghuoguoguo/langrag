@@ -2,9 +2,9 @@
 
 from loguru import logger
 
-from ..base import BaseChunker
-from ...core.document import Document
 from ...core.chunk import Chunk
+from ...core.document import Document
+from ..base import BaseChunker
 
 
 class FixedSizeChunker(BaseChunker):
@@ -50,13 +50,9 @@ class FixedSizeChunker(BaseChunker):
         for doc in documents:
             doc_chunks = self._split_document(doc)
             chunks.extend(doc_chunks)
-            logger.debug(
-                f"Split document {doc.id} into {len(doc_chunks)} chunks"
-            )
+            logger.debug(f"Split document {doc.id} into {len(doc_chunks)} chunks")
 
-        logger.info(
-            f"Created {len(chunks)} chunks from {len(documents)} documents"
-        )
+        logger.info(f"Created {len(chunks)} chunks from {len(documents)} documents")
         return chunks
 
     def _split_document(self, doc: Document) -> list[Chunk]:
@@ -85,7 +81,7 @@ class FixedSizeChunker(BaseChunker):
                     "chunk_index": chunk_index,
                     "start_char": start,
                     "end_char": min(end, len(text)),
-                }
+                },
             )
             chunks.append(chunk)
 

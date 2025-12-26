@@ -1,17 +1,19 @@
 """Simple text file parser implementation."""
 
 from pathlib import Path
+
 from loguru import logger
 
 try:
     import chardet
+
     CHARDET_AVAILABLE = True
 except ImportError:
     CHARDET_AVAILABLE = False
     logger.debug("chardet not installed. Encoding detection will not be available.")
 
-from ..base import BaseParser
 from ...core.document import Document
+from ..base import BaseParser
 
 
 class SimpleTextParser(BaseParser):
@@ -19,7 +21,7 @@ class SimpleTextParser(BaseParser):
 
     This parser reads .txt files and returns a single Document
     containing the entire file content.
-    
+
     支持自动编码检测（如果安装了 chardet）。
 
     Attributes:
@@ -27,11 +29,7 @@ class SimpleTextParser(BaseParser):
         auto_detect_encoding: 是否自动检测编码
     """
 
-    def __init__(
-        self,
-        encoding: str = "utf-8",
-        auto_detect_encoding: bool = True
-    ):
+    def __init__(self, encoding: str = "utf-8", auto_detect_encoding: bool = True):
         """Initialize the text parser.
 
         Args:
@@ -41,7 +39,7 @@ class SimpleTextParser(BaseParser):
         self.encoding = encoding
         self.auto_detect_encoding = auto_detect_encoding and CHARDET_AVAILABLE
 
-    def parse(self, file_path: str | Path, **kwargs) -> list[Document]:
+    def parse(self, file_path: str | Path, **_kwargs) -> list[Document]:
         """Parse a text file into a single document.
 
         Args:
@@ -71,20 +69,22 @@ class SimpleTextParser(BaseParser):
             try:
                 raw_data = path.read_bytes()
                 detected = chardet.detect(raw_data)
-                if detected['encoding']:
-                    encoding = detected['encoding']
-                    logger.debug(f"Detected encoding: {encoding} (confidence: {detected['confidence']:.2f})")
+                if detected["encoding"]:
+                    encoding = detected["encoding"]
+                    logger.debug(
+                        f"Detected encoding: {encoding} (confidence: {detected['confidence']:.2f})"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to detect encoding, using {self.encoding}: {e}")
                 encoding = self.encoding
 
         # 读取文件
         try:
-            content = path.read_text(encoding=encoding, errors='ignore')
+            content = path.read_text(encoding=encoding, errors="ignore")
         except Exception as e:
             logger.warning(f"Failed to read with encoding {encoding}, retrying with utf-8: {e}")
-            content = path.read_text(encoding='utf-8', errors='ignore')
-            encoding = 'utf-8'
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            encoding = "utf-8"
 
         doc = Document(
             content=content,
@@ -93,8 +93,8 @@ class SimpleTextParser(BaseParser):
                 "filename": path.name,
                 "extension": path.suffix,
                 "encoding": encoding,
-                "parser": "SimpleTextParser"
-            }
+                "parser": "SimpleTextParser",
+            },
         )
 
         logger.debug(f"Parsed document {doc.id} with {len(content)} characters")

@@ -1,6 +1,7 @@
 """Base LLM interface."""
 
 from abc import ABC, abstractmethod
+
 from ..core.search_result import SearchResult
 
 
@@ -11,12 +12,7 @@ class BaseLLM(ABC):
     """
 
     @abstractmethod
-    def generate(
-        self,
-        query: str,
-        context: list[SearchResult],
-        **kwargs
-    ) -> str:
+    def generate(self, query: str, context: list[SearchResult], **kwargs) -> str:
         """Generate response using query and context.
 
         Args:

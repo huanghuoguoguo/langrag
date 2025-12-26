@@ -4,12 +4,11 @@ This chunker implements a hierarchical splitting strategy similar to LangChain's
 RecursiveCharacterTextSplitter, prioritizing semantic boundaries.
 """
 
-from typing import Optional
 from loguru import logger
 
-from ..base import BaseChunker
-from ...core.document import Document
 from ...core.chunk import Chunk
+from ...core.document import Document
+from ..base import BaseChunker
 
 
 class RecursiveCharacterChunker(BaseChunker):
@@ -33,24 +32,24 @@ class RecursiveCharacterChunker(BaseChunker):
     # Default separators in order of semantic significance
     DEFAULT_SEPARATORS = [
         "\n\n",  # Paragraphs
-        "\n",    # Lines
-        ". ",    # Sentences (with space after period)
-        "。",    # Chinese/Japanese sentence end
-        "! ",    # Exclamations
-        "? ",    # Questions
-        "; ",    # Semicolons
-        "；",    # Chinese semicolon
-        "，",    # Chinese comma
-        ", ",    # Commas
-        " ",     # Spaces (words)
-        "",      # Characters (fallback)
+        "\n",  # Lines
+        ". ",  # Sentences (with space after period)
+        "。",  # Chinese/Japanese sentence end
+        "! ",  # Exclamations
+        "? ",  # Questions
+        "; ",  # Semicolons
+        "；",  # Chinese semicolon
+        "，",  # Chinese comma
+        ", ",  # Commas
+        " ",  # Spaces (words)
+        "",  # Characters (fallback)
     ]
 
     def __init__(
         self,
         chunk_size: int = 500,
         chunk_overlap: int = 50,
-        separators: Optional[list[str]] = None,
+        separators: list[str] | None = None,
         keep_separator: bool = True,
     ):
         """Initialize the recursive character chunker.
@@ -133,18 +132,14 @@ class RecursiveCharacterChunker(BaseChunker):
                     "chunk_index": i,
                     "chunk_size": len(chunk_text),
                     "chunking_method": "recursive_character",
-                }
+                },
             )
             chunks.append(chunk)
             char_position += len(chunk_text)
 
         return chunks
 
-    def _split_text_recursive(
-        self,
-        text: str,
-        separators: list[str]
-    ) -> list[str]:
+    def _split_text_recursive(self, text: str, separators: list[str]) -> list[str]:
         """Recursively split text using a hierarchy of separators.
 
         Args:
@@ -199,10 +194,7 @@ class RecursiveCharacterChunker(BaseChunker):
                 final_chunks.append(merged)
 
                 # Start new chunk with overlap
-                overlap_chunks = self._get_overlap_chunks(
-                    current_chunk,
-                    separator
-                )
+                overlap_chunks = self._get_overlap_chunks(current_chunk, separator)
                 current_chunk = overlap_chunks
                 current_length = sum(len(c) for c in current_chunk)
                 if current_chunk:
@@ -239,7 +231,7 @@ class RecursiveCharacterChunker(BaseChunker):
             # Split but keep separator at the end of each piece
             splits = text.split(separator)
             result = []
-            for i, split in enumerate(splits[:-1]):
+            for split in splits[:-1]:
                 if split:  # Skip empty strings
                     result.append(split + separator)
             # Add last piece without separator
@@ -269,11 +261,7 @@ class RecursiveCharacterChunker(BaseChunker):
         else:
             return separator.join(chunks)
 
-    def _get_overlap_chunks(
-        self,
-        chunks: list[str],
-        separator: str
-    ) -> list[str]:
+    def _get_overlap_chunks(self, chunks: list[str], separator: str) -> list[str]:
         """Get chunks that fit within the overlap size.
 
         Args:

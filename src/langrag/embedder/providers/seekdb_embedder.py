@@ -4,11 +4,11 @@ SeekDB provides a default embedding function (all-MiniLM-L6-v2)
 that can be used independently of SeekDB's vector storage.
 """
 
-from typing import List
 from loguru import logger
 
 try:
     import pyseekdb
+
     SEEKDB_AVAILABLE = True
 except ImportError:
     SEEKDB_AVAILABLE = False
@@ -46,8 +46,7 @@ class SeekDBEmbedder(BaseEmbedder):
         """
         if not SEEKDB_AVAILABLE:
             raise ImportError(
-                "pyseekdb is required for SeekDBEmbedder. "
-                "Install with: pip install pyseekdb"
+                "pyseekdb is required for SeekDBEmbedder. Install with: pip install pyseekdb"
             )
 
         # Get SeekDB's default embedding function
@@ -59,7 +58,7 @@ class SeekDBEmbedder(BaseEmbedder):
             "(dimension=384, local inference)"
         )
 
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using SeekDB's embedding function.
 
         Args:
@@ -90,7 +89,7 @@ class SeekDBEmbedder(BaseEmbedder):
 
         except Exception as e:
             logger.error(f"SeekDB embedding failed: {e}")
-            raise RuntimeError(f"SeekDB embedding generation failed: {e}")
+            raise RuntimeError(f"SeekDB embedding generation failed: {e}") from e
 
     @property
     def dimension(self) -> int:

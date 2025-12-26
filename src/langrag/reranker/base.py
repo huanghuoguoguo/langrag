@@ -1,6 +1,7 @@
 """Base reranker interface."""
 
 from abc import ABC, abstractmethod
+
 from ..core.query import Query
 from ..core.search_result import SearchResult
 
@@ -14,10 +15,7 @@ class BaseReranker(ABC):
 
     @abstractmethod
     def rerank(
-        self,
-        query: Query,
-        results: list[SearchResult],
-        top_k: int | None = None
+        self, query: Query, results: list[SearchResult], top_k: int | None = None
     ) -> list[SearchResult]:
         """Rerank search results.
 

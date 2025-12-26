@@ -1,6 +1,7 @@
 """Chunker factory for creating chunker instances."""
 
 from typing import Any
+
 from loguru import logger
 
 from .base import BaseChunker
@@ -40,8 +41,7 @@ class ChunkerFactory:
         if chunker_type not in cls._registry:
             available = ", ".join(cls._registry.keys())
             raise ValueError(
-                f"Unknown chunker type: '{chunker_type}'. "
-                f"Available types: {available}"
+                f"Unknown chunker type: '{chunker_type}'. Available types: {available}"
             )
 
         chunker_class = cls._registry[chunker_type]
@@ -61,9 +61,7 @@ class ChunkerFactory:
             TypeError: If chunker_class is not a subclass of BaseChunker
         """
         if not issubclass(chunker_class, BaseChunker):
-            raise TypeError(
-                f"{chunker_class.__name__} must be a subclass of BaseChunker"
-            )
+            raise TypeError(f"{chunker_class.__name__} must be a subclass of BaseChunker")
 
         cls._registry[chunker_type] = chunker_class
         logger.info(f"Registered chunker type '{chunker_type}': {chunker_class.__name__}")
