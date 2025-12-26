@@ -3,6 +3,7 @@
 from loguru import logger
 
 from ..chunker import BaseChunker, ChunkerFactory
+from ..compressor import BaseCompressor, CompressorFactory
 from ..embedder import BaseEmbedder, EmbedderFactory
 from ..llm import BaseLLM, LLMFactory
 from ..parser import BaseParser, ParserFactory
@@ -81,6 +82,19 @@ class ComponentFactory:
         """
         logger.info(f"Creating reranker: {config.type}")
         return RerankerFactory.create(config.type, **config.params)
+
+    @staticmethod
+    def create_compressor(config: ComponentConfig) -> BaseCompressor:
+        """Create a compressor from configuration.
+
+        Args:
+            config: Component configuration with type and params
+
+        Returns:
+            Compressor instance
+        """
+        logger.info(f"Creating compressor: {config.type}")
+        return CompressorFactory.create(config.type, **config.params)
 
     @staticmethod
     def create_llm(config: ComponentConfig) -> BaseLLM:
