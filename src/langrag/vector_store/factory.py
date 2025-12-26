@@ -6,6 +6,30 @@ from loguru import logger
 from .base import BaseVectorStore
 from .providers.in_memory import InMemoryVectorStore
 
+# Conditionally import SeekDB if available
+try:
+    from .providers.seekdb import SeekDBVectorStore
+    SEEKDB_AVAILABLE = True
+except ImportError:
+    SEEKDB_AVAILABLE = False
+    logger.debug("SeekDB not available (pyseekdb not installed)")
+
+# Conditionally import Chroma if available
+try:
+    from .providers.chroma import ChromaVectorStore, CHROMA_AVAILABLE
+    CHROMA_VECTORSTORE_AVAILABLE = CHROMA_AVAILABLE
+except ImportError:
+    CHROMA_VECTORSTORE_AVAILABLE = False
+    logger.debug("Chroma not available (chromadb not installed)")
+
+# Conditionally import DuckDB if available
+try:
+    from .providers.duckdb import DuckDBVectorStore, DUCKDB_AVAILABLE
+    DUCKDB_VECTORSTORE_AVAILABLE = DUCKDB_AVAILABLE
+except ImportError:
+    DUCKDB_VECTORSTORE_AVAILABLE = False
+    logger.debug("DuckDB not available (duckdb not installed)")
+
 
 class VectorStoreFactory:
     """Factory for creating vector store instances based on type.
@@ -16,11 +40,19 @@ class VectorStoreFactory:
 
     _registry: dict[str, type[BaseVectorStore]] = {
         "in_memory": InMemoryVectorStore,
-        # Future vector stores can be registered here:
-        # "chroma": ChromaVectorStore,
-        # "pinecone": PineconeVectorStore,
-        # "weaviate": WeaviateVectorStore,
     }
+
+    # Register SeekDB if available
+    if SEEKDB_AVAILABLE:
+        _registry["seekdb"] = SeekDBVectorStore
+
+    # Register Chroma if available
+    if CHROMA_VECTORSTORE_AVAILABLE:
+        _registry["chroma"] = ChromaVectorStore
+
+    # Register DuckDB if available
+    if DUCKDB_VECTORSTORE_AVAILABLE:
+        _registry["duckdb"] = DuckDBVectorStore
 
     @classmethod
     def create(cls, store_type: str, **params: Any) -> BaseVectorStore:

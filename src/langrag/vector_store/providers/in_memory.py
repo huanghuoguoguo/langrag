@@ -5,6 +5,7 @@ from pathlib import Path
 from loguru import logger
 
 from ..base import BaseVectorStore
+from ..capabilities import VectorStoreCapabilities
 from ...core.chunk import Chunk
 from ...core.search_result import SearchResult
 from ...utils.similarity import cosine_similarity
@@ -18,12 +19,27 @@ class InMemoryVectorStore(BaseVectorStore):
 
     Attributes:
         _chunks: Dictionary mapping chunk IDs to Chunk objects
+        _capabilities: Declares this store only supports vector search
     """
 
     def __init__(self):
         """Initialize an empty vector store."""
         self._chunks: dict[str, Chunk] = {}
+        self._capabilities = VectorStoreCapabilities(
+            supports_vector=True,
+            supports_fulltext=False,
+            supports_hybrid=False
+        )
         logger.info("Initialized InMemoryVectorStore")
+
+    @property
+    def capabilities(self) -> VectorStoreCapabilities:
+        """Get capabilities - only vector search supported.
+
+        Returns:
+            Capability declaration indicating vector-only support
+        """
+        return self._capabilities
 
     def add(self, chunks: list[Chunk]) -> None:
         """Add chunks to the store.

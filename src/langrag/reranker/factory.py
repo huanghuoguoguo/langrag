@@ -5,6 +5,7 @@ from loguru import logger
 
 from .base import BaseReranker
 from .providers.noop import NoOpReranker
+from .providers.qwen import QwenReranker
 
 
 class RerankerFactory:
@@ -16,6 +17,7 @@ class RerankerFactory:
 
     _registry: dict[str, type[BaseReranker]] = {
         "noop": NoOpReranker,
+        "qwen": QwenReranker,
         # Future rerankers can be registered here:
         # "cross_encoder": CrossEncoderReranker,
         # "bm25": BM25Reranker,
