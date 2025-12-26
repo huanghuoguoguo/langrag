@@ -171,18 +171,17 @@ class KnowledgeBase:
         return self._indexing_pipeline
 
     @property
-    def retrieval_pipeline(self):
-        """获取检索管道（延迟创建）
-        
+    def retriever(self):
+        """获取检索器（延迟创建）
+
         Returns:
-            AdaptiveRetrievalPipeline 实例
+            Retriever 实例
         """
-        if self._retrieval_pipeline is None:
+        if self._retrieval_pipeline is None:  # 保留变量名以兼容
             from ..retrieval import Retriever
-            from ..engine import AdaptiveRetrievalPipeline
-            
+
             stores = self._get_vector_stores()
-            
+
             # 根据数据源数量选择检索模式
             if len(stores) == 1:
                 # 单数据源：能力自适应
@@ -190,10 +189,11 @@ class KnowledgeBase:
                     f"KB '{self.kb_id}': Using single-store retrieval "
                     f"({stores[0][0].__class__.__name__})"
                 )
-                retriever = Retriever.from_single_store(
+                self._retrieval_pipeline = Retriever.from_single_store(
                     embedder=self.embedder,
                     vector_store=stores[0][0],
-                    storage_role=stores[0][1]
+                    storage_role=stores[0][1],
+                    reranker=self.reranker
                 )
             else:
                 # 多数据源：RRF 融合
@@ -201,22 +201,15 @@ class KnowledgeBase:
                     f"KB '{self.kb_id}': Using multi-store retrieval "
                     f"with {len(stores)} stores"
                 )
-                retriever = Retriever.from_multi_stores(
+                self._retrieval_pipeline = Retriever.from_multi_stores(
                     embedder=self.embedder,
                     stores_config=stores,
+                    reranker=self.reranker,
                     fusion_strategy=self.retrieval_config.get('fusion_strategy', 'rrf'),
                     fusion_weights=self.retrieval_config.get('fusion_weights')
                 )
-            
-            # 创建检索管道
-            self._retrieval_pipeline = AdaptiveRetrievalPipeline(
-                retriever=retriever,
-                reranker=self.reranker,
-                top_k=self.retrieval_config.get('top_k', 5),
-                rerank_top_k=self.retrieval_config.get('rerank_top_k')
-            )
-            
-            logger.info(f"Created retrieval pipeline for KB '{self.kb_id}'")
+
+            logger.info(f"Created retriever for KB '{self.kb_id}'")
         
         return self._retrieval_pipeline
 
@@ -224,17 +217,20 @@ class KnowledgeBase:
 
     def index_file(self, file_path: str | Path) -> int:
         """索引单个文件到这个知识库
-        
+
         Args:
             file_path: 文件路径
-            
+
         Returns:
             索引的 chunk 数量
-            
+
         Raises:
             FileNotFoundError: 文件不存在
-            ValueError: 文件格式不支持
+            ValueError: 文件格式不支持或路径为空
         """
+        if not file_path:
+            raise ValueError("file_path cannot be empty")
+
         logger.info(f"KB '{self.kb_id}': Indexing file '{file_path}'")
         num_chunks = self.indexing_pipeline.index_file(file_path)
         logger.info(
@@ -245,13 +241,19 @@ class KnowledgeBase:
 
     def index_files(self, file_paths: List[str | Path]) -> int:
         """索引多个文件到这个知识库
-        
+
         Args:
             file_paths: 文件路径列表
-            
+
         Returns:
             总共索引的 chunk 数量
+
+        Raises:
+            ValueError: 如果文件路径列表为空
         """
+        if not file_paths:
+            raise ValueError("file_paths cannot be empty")
+
         logger.info(f"KB '{self.kb_id}': Indexing {len(file_paths)} files")
         total = self.indexing_pipeline.index_files(file_paths)
         logger.info(f"KB '{self.kb_id}': Indexed {total} chunks in total")
@@ -259,32 +261,36 @@ class KnowledgeBase:
 
     def retrieve(self, query: str, top_k: Optional[int] = None) -> List[SearchResult]:
         """从这个知识库检索相关内容
-        
+
+        This is a synchronous wrapper around retrieve_async().
+        For async environments, use retrieve_async() directly.
+
         Args:
             query: 查询文本
             top_k: 返回的结果数（可选，默认使用配置中的值）
-            
+
         Returns:
             SearchResult 列表
+
+        Raises:
+            ValueError: 如果查询文本为空
         """
-        # 临时覆盖 top_k
-        if top_k is not None:
-            original_top_k = self.retrieval_pipeline.top_k
-            self.retrieval_pipeline.top_k = top_k
-        
-        try:
-            logger.info(
-                f"KB '{self.kb_id}': Retrieving for query: {query[:50]}..."
-            )
-            results = self.retrieval_pipeline.retrieve(query)
-            logger.info(
-                f"KB '{self.kb_id}': Retrieved {len(results)} results"
-            )
-            return results
-        finally:
-            # 恢复原值
-            if top_k is not None:
-                self.retrieval_pipeline.top_k = original_top_k
+        if not query or not query.strip():
+            raise ValueError("query cannot be empty")
+
+        from ..utils import run_async_in_sync_context
+
+        logger.info(
+            f"KB '{self.kb_id}': Retrieving for query: {query[:50]}..."
+        )
+
+        # 使用工具函数处理同步/异步转换
+        results = run_async_in_sync_context(self.retrieve_async(query, top_k))
+
+        logger.info(
+            f"KB '{self.kb_id}': Retrieved {len(results)} results"
+        )
+        return results
 
     async def retrieve_async(
         self,
@@ -292,24 +298,35 @@ class KnowledgeBase:
         top_k: Optional[int] = None
     ) -> List[SearchResult]:
         """异步检索（推荐使用）
-        
+
         Args:
             query: 查询文本
             top_k: 返回的结果数
-            
+
         Returns:
             SearchResult 列表
+
+        Raises:
+            ValueError: 如果查询文本为空
         """
-        if top_k is not None:
-            original_top_k = self.retrieval_pipeline.top_k
-            self.retrieval_pipeline.top_k = top_k
-        
-        try:
-            results = await self.retrieval_pipeline.retrieve_async(query)
-            return results
-        finally:
-            if top_k is not None:
-                self.retrieval_pipeline.top_k = original_top_k
+        if not query or not query.strip():
+            raise ValueError("query cannot be empty")
+
+        logger.info(
+            f"KB '{self.kb_id}': Async retrieving for query: {query[:50]}..."
+        )
+
+        # 确定参数
+        top_k_value = top_k if top_k is not None else self.retrieval_config.get('top_k', 5)
+        rerank_top_k = self.retrieval_config.get('rerank_top_k')
+
+        # 直接调用 Retriever 的异步方法
+        results = await self.retriever.retrieve(query, top_k_value, rerank_top_k)
+
+        logger.info(
+            f"KB '{self.kb_id}': Retrieved {len(results)} results"
+        )
+        return results
 
     def get_stats(self) -> Dict[str, Any]:
         """获取知识库统计信息

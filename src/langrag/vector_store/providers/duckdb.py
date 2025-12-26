@@ -284,6 +284,14 @@ class DuckDBVectorStore(BaseVectorStore):
         Returns:
             List of search results, sorted by BM25 score descending
         """
+        if not query_text or not query_text.strip():
+            logger.warning("Empty query text provided to search_fulltext")
+            return []
+
+        if top_k <= 0:
+            logger.warning(f"Invalid top_k value: {top_k}, using default 5")
+            top_k = 5
+
         fts_table = f"fts_main_{self.table_name}"
 
         search_sql = f"""
@@ -298,45 +306,41 @@ class DuckDBVectorStore(BaseVectorStore):
         try:
             results = self._connection.execute(search_sql, [query_text, top_k]).fetchall()
 
+            if not results:
+                logger.debug("No full-text search results found")
+                return []
+
+            # Single-pass processing with improved normalization
             search_results = []
-            # Get all scores to normalize them
-            all_scores = []
+            raw_scores = [float(row[5] or 0.0) for row in results]
+
+            # Use max score for normalization (preserves relative differences)
+            max_score = max(raw_scores) if raw_scores else 1.0
+
+            # Avoid division by zero
+            if max_score <= 0:
+                max_score = 1.0
 
             for row in results:
-                chunk_id, content, embedding, source_doc_id, metadata_json, score = row
-                all_scores.append(float(score or 0.0))
+                chunk_id, content, embedding, source_doc_id, metadata_json, raw_score = row
 
-            # Normalize BM25 scores to [0, 1] range
-            if all_scores:
-                max_score = max(all_scores)
-                min_score = min(all_scores)
-                score_range = max_score - min_score
+                # Parse metadata
+                metadata = self._parse_metadata(metadata_json)
 
-                for row in results:
-                    chunk_id, content, embedding, source_doc_id, metadata_json, raw_score = row
+                # Reconstruct chunk
+                chunk = Chunk(
+                    id=chunk_id,
+                    content=content,
+                    embedding=embedding,
+                    source_doc_id=source_doc_id,
+                    metadata=metadata
+                )
 
-                    # Parse metadata
-                    metadata = self._parse_metadata(metadata_json)
+                # Normalize score: divide by max to get [0, 1] range while preserving relative order
+                normalized_score = float(raw_score or 0.0) / max_score
+                normalized_score = max(0.0, min(1.0, normalized_score))
 
-                    # Reconstruct chunk
-                    chunk = Chunk(
-                        id=chunk_id,
-                        content=content,
-                        embedding=embedding,
-                        source_doc_id=source_doc_id,
-                        metadata=metadata
-                    )
-
-                    # Normalize score
-                    if score_range > 0:
-                        normalized_score = (float(raw_score or 0.0) - min_score) / score_range
-                        # Ensure score is in [0, 1] and not too close to 0
-                        normalized_score = max(0.001, min(1.0, normalized_score))
-                    else:
-                        # All scores are the same, assign equal scores
-                        normalized_score = 1.0 / len(results) if results else 0.0
-
-                    search_results.append(SearchResult(chunk=chunk, score=normalized_score))
+                search_results.append(SearchResult(chunk=chunk, score=normalized_score))
 
             logger.debug(f"Full-text search returned {len(search_results)} results")
             return search_results
@@ -369,6 +373,22 @@ class DuckDBVectorStore(BaseVectorStore):
         except Exception as e:
             logger.error(f"Failed to delete chunks from DuckDB: {e}")
             raise
+
+    def count(self) -> int:
+        """Get the total number of chunks in this store.
+
+        Returns:
+            Number of chunks currently stored
+        """
+        try:
+            result = self._connection.execute(
+                f"SELECT COUNT(*) FROM {self.table_name}"
+            ).fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            logger.error(f"Failed to count chunks in DuckDB: {e}")
+            return 0
 
     def persist(self, path: str) -> None:
         """Persist database to file.

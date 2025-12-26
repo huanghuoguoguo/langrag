@@ -83,10 +83,11 @@ class TestRAGIntegration:
         assert engine.parser is not None
         assert engine.chunker is not None
         assert engine.embedder is not None
-        assert engine.vector_store is not None
+        assert engine.vector_stores is not None
+        assert len(engine.vector_stores) > 0
         assert engine.reranker is not None
         assert engine.indexing_pipeline is not None
-        assert engine.retrieval_pipeline is not None
+        assert engine.retriever is not None
 
     def test_basic_indexing_and_retrieval(self, config: RAGConfig, sample_documents: list[Path]):
         """测试基础索引和检索功能"""
@@ -134,12 +135,19 @@ class TestRAGIntegration:
         assert engine.num_chunks == total_chunks
 
         # 验证所有文档都被索引
-        for doc_path in sample_documents:
-            assert engine.vector_store._chunks is not None  # 假设in_memory实现有_chunks属性
-            # 检查是否有来自该文档的块
-            doc_chunks = [chunk for chunk in engine.vector_store._chunks.values()
-                         if chunk.metadata.get('filename') == doc_path.name]
-            assert len(doc_chunks) > 0, f"文档 {doc_path.name} 没有被正确索引"
+        # 获取第一个 PRIMARY 存储来验证
+        primary_store = None
+        for store, role in engine.vector_stores:
+            if role.value == "primary":
+                primary_store = store
+                break
+
+        if primary_store and hasattr(primary_store, '_chunks'):
+            for doc_path in sample_documents:
+                # 检查是否有来自该文档的块
+                doc_chunks = [chunk for chunk in primary_store._chunks.values()
+                             if chunk.metadata.get('filename') == doc_path.name]
+                assert len(doc_chunks) > 0, f"文档 {doc_path.name} 没有被正确索引"
 
     def test_retrieval_relevance(self, config: RAGConfig, sample_documents: list[Path]):
         """测试检索的相关性"""

@@ -262,6 +262,14 @@ class ChromaVectorStore(BaseVectorStore):
             f"(remaining: {self._collection.count()})"
         )
 
+    def count(self) -> int:
+        """Get the total number of chunks in this store.
+
+        Returns:
+            Number of chunks currently stored
+        """
+        return self._collection.count()
+
     def persist(self, path: str) -> None:
         """Persist is automatic in Chroma persistent mode.
 
