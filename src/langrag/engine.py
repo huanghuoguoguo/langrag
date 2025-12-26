@@ -126,6 +126,10 @@ class RAGEngine:
         if self.config.reranker:
             self.reranker = ComponentFactory.create_reranker(self.config.reranker)
 
+        self.compressor = None
+        if self.config.compressor:
+            self.compressor = ComponentFactory.create_compressor(self.config.compressor)
+
         self.llm = None
         if self.config.llm:
             self.llm = ComponentFactory.create_llm(self.config.llm)
@@ -202,6 +206,8 @@ class RAGEngine:
             vector_store=vector_store,
             storage_role=storage_role,
             reranker=self.reranker,
+            compressor=self.compressor,
+            compression_ratio=self.config.compression_ratio,
         )
 
     def _create_multi_store_retriever(self, retrieval_config) -> Retriever:
@@ -219,8 +225,10 @@ class RAGEngine:
             embedder=self.embedder,
             stores_config=self.vector_stores,
             reranker=self.reranker,
+            compressor=self.compressor,
             fusion_strategy=retrieval_config.fusion_strategy,
             fusion_weights=retrieval_config.fusion_weights,
+            compression_ratio=self.config.compression_ratio,
         )
 
     def index(self, file_path: str | Path) -> int:

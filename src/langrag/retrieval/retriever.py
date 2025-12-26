@@ -13,6 +13,7 @@ from .base import BaseRetrievalProvider
 from .factory import ProviderFactory
 
 if TYPE_CHECKING:
+    from ..compressor import BaseCompressor
     from ..config.models import StorageRole
     from ..core.search_result import SearchResult
     from ..embedder import BaseEmbedder
@@ -40,9 +41,11 @@ class Retriever:
         embedder: BaseEmbedder,
         providers: list[BaseRetrievalProvider] | None = None,
         reranker: BaseReranker | None = None,
+        compressor: BaseCompressor | None = None,
         fusion_strategy: str = "rrf",
         fusion_weights: list[float] | None = None,
         rrf_k: int = 60,
+        compression_ratio: float = 0.5,
     ):
         """初始化检索协调器
 
@@ -50,16 +53,20 @@ class Retriever:
             embedder: 嵌入器（用于向量化查询）
             providers: 检索 Provider 列表（如果为空则需后续添加）
             reranker: 可选的重排序器
+            compressor: 可选的上下文压缩器
             fusion_strategy: 融合策略 ("rrf" | "weighted_rrf")
             fusion_weights: Provider 权重（用于 weighted_rrf）
             rrf_k: RRF 常数
+            compression_ratio: 压缩比率（0-1）
         """
         self.embedder = embedder
         self.providers = providers or []
         self.reranker = reranker
+        self.compressor = compressor
         self.fusion_strategy = fusion_strategy
         self.fusion_weights = fusion_weights
         self.rrf_k = rrf_k
+        self.compression_ratio = compression_ratio
 
         # 验证权重
         if fusion_weights and len(fusion_weights) != len(self.providers):
@@ -72,6 +79,7 @@ class Retriever:
             f"Initialized Retriever with {len(self.providers)} providers: "
             f"{[p.name for p in self.providers]}"
             f"{', with reranker' if reranker else ''}"
+            f"{', with compressor' if compressor else ''}"
         )
 
     def add_provider(self, provider: BaseRetrievalProvider) -> None:
@@ -90,6 +98,8 @@ class Retriever:
         vector_store: BaseVectorStore,
         storage_role: StorageRole = None,
         reranker: BaseReranker | None = None,
+        compressor: BaseCompressor | None = None,
+        compression_ratio: float = 0.5,
     ) -> Retriever:
         """从单个向量存储创建 Retriever（能力自适应）
 
@@ -100,12 +110,20 @@ class Retriever:
             vector_store: 向量存储
             storage_role: 存储角色（可选，用于命名）
             reranker: 可选的重排序器
+            compressor: 可选的上下文压缩器
+            compression_ratio: 压缩比率（0-1）
 
         Returns:
             配置好的 Retriever 实例
         """
         provider = ProviderFactory.create_for_store(embedder, vector_store, storage_role)
-        return cls(embedder=embedder, providers=[provider], reranker=reranker)
+        return cls(
+            embedder=embedder,
+            providers=[provider],
+            reranker=reranker,
+            compressor=compressor,
+            compression_ratio=compression_ratio,
+        )
 
     @classmethod
     def from_multi_stores(
@@ -113,8 +131,10 @@ class Retriever:
         embedder: BaseEmbedder,
         stores_config: list[tuple[BaseVectorStore, StorageRole]],
         reranker: BaseReranker | None = None,
+        compressor: BaseCompressor | None = None,
         fusion_strategy: str = "rrf",
         fusion_weights: list[float] | None = None,
+        compression_ratio: float = 0.5,
     ) -> Retriever:
         """从多个向量存储创建 Retriever（角色分工）
 
@@ -127,8 +147,10 @@ class Retriever:
             embedder: 嵌入器
             stores_config: [(vector_store, role), ...] 列表
             reranker: 可选的重排序器
+            compressor: 可选的上下文压缩器
             fusion_strategy: 融合策略
             fusion_weights: Provider 权重
+            compression_ratio: 压缩比率（0-1）
 
         Returns:
             配置好的 Retriever 实例
@@ -148,8 +170,10 @@ class Retriever:
             embedder=embedder,
             providers=providers,
             reranker=reranker,
+            compressor=compressor,
             fusion_strategy=fusion_strategy,
             fusion_weights=fusion_weights,
+            compression_ratio=compression_ratio,
         )
 
     async def retrieve(
@@ -194,6 +218,18 @@ class Retriever:
                 query_obj = Query(text=query, vector=None)  # Reranker 通常不需要 vector
                 results = self.reranker.rerank(query=query_obj, results=results, top_k=rerank_top_k)
             logger.debug(f"Reranking returned {len(results)} results")
+
+        # 3. 可选的上下文压缩阶段
+        if self.compressor is not None and results:
+            with timer(f"Compressing {len(results)} results", threshold_ms=100):
+                # 根据 compressor 类型选择同步或异步调用
+                if hasattr(self.compressor, "compress_async"):
+                    results = await self.compressor.compress_async(
+                        query, results, self.compression_ratio
+                    )
+                else:
+                    results = self.compressor.compress(query, results, self.compression_ratio)
+            logger.debug(f"Compression returned {len(results)} results")
 
         return results
 

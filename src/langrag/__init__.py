@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 
 # Core entities
 from .chunker import BaseChunker, ChunkerFactory, FixedSizeChunker, RecursiveCharacterChunker
+from .compressor import BaseCompressor, CompressorFactory
 from .config.factory import ComponentFactory
 
 # Configuration
@@ -85,6 +86,9 @@ __all__ = [
     "BaseReranker",
     "NoOpReranker",
     "RerankerFactory",
+    # Compressor
+    "BaseCompressor",
+    "CompressorFactory",
     # LLM
     "BaseLLM",
     "LLMFactory",

@@ -95,10 +95,12 @@ class RAGConfig(BaseModel):
     vector_stores: list[VectorStoreConfig] | None = None  # 多存储（新增）
 
     reranker: ComponentConfig | None = None
+    compressor: ComponentConfig | None = None  # 上下文压缩器配置
     llm: ComponentConfig | None = None
 
     # 检索配置
     retrieval: RetrievalConfig | None = None
+    compression_ratio: float = Field(default=0.5, ge=0.1, le=1.0)  # 压缩比率（0.1-1.0）
 
     # Pipeline settings (deprecated, use retrieval config instead)
     retrieval_top_k: int = Field(default=5, ge=1)
