@@ -120,6 +120,21 @@ class BaseVectorStore(ABC):
         pass
 
     @abstractmethod
+    def count(self) -> int:
+        """Get the total number of chunks in this store.
+
+        Returns:
+            Number of chunks currently stored
+
+        Examples:
+            >>> store = InMemoryVectorStore()
+            >>> store.add(chunks)
+            >>> print(f"Total chunks: {store.count()}")
+            Total chunks: 100
+        """
+        pass
+
+    @abstractmethod
     def persist(self, path: str) -> None:
         """Save store to disk.
 

@@ -9,6 +9,7 @@ from ..chunker import BaseChunker
 from ..embedder import BaseEmbedder
 from ..vector_store import BaseVectorStore
 from ..config.models import StorageRole
+from ..utils.performance import timer
 
 if TYPE_CHECKING:
     pass
@@ -81,28 +82,76 @@ class IndexingPipeline:
             FileNotFoundError: If file doesn't exist
             ValueError: If file format is invalid or chunks lack embeddings
         """
+        file_path = Path(file_path)
         logger.info(f"Indexing file: {file_path}")
 
-        # 1. Parse
-        documents = self.parser.parse(file_path)
-        logger.debug(f"Parsed {len(documents)} documents")
+        # Validate file exists
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
 
-        # 2. Chunk
-        chunks = self.chunker.split(documents)
-        logger.debug(f"Created {len(chunks)} chunks")
+        if not file_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
 
-        # 3. Embed
-        texts = [chunk.content for chunk in chunks]
-        embeddings = self.embedder.embed(texts)
+        try:
+            # 1. Parse
+            with timer(f"Parsing {file_path.name}", threshold_ms=100):
+                documents = self.parser.parse(file_path)
+            logger.debug(f"Parsed {len(documents)} documents from {file_path}")
 
-        # Attach embeddings to chunks
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk.embedding = embedding
+            if not documents:
+                logger.warning(f"No documents parsed from {file_path}")
+                return 0
 
-        # 4. Store - 写入所有配置的存储
-        self._store_chunks(chunks)
+        except Exception as e:
+            logger.error(f"Failed to parse file {file_path}: {e}")
+            raise ValueError(f"Failed to parse file {file_path}: {e}") from e
 
-        logger.info(f"Successfully indexed {len(chunks)} chunks")
+        try:
+            # 2. Chunk
+            with timer(f"Chunking {len(documents)} documents", threshold_ms=100):
+                chunks = self.chunker.split(documents)
+            logger.debug(f"Created {len(chunks)} chunks from {file_path}")
+
+            if not chunks:
+                logger.warning(f"No chunks created from {file_path}")
+                return 0
+
+        except Exception as e:
+            logger.error(f"Failed to chunk documents from {file_path}: {e}")
+            raise ValueError(f"Failed to chunk documents: {e}") from e
+
+        try:
+            # 3. Embed
+            texts = [chunk.content for chunk in chunks]
+
+            with timer(f"Embedding {len(chunks)} chunks", threshold_ms=500):
+                embeddings = self.embedder.embed(texts)
+
+            # Validate embeddings
+            if len(embeddings) != len(chunks):
+                raise ValueError(
+                    f"Embedding count mismatch: {len(embeddings)} embeddings "
+                    f"for {len(chunks)} chunks"
+                )
+
+            # Attach embeddings to chunks
+            for chunk, embedding in zip(chunks, embeddings):
+                chunk.embedding = embedding
+
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings for {file_path}: {e}")
+            raise ValueError(f"Failed to generate embeddings: {e}") from e
+
+        try:
+            # 4. Store - 写入所有配置的存储
+            with timer(f"Storing {len(chunks)} chunks to vector stores", threshold_ms=200):
+                self._store_chunks(chunks)
+
+        except Exception as e:
+            logger.error(f"Failed to store chunks from {file_path}: {e}")
+            raise ValueError(f"Failed to store chunks: {e}") from e
+
+        logger.info(f"Successfully indexed {len(chunks)} chunks from {file_path}")
         return len(chunks)
     
     def _store_chunks(self, chunks):
@@ -170,9 +219,41 @@ class IndexingPipeline:
             file_paths: List of file paths to index
 
         Returns:
-            Total number of chunks indexed
+            Total number of chunks indexed across all successful files
+
+        Note:
+            This method continues processing remaining files even if some fail.
+            Check logs for individual file failures.
         """
         total = 0
+        successful = 0
+        failed = []
+
+        logger.info(f"Starting batch indexing of {len(file_paths)} files")
+
         for path in file_paths:
-            total += self.index_file(path)
+            try:
+                num_chunks = self.index_file(path)
+                total += num_chunks
+                successful += 1
+                logger.debug(f"✓ Indexed {path}: {num_chunks} chunks")
+
+            except Exception as e:
+                failed.append((path, str(e)))
+                logger.error(f"✗ Failed to index {path}: {e}")
+                # Continue processing remaining files
+
+        # Summary logging
+        logger.info(
+            f"Batch indexing completed: "
+            f"{successful}/{len(file_paths)} files successful, "
+            f"{len(failed)} failed, "
+            f"{total} total chunks"
+        )
+
+        if failed:
+            logger.warning(
+                f"Failed files: {[str(path) for path, _ in failed]}"
+            )
+
         return total

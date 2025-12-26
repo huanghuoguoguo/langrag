@@ -98,6 +98,14 @@ class InMemoryVectorStore(BaseVectorStore):
             self._chunks.pop(chunk_id, None)
         logger.info(f"Deleted {len(chunk_ids)} chunks")
 
+    def count(self) -> int:
+        """Get the total number of chunks in this store.
+
+        Returns:
+            Number of chunks currently stored
+        """
+        return len(self._chunks)
+
     def persist(self, path: str) -> None:
         """Save store to pickle file.
 

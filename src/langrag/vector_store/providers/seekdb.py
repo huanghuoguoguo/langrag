@@ -538,6 +538,24 @@ class SeekDBVectorStore(BaseVectorStore):
 
         logger.info(f"Deleted {len(chunk_ids)} chunks from SeekDB collection '{self.collection_name}'")
 
+    def count(self) -> int:
+        """Get the total number of chunks in this store.
+
+        Returns:
+            Number of chunks currently stored
+        """
+        return asyncio.run(self._count_async())
+
+    async def _count_async(self) -> int:
+        """Async implementation of count."""
+        try:
+            coll = await self._get_or_create_collection()
+            # SeekDB collection has a count() method
+            return await asyncio.to_thread(coll.count)
+        except Exception as e:
+            logger.error(f"Failed to count chunks in SeekDB: {e}")
+            return 0
+
     def persist(self, path: str) -> None:
         """Persist is handled automatically by SeekDB.
 
