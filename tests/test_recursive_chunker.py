@@ -109,20 +109,59 @@ def test_recursive_chunker_vs_fixed_size():
     print("SEMANTIC COHERENCE ANALYSIS")
     print("="*80)
 
-    print("\nRecursive Chunker - Chunk boundaries:")
-    for i, chunk in enumerate(recursive_chunks[:5], 1):
-        # Check if chunk ends with sentence boundary
-        ends_with_period = chunk.content.rstrip().endswith(('.', '。', '!', '?'))
-        ends_with_para = chunk.content.rstrip().endswith('\n\n')
-        print(f"  Chunk {i}: ends_with_period={ends_with_period}, ends_with_paragraph={ends_with_para}")
+    def analyze_chunk_boundaries(chunks, name):
+        print(f"\n{name} - Chunk boundaries:")
+        semantic_splits = 0
+        total_chunks = len(chunks)
 
-    print("\nFixed Chunker - Chunk boundaries:")
-    for i, chunk in enumerate(fixed_chunks[:5], 1):
-        ends_with_period = chunk.content.rstrip().endswith(('.', '。', '!', '?'))
-        ends_with_para = chunk.content.rstrip().endswith('\n\n')
-        print(f"  Chunk {i}: ends_with_period={ends_with_period}, ends_with_paragraph={ends_with_para}")
+        for i, chunk in enumerate(chunks, 1):
+            content = chunk.content.rstrip()
+            ends_with_period = any(content.endswith(punct) for punct in ['.', '。', '!', '?', ';', '；'])
+            ends_with_para = content.endswith('\n\n')
+            ends_with_newline = content.endswith('\n')
+            is_semantic = ends_with_period or ends_with_para or ends_with_newline
 
-    return recursive_chunks, fixed_chunks
+            if is_semantic:
+                semantic_splits += 1
+
+            print(f"  Chunk {i}: semantic_boundary={is_semantic} (period={ends_with_period}, para={ends_with_para}, line={ends_with_newline})")
+
+        semantic_ratio = semantic_splits / total_chunks if total_chunks > 0 else 0
+        print(".2f")
+        return semantic_ratio
+
+    recursive_semantic_ratio = analyze_chunk_boundaries(recursive_chunks, "Recursive Chunker")
+    fixed_semantic_ratio = analyze_chunk_boundaries(fixed_chunks, "Fixed Chunker")
+
+    # Test assertions
+    print("\n" + "="*80)
+    print("TEST VALIDATION")
+    print("="*80)
+
+    # Recursive chunker should have higher semantic coherence
+    assert recursive_semantic_ratio > fixed_semantic_ratio, f"Recursive chunker should have better semantic boundaries: {recursive_semantic_ratio} vs {fixed_semantic_ratio}"
+
+    # Both should produce reasonable chunk sizes
+    recursive_avg_size = sum(len(c.content) for c in recursive_chunks) / len(recursive_chunks)
+    fixed_avg_size = sum(len(c.content) for c in fixed_chunks) / len(fixed_chunks)
+
+    print(f"Average recursive chunk size: {recursive_avg_size:.1f} chars")
+    print(f"Average fixed chunk size: {fixed_avg_size:.1f} chars")
+
+    # Chunks should not be too small (avoid excessive splitting)
+    min_reasonable_size = 50  # Allow some small chunks but not too many
+    recursive_small_chunks = sum(1 for c in recursive_chunks if len(c.content) < min_reasonable_size)
+    fixed_small_chunks = sum(1 for c in fixed_chunks if len(c.content) < min_reasonable_size)
+
+    print(f"Recursive chunker small chunks (<{min_reasonable_size} chars): {recursive_small_chunks}/{len(recursive_chunks)}")
+    print(f"Fixed chunker small chunks (<{min_reasonable_size} chars): {fixed_small_chunks}/{len(fixed_chunks)}")
+
+    # Recursive chunker should not produce excessively small chunks
+    assert recursive_small_chunks <= len(recursive_chunks) * 0.3, f"Too many small chunks in recursive splitter: {recursive_small_chunks}/{len(recursive_chunks)}"
+
+    print("\n✅ All validation tests passed!")
+
+    # Test completed successfully - no return value needed for pytest
 
 
 def test_with_custom_file():

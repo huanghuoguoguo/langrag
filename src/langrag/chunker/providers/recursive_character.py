@@ -38,8 +38,8 @@ class RecursiveCharacterChunker(BaseChunker):
         "。",    # Chinese/Japanese sentence end
         "! ",    # Exclamations
         "? ",    # Questions
+        "; ",    # Semicolons
         "；",    # Chinese semicolon
-        "；",    # Fullwidth semicolon
         "，",    # Chinese comma
         ", ",    # Commas
         " ",     # Spaces (words)
