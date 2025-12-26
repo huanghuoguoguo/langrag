@@ -1,0 +1,76 @@
+"""Parser factory for creating parser instances."""
+
+from typing import Any
+from loguru import logger
+
+from .base import BaseParser
+from .providers.simple_text import SimpleTextParser
+
+
+class ParserFactory:
+    """Factory for creating parser instances based on type.
+
+    This factory maintains a registry of available parser types
+    and creates instances based on string identifiers.
+    """
+
+    _registry: dict[str, type[BaseParser]] = {
+        "simple_text": SimpleTextParser,
+        # Future parsers can be registered here:
+        # "pdf": PdfParser,
+        # "markdown": MarkdownParser,
+    }
+
+    @classmethod
+    def create(cls, parser_type: str, **params: Any) -> BaseParser:
+        """Create a parser instance by type.
+
+        Args:
+            parser_type: Type identifier (e.g., "simple_text")
+            **params: Initialization parameters for the parser
+
+        Returns:
+            Parser instance
+
+        Raises:
+            ValueError: If parser type is not registered
+        """
+        if parser_type not in cls._registry:
+            available = ", ".join(cls._registry.keys())
+            raise ValueError(
+                f"Unknown parser type: '{parser_type}'. "
+                f"Available types: {available}"
+            )
+
+        parser_class = cls._registry[parser_type]
+        logger.debug(f"Creating {parser_class.__name__} with params: {params}")
+
+        return parser_class(**params)
+
+    @classmethod
+    def register(cls, parser_type: str, parser_class: type[BaseParser]):
+        """Register a new parser type.
+
+        Args:
+            parser_type: Type identifier
+            parser_class: Parser class to register
+
+        Raises:
+            TypeError: If parser_class is not a subclass of BaseParser
+        """
+        if not issubclass(parser_class, BaseParser):
+            raise TypeError(
+                f"{parser_class.__name__} must be a subclass of BaseParser"
+            )
+
+        cls._registry[parser_type] = parser_class
+        logger.info(f"Registered parser type '{parser_type}': {parser_class.__name__}")
+
+    @classmethod
+    def list_types(cls) -> list[str]:
+        """Get list of available parser types.
+
+        Returns:
+            List of registered parser type identifiers
+        """
+        return list(cls._registry.keys())
