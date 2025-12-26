@@ -16,7 +16,7 @@ class NoOpReranker(BaseReranker):
 
     def rerank(
         self,
-        query: Query,
+        query: Query,  # noqa: ARG002
         results: list[SearchResult],
         top_k: int | None = None,  # noqa: ARG002
     ) -> list[SearchResult]:
