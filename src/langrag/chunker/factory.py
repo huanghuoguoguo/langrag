@@ -5,6 +5,7 @@ from loguru import logger
 
 from .base import BaseChunker
 from .providers.fixed_size import FixedSizeChunker
+from .providers.recursive_character import RecursiveCharacterChunker
 
 
 class ChunkerFactory:
@@ -16,6 +17,7 @@ class ChunkerFactory:
 
     _registry: dict[str, type[BaseChunker]] = {
         "fixed_size": FixedSizeChunker,
+        "recursive": RecursiveCharacterChunker,
         # Future chunkers can be registered here:
         # "semantic": SemanticChunker,
         # "sentence": SentenceChunker,

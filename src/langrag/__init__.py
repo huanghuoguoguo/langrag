@@ -15,7 +15,7 @@ from .core.search_result import SearchResult
 
 # Modular components
 from .parser import BaseParser, SimpleTextParser, ParserFactory
-from .chunker import BaseChunker, FixedSizeChunker, ChunkerFactory
+from .chunker import BaseChunker, FixedSizeChunker, RecursiveCharacterChunker, ChunkerFactory
 from .embedder import BaseEmbedder, MockEmbedder, EmbedderFactory
 from .vector_store import BaseVectorStore, InMemoryVectorStore, VectorStoreFactory
 from .reranker import BaseReranker, NoOpReranker, RerankerFactory
@@ -47,6 +47,7 @@ __all__ = [
     # Chunker
     "BaseChunker",
     "FixedSizeChunker",
+    "RecursiveCharacterChunker",
     "ChunkerFactory",
     # Embedder
     "BaseEmbedder",
