@@ -1,0 +1,77 @@
+"""Vector store factory for creating vector store instances."""
+
+from typing import Any
+from loguru import logger
+
+from .base import BaseVectorStore
+from .providers.in_memory import InMemoryVectorStore
+
+
+class VectorStoreFactory:
+    """Factory for creating vector store instances based on type.
+
+    This factory maintains a registry of available vector store types
+    and creates instances based on string identifiers.
+    """
+
+    _registry: dict[str, type[BaseVectorStore]] = {
+        "in_memory": InMemoryVectorStore,
+        # Future vector stores can be registered here:
+        # "chroma": ChromaVectorStore,
+        # "pinecone": PineconeVectorStore,
+        # "weaviate": WeaviateVectorStore,
+    }
+
+    @classmethod
+    def create(cls, store_type: str, **params: Any) -> BaseVectorStore:
+        """Create a vector store instance by type.
+
+        Args:
+            store_type: Type identifier (e.g., "in_memory")
+            **params: Initialization parameters for the vector store
+
+        Returns:
+            Vector store instance
+
+        Raises:
+            ValueError: If vector store type is not registered
+        """
+        if store_type not in cls._registry:
+            available = ", ".join(cls._registry.keys())
+            raise ValueError(
+                f"Unknown vector store type: '{store_type}'. "
+                f"Available types: {available}"
+            )
+
+        store_class = cls._registry[store_type]
+        logger.debug(f"Creating {store_class.__name__} with params: {params}")
+
+        return store_class(**params)
+
+    @classmethod
+    def register(cls, store_type: str, store_class: type[BaseVectorStore]):
+        """Register a new vector store type.
+
+        Args:
+            store_type: Type identifier
+            store_class: Vector store class to register
+
+        Raises:
+            TypeError: If store_class is not a subclass of BaseVectorStore
+        """
+        if not issubclass(store_class, BaseVectorStore):
+            raise TypeError(
+                f"{store_class.__name__} must be a subclass of BaseVectorStore"
+            )
+
+        cls._registry[store_type] = store_class
+        logger.info(f"Registered vector store type '{store_type}': {store_class.__name__}")
+
+    @classmethod
+    def list_types(cls) -> list[str]:
+        """Get list of available vector store types.
+
+        Returns:
+            List of registered vector store type identifiers
+        """
+        return list(cls._registry.keys())
