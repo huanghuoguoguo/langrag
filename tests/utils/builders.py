@@ -1,14 +1,11 @@
-"""Test builders - 使用构建器模式创建测试对象"""
+"""Test builders - Use builder pattern to create test objects."""
 
-from pathlib import Path
-
-from langrag.config.models import ComponentConfig, RAGConfig
-from langrag.core.chunk import Chunk
-from langrag.core.document import Document
-
+from typing import Any, Dict, List, Optional
+from langrag.config.models import ComponentConfig, RAGConfig, VectorStoreConfig
+from langrag.entities.document import Document, DocumentType
 
 class RAGConfigBuilder:
-    """RAG 配置构建器"""
+    """Builder for RAGConfig."""
 
     def __init__(self):
         self._parser = ComponentConfig(type="simple_text", params={})
@@ -16,42 +13,35 @@ class RAGConfigBuilder:
             type="recursive", params={"chunk_size": 500, "chunk_overlap": 50}
         )
         self._embedder = ComponentConfig(type="simple", params={"dimension": 384})
-        self._vector_store = ComponentConfig(type="in_memory", params={})
+        self._vector_store = VectorStoreConfig(type="in_memory", params={})
         self._reranker = None
         self._llm = None
 
     def with_parser(self, parser_type: str, **params):
-        """设置解析器"""
         self._parser = ComponentConfig(type=parser_type, params=params)
         return self
 
     def with_chunker(self, chunker_type: str, **params):
-        """设置分块器"""
         self._chunker = ComponentConfig(type=chunker_type, params=params)
         return self
 
     def with_embedder(self, embedder_type: str, **params):
-        """设置嵌入器"""
         self._embedder = ComponentConfig(type=embedder_type, params=params)
         return self
 
     def with_vector_store(self, store_type: str, **params):
-        """设置向量存储"""
-        self._vector_store = ComponentConfig(type=store_type, params=params)
+        self._vector_store = VectorStoreConfig(type=store_type, params=params)
         return self
 
     def with_reranker(self, reranker_type: str, **params):
-        """设置重排序器"""
         self._reranker = ComponentConfig(type=reranker_type, params=params)
         return self
 
     def with_llm(self, llm_type: str, **params):
-        """设置 LLM"""
         self._llm = ComponentConfig(type=llm_type, params=params)
         return self
 
     def build(self) -> RAGConfig:
-        """构建 RAG 配置"""
         return RAGConfig(
             parser=self._parser,
             chunker=self._chunker,
@@ -63,98 +53,44 @@ class RAGConfigBuilder:
 
 
 class DocumentBuilder:
-    """文档构建器"""
+    """Builder for Document entity."""
 
     def __init__(self):
-        self._content = "Sample document content"
-        self._metadata = {}
+        self._page_content = "Sample document content"
+        self._metadata: Dict[str, Any] = {}
+        self._vector: Optional[List[float]] = None
+        self._type = DocumentType.ORIGINAL
+        self._id = None
 
     def with_content(self, content: str):
-        """设置内容"""
-        self._content = content
+        self._page_content = content
         return self
 
     def with_metadata(self, **metadata):
-        """设置元数据"""
         self._metadata.update(metadata)
+        return self
+
+    def with_vector(self, vector: List[float]):
+        self._vector = vector
+        return self
+        
+    def with_type(self, doc_type: DocumentType):
+        self._type = doc_type
+        return self
+
+    def with_id(self, doc_id: str):
+        self._id = doc_id
+        return self
+
+    def as_chunk(self):
+        self._type = DocumentType.CHUNK
         return self
 
     def build(self) -> Document:
-        """构建文档"""
-        return Document(content=self._content, metadata=self._metadata)
-
-
-class ChunkBuilder:
-    """Chunk 构建器"""
-
-    def __init__(self):
-        self._id = "test-chunk-1"
-        self._content = "Sample chunk content"
-        self._embedding = [0.1] * 384
-        self._source_doc_id = "test-doc"
-        self._metadata = {}
-
-    def with_id(self, chunk_id: str):
-        """设置 ID"""
-        self._id = chunk_id
-        return self
-
-    def with_content(self, content: str):
-        """设置内容"""
-        self._content = content
-        return self
-
-    def with_embedding(self, embedding: list):
-        """设置 embedding"""
-        self._embedding = embedding
-        return self
-
-    def without_embedding(self):
-        """移除 embedding"""
-        self._embedding = None
-        return self
-
-    def with_source_doc_id(self, doc_id: str):
-        """设置源文档 ID"""
-        self._source_doc_id = doc_id
-        return self
-
-    def with_metadata(self, **metadata):
-        """设置元数据"""
-        self._metadata.update(metadata)
-        return self
-
-    def build(self) -> Chunk:
-        """构建 Chunk"""
-        return Chunk(
-            id=self._id,
-            content=self._content,
-            embedding=self._embedding,
-            source_doc_id=self._source_doc_id,
+        return Document(
+            page_content=self._page_content,
             metadata=self._metadata,
+            vector=self._vector,
+            type=self._type,
+            id=self._id
         )
-
-
-class TestFileBuilder:
-    """测试文件构建器"""
-
-    def __init__(self, temp_dir: Path):
-        self._temp_dir = Path(temp_dir)
-        self._filename = "test_file.txt"
-        self._content = "Sample file content for testing"
-
-    def with_filename(self, filename: str):
-        """设置文件名"""
-        self._filename = filename
-        return self
-
-    def with_content(self, content: str):
-        """设置内容"""
-        self._content = content
-        return self
-
-    def build(self) -> Path:
-        """创建文件并返回路径"""
-        file_path = self._temp_dir / self._filename
-        file_path.write_text(self._content, encoding="utf-8")
-        return file_path

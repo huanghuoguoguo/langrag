@@ -1,5 +1,5 @@
 """Document entity representing a source document or a chunk."""
-    from enum import StrEnum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
@@ -29,6 +29,9 @@ class Document(BaseModel):
     
     # Core IDs (Extracted from metadata for easier access, but sync is manual)
     id: str = Field(default_factory=lambda: str(uuid4())) # The chunk ID (or doc ID)
+    
+    # Type identifier
+    type: DocumentType = Field(default=DocumentType.ORIGINAL)
     
     # Dify Compatibility Fields (Often stored in metadata)
     # dataset_id: str
