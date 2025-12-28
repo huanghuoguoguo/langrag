@@ -88,3 +88,64 @@ def list_embedders(session: Session = Depends(get_session)):
             for cfg in configs
         ]
     }
+
+
+# ================= LLM Config =================
+
+class LLMConfigRequest(BaseModel):
+    name: str = "default"
+    base_url: str
+    api_key: str
+    model: str
+    temperature: float = 0.7
+    max_tokens: int = 2048
+
+
+@router.post("/llm")
+def save_llm_config(
+    req: LLMConfigRequest,
+    session: Session = Depends(get_session),
+    rag_kernel: RAGKernel = Depends(get_rag_kernel)
+):
+    """保存并激活 LLM 配置"""
+    from web.services.llm_service import LLMService
+    try:
+        config = LLMService.save_config(
+            session,
+            rag_kernel,
+            name=req.name,
+            base_url=req.base_url,
+            api_key=req.api_key,
+            model=req.model,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens
+        )
+        
+        return {
+            "status": "ok",
+            "message": "LLM configured successfully",
+            "config": {
+                "name": config.name,
+                "model": config.model
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/llms")
+def list_llms(session: Session = Depends(get_session)):
+    """列出所有 LLM 配置"""
+    from web.services.llm_service import LLMService
+    configs = LLMService.list_all(session)
+    return {
+        "llms": [
+            {
+                "name": cfg.name,
+                "base_url": cfg.base_url,
+                "model": cfg.model,
+                "is_active": cfg.is_active
+            }
+            for cfg in configs
+        ]
+    }

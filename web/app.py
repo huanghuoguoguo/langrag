@@ -8,8 +8,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from web.core.database import init_db
+from web.core.database import init_db, engine, get_session
+from web.models.database import KnowledgeBase, LLMConfig
 from web.core.rag_kernel import RAGKernel
+from web.core.context import rag_kernel
 from web.routers import kb_router, document_router, search_router, config_router
 
 # Setup logging
@@ -18,9 +20,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("web-app")
-
-# Global RAG Kernel instance
-rag_kernel = RAGKernel()
 
 
 @asynccontextmanager
@@ -42,6 +41,27 @@ async def lifespan(app: FastAPI):
         for kb in kbs:
             rag_kernel.create_vector_store(kb.kb_id, kb.collection_name, kb.vdb_type)
             logger.info(f"Restored vector store for KB: {kb.kb_id} (type: {kb.vdb_type})")
+            
+        # Restore active Embedder
+        from web.services.embedder_service import EmbedderService
+        active_emb = EmbedderService.get_active_config(session)
+        if active_emb:
+            rag_kernel.set_embedder(active_emb.embedder_type, active_emb.model, active_emb.base_url, active_emb.api_key)
+            logger.info(f"Restored active embedder: {active_emb.name}")
+
+        # Restore active LLM
+        from web.services.llm_service import LLMService
+        active_llm = LLMService.get_active_config(session)
+        if active_llm:
+            rag_kernel.set_llm(
+                base_url=active_llm.base_url,
+                api_key=active_llm.api_key,
+                model=active_llm.model,
+                temperature=active_llm.temperature,
+                max_tokens=active_llm.max_tokens
+            )
+            logger.info(f"Restored active LLM: {active_llm.name}")
+            
     finally:
         session.close()
     
@@ -53,19 +73,22 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down...")
 
 
-# Create FastAPI app
+# Initialize FastAPI
 app = FastAPI(
-    title="LangRAG Web Application",
-    description="业务层应用，使用 langrag 核心库",
-    version="1.0.0",
+    title="LangRAG API",
+    description="RAG Knowledge Base Management API",
+    version="0.1.0",
     lifespan=lifespan
 )
 
+# Register routers
 # Register routers
 app.include_router(kb_router)
 app.include_router(document_router)
 app.include_router(search_router)
 app.include_router(config_router)
+from web.routers.chat import router as chat_router
+app.include_router(chat_router)
 
 # Mount static files
 app.mount("/", StaticFiles(directory="web/static", html=True), name="static")
