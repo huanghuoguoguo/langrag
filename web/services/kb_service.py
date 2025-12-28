@@ -20,8 +20,8 @@ class KBService:
         description: Optional[str] = None,
         vdb_type: str = "chroma",
         embedder_name: Optional[str] = None,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50
+        chunk_size: int = 1000,
+        chunk_overlap: int = 100
     ) -> KnowledgeBase:
         """创建知识库"""
         # Generate unique ID

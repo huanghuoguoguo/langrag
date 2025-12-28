@@ -209,9 +209,43 @@ class RAGKernel:
         
         logger.info(f"[RAGKernel] Vector store found for kb_id: {kb_id}")
         
-        # 1. Parse
+        # 1. Parse - 根据文件类型选择解析器
         logger.info(f"[RAGKernel] Step 1: Parsing document...")
-        parser = SimpleTextParser()
+        file_ext = file_path.suffix.lower()
+        
+        if file_ext == '.pdf':
+            try:
+                from langrag.index_processor.extractor.providers.pdf import PdfParser
+                parser = PdfParser()
+                logger.info(f"[RAGKernel] Using PdfParser for {file_ext} file")
+            except ImportError:
+                logger.warning("pypdf not installed, falling back to SimpleTextParser (may produce incorrect results)")
+                parser = SimpleTextParser()
+        elif file_ext in ['.md', '.markdown']:
+            try:
+                from langrag.index_processor.extractor.providers.markdown import MarkdownParser
+                parser = MarkdownParser()
+                logger.info(f"[RAGKernel] Using MarkdownParser for {file_ext} file")
+            except ImportError:
+                parser = SimpleTextParser()
+        elif file_ext in ['.html', '.htm']:
+            try:
+                from langrag.index_processor.extractor.providers.html import HtmlParser
+                parser = HtmlParser()
+                logger.info(f"[RAGKernel] Using HtmlParser for {file_ext} file")
+            except ImportError:
+                parser = SimpleTextParser()
+        elif file_ext in ['.docx', '.doc']:
+            try:
+                from langrag.index_processor.extractor.providers.docx import DocxParser
+                parser = DocxParser()
+                logger.info(f"[RAGKernel] Using DocxParser for {file_ext} file")
+            except ImportError:
+                parser = SimpleTextParser()
+        else:
+            parser = SimpleTextParser()
+            logger.info(f"[RAGKernel] Using SimpleTextParser for {file_ext} file")
+        
         raw_docs = parser.parse(file_path)
         logger.info(f"[RAGKernel] Parsed {len(raw_docs)} raw documents")
         

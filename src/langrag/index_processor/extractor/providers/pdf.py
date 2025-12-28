@@ -104,6 +104,9 @@ class PdfParser(BaseParser):
 
                 if not content.strip():
                     logger.warning(f"No text content extracted from {path}")
+                    logger.warning("This may be a scanned PDF or image-based PDF. OCR is required.")
+                    # Provide placeholder to avoid validation error
+                    content = f"[PDF文件：{path.name}]\n[无法提取文本内容，可能是扫描版PDF，需要OCR支持]"
 
                 doc = Document(
                     page_content=content,
@@ -114,6 +117,7 @@ class PdfParser(BaseParser):
                         "total_pages": total_pages,
                         "extracted_pages": f"{start}-{end}",
                         "parser": "PdfParser",
+                        "text_extracted": len(content.strip()) > 0,
                     },
                 )
 

@@ -17,8 +17,8 @@ class KBCreateRequest(BaseModel):
     description: Optional[str] = None
     vdb_type: str = "chroma"  # chroma, duckdb, seekdb
     embedder_name: Optional[str] = None
-    chunk_size: int = 500
-    chunk_overlap: int = 50
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
 
 
 class KBResponse(BaseModel):
