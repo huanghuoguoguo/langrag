@@ -1,26 +1,54 @@
-"""Base LLM interface."""
-
 from abc import ABC, abstractmethod
-
-from ..core.search_result import SearchResult
-
+from typing import Any, List, Dict, Optional
 
 class BaseLLM(ABC):
-    """Abstract base class for LLM-based generation.
-
-    LLMs generate responses using retrieved context.
+    """
+    Interface for a specific LLM instance (e.g., 'gpt-4', 'text-embedding-3').
+    LangRAG components use this to perform actual inference/embedding.
     """
 
     @abstractmethod
-    def generate(self, query: str, context: list[SearchResult], **kwargs) -> str:
-        """Generate response using query and context.
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of texts (for indexing)."""
+        pass
 
-        Args:
-            query: User query string
-            context: Retrieved context chunks
-            **kwargs: Model-specific generation parameters
+    @abstractmethod
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a single query (for retrieval)."""
+        pass
 
-        Returns:
-            Generated response text
+    @abstractmethod
+    def chat(self, messages: list[dict], **kwargs) -> str:
         """
+        Chat completion.
+        messages: [{"role": "user", "content": "..."}, ...]
+        """
+        pass
+
+
+class ModelManager(ABC):
+    """
+    Interface for managing and retrieving LLM instances.
+    The host application implements this to provide LangRAG with access to configured models.
+    """
+
+    @abstractmethod
+    def get_embedding_model(self, model_uid: str = None) -> BaseLLM:
+        """
+        Get an embedding model instance.
+        If model_uid is None, return the system default.
+        """
+        pass
+
+    @abstractmethod
+    def get_chat_model(self, model_uid: str = None) -> BaseLLM:
+        """
+        Get a chat/generation model instance.
+        If model_uid is None, return the system default.
+        """
+        pass
+    
+    @abstractmethod
+    def get_rerank_model(self, model_uid: str = None) -> Any:
+        # Rerank model interface might be different
         pass
