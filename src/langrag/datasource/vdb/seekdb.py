@@ -40,16 +40,20 @@ class SeekDBVector(BaseVector):
              # Need to ensure dataset.collection_name is used as DB name or Table name
              # Following legacy logic: db_name = collection_name
              self.db_name = self.collection_name 
-             self._client = pyseekdb.Client(path=db_path, database=self.db_name)
              
              # Attempt to create DB if not exists (AdminClient needed)
+             # MUST be done before creating the main client to avoid locking issues
              try:
                  admin = pyseekdb.AdminClient(path=db_path)
                  existing = [d.name for d in admin.list_databases()]
                  if self.db_name not in existing:
                      admin.create_database(self.db_name)
+                 # release admin client
+                 del admin
              except Exception as e:
                  logger.warning(f"Failed to check/create SeekDB database: {e}")
+
+             self._client = pyseekdb.Client(path=db_path, database=self.db_name)
 
         else:
              if not host or not port:
@@ -178,3 +182,8 @@ class SeekDBVector(BaseVector):
 
     def delete(self) -> None:
         self._client.delete_collection(self.collection_name)
+
+    def close(self) -> None:
+        """Close the underlying client connection."""
+        if hasattr(self, '_client') and hasattr(self._client, '__exit__'):
+            self._client.__exit__(None, None, None)
