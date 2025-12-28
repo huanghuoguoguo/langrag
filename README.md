@@ -36,7 +36,31 @@ uv sync --dev
 
 ## 快速开始
 
-### 1. 运行 Demo
+### 1. 启动 Web 界面 (推荐)
+
+LangRAG 提供了一个功能完整的 Web 管理界面，支持可视化的知识库管理、文档上传、配置和检索测试。
+
+**功能亮点：**
+- **可视化管理**: 直观的知识库列表和详情页。
+- **多向量库支持**: 支持 ChromaDB, DuckDB (Persistent), SeekDB (Hybrid Search)。
+- **灵活的 Embedder**: 支持 OpenAI 兼容接口及 SeekDB 本地内置模型。
+- **混合检索**: 配合 SeekDB 实现向量+全文的混合检索。
+- **持久化存储**: 所有业务数据和向量数据均持久化存储于 `web/data` 目录。
+
+**启动方式：**
+
+```bash
+# 方式一：使用启动脚本
+chmod +x web/start.sh
+./web/start.sh
+
+# 方式二：直接运行模块
+uv run python -m web.app
+```
+
+启动后访问: [http://localhost:8000](http://localhost:8000)
+
+### 2. 运行脚本 Demo (CLI)
 
 LangRAG 提供了一个开箱即用的 `main.py` 演示脚本，它会使用内存向量存储演示完整的索引和检索流程。
 
