@@ -6,7 +6,7 @@ multiple retrieval systems without requiring score normalization.
 
 from loguru import logger
 
-from ..core.search_result import SearchResult
+from ..entities.search_result import SearchResult
 
 
 def reciprocal_rank_fusion(
