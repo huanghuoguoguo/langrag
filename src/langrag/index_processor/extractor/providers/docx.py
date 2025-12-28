@@ -14,7 +14,7 @@ except ImportError:
     DOCX_AVAILABLE = False
     logger.warning("python-docx not installed. DOCX parsing will not be available.")
 
-from ...core.document import Document
+from langrag.entities.document import Document
 from ..base import BaseParser
 
 
@@ -121,7 +121,7 @@ class DocxParser(BaseParser):
                 logger.warning(f"No text content extracted from {path}")
 
             doc_obj = Document(
-                content=content,
+                page_content=content,
                 metadata={
                     "source": str(path.absolute()),
                     "filename": path.name,

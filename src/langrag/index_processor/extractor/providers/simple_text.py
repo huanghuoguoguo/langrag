@@ -12,7 +12,8 @@ except ImportError:
     CHARDET_AVAILABLE = False
     logger.debug("chardet not installed. Encoding detection will not be available.")
 
-from ...core.document import Document
+
+from langrag.entities.document import Document
 from ..base import BaseParser
 
 
@@ -87,7 +88,7 @@ class SimpleTextParser(BaseParser):
             encoding = "utf-8"
 
         doc = Document(
-            content=content,
+            page_content=content,
             metadata={
                 "source": str(path.absolute()),
                 "filename": path.name,

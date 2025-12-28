@@ -2,8 +2,8 @@
 
 from loguru import logger
 
-from ...core.chunk import Chunk
-from ...core.document import Document
+
+from langrag.entities.document import Document, DocumentType
 from ..base import BaseChunker
 
 
@@ -36,7 +36,7 @@ class FixedSizeChunker(BaseChunker):
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def split(self, documents: list[Document]) -> list[Chunk]:
+    def split(self, documents: list[Document]) -> list[Document]:
         """Split documents into fixed-size chunks.
 
         Args:
@@ -55,7 +55,7 @@ class FixedSizeChunker(BaseChunker):
         logger.info(f"Created {len(chunks)} chunks from {len(documents)} documents")
         return chunks
 
-    def _split_document(self, doc: Document) -> list[Chunk]:
+    def _split_document(self, doc: Document) -> list[Document]:
         """Split a single document into chunks.
 
         Args:
@@ -64,7 +64,7 @@ class FixedSizeChunker(BaseChunker):
         Returns:
             List of chunks from this document
         """
-        text = doc.content
+        text = doc.page_content
         chunks = []
         start = 0
         chunk_index = 0
@@ -73,14 +73,15 @@ class FixedSizeChunker(BaseChunker):
             end = start + self.chunk_size
             chunk_text = text[start:end]
 
-            chunk = Chunk(
-                content=chunk_text,
-                source_doc_id=doc.id,
+            chunk = Document(
+                page_content=chunk_text,
                 metadata={
                     **doc.metadata,
+                    "source_doc_id": doc.id,
                     "chunk_index": chunk_index,
                     "start_char": start,
                     "end_char": min(end, len(text)),
+                    "type": DocumentType.CHUNK,
                 },
             )
             chunks.append(chunk)

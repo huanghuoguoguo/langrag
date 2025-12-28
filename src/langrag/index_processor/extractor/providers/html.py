@@ -15,7 +15,7 @@ except ImportError:
     HTML_AVAILABLE = False
     logger.warning("beautifulsoup4 not installed. HTML parsing will not be available.")
 
-from ...core.document import Document
+from langrag.entities.document import Document
 from ..base import BaseParser
 
 
@@ -107,7 +107,7 @@ class HtmlParser(BaseParser):
                 logger.warning(f"No text content extracted from {path}")
 
             doc = Document(
-                content=text_content,
+                page_content=text_content,
                 metadata={
                     "source": str(path.absolute()),
                     "filename": path.name,
