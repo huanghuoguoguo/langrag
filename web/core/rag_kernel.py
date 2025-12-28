@@ -156,6 +156,9 @@ class RAGKernel:
         """为知识库创建向量存储"""
         logger.info(f"[RAGKernel] Creating vector store: kb_id={kb_id}, type={vdb_type}, collection={collection_name}")
         
+        # Import config for data directories
+        from web.config import CHROMA_DIR, DUCKDB_DIR, SEEKDB_DIR
+        
         dataset = Dataset(
             id=kb_id,
             tenant_id="default",
@@ -165,16 +168,19 @@ class RAGKernel:
             collection_name=collection_name
         )
         
-        # Import vector store based on type
+        # Import vector store based on type with configured paths
         if vdb_type == "chroma":
             from langrag.datasource.vdb.chroma import ChromaVector
-            store = ChromaVector(dataset)
+            store = ChromaVector(dataset, persist_directory=str(CHROMA_DIR))
+            logger.info(f"[RAGKernel] ChromaDB data directory: {CHROMA_DIR}")
         elif vdb_type == "duckdb":
             from langrag.datasource.vdb.duckdb import DuckDBVector
-            store = DuckDBVector(dataset)
+            store = DuckDBVector(dataset, persist_directory=str(DUCKDB_DIR))
+            logger.info(f"[RAGKernel] DuckDB data directory: {DUCKDB_DIR}")
         elif vdb_type == "seekdb":
             from langrag.datasource.vdb.seekdb import SeekDBVector
-            store = SeekDBVector(dataset)
+            store = SeekDBVector(dataset, persist_directory=str(SEEKDB_DIR))
+            logger.info(f"[RAGKernel] SeekDB data directory: {SEEKDB_DIR}")
         else:
             raise ValueError(f"Unsupported vector database type: {vdb_type}")
         
