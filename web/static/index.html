@@ -213,15 +213,22 @@
                     <select id="modal-kb-vdb">
                         <option value="chroma">ChromaDB</option>
                         <option value="duckdb">DuckDB</option>
-                        <option value="seekdb">SeekDB</option>
+                        <option value="seekdb">SeekDB（支持混合检索）</option>
                     </select>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文），检索效果更好
+                    </p>
                 </div>
                 <div class="form-group">
-                    <label>Embedding 模型</label>
-                    <select id="modal-kb-embedder">
-                        <option value="">不使用（仅关键词检索）</option>
+                    <label>Embedding 模型 *</label>
+                    <select id="modal-kb-embedder" required>
+                        <option value="">请选择 Embedder...</option>
                         <!-- Will be populated dynamically -->
                     </select>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        💡 必须配置 Embedder（在"模型配置"页面添加）<br>
+                        💡 SeekDB 向量库 + 任何 Embedder = 混合检索
+                    </p>
                 </div>
                 <div class="form-group">
                     <label>分块大小 (字符数)</label>

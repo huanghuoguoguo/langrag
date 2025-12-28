@@ -16,7 +16,7 @@ class KBCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     vdb_type: str = "chroma"  # chroma, duckdb, seekdb
-    embedder_name: Optional[str] = None
+    embedder_name: str  # Required - must configure embedder first
     chunk_size: int = 1000
     chunk_overlap: int = 100
 
@@ -45,6 +45,13 @@ def create_kb(
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
     """创建知识库"""
+    # Validate embedder_name is required
+    if not req.embedder_name:
+        raise HTTPException(
+            status_code=400, 
+            detail="Embedder is required. Please configure an embedder in 'Model Configuration' page first."
+        )
+    
     kb = KBService.create_kb(
         session,
         rag_kernel,

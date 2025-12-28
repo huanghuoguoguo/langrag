@@ -179,8 +179,10 @@ class RAGKernel:
             logger.info(f"[RAGKernel] DuckDB data directory: {DUCKDB_DIR}")
         elif vdb_type == "seekdb":
             from langrag.datasource.vdb.seekdb import SeekDBVector
-            store = SeekDBVector(dataset, persist_directory=str(SEEKDB_DIR))
+            # SeekDB uses db_path instead of persist_directory
+            store = SeekDBVector(dataset, mode="embedded", db_path=str(SEEKDB_DIR))
             logger.info(f"[RAGKernel] SeekDB data directory: {SEEKDB_DIR}")
+            logger.info(f"[RAGKernel] SeekDB supports hybrid search (vector + full-text)")
         else:
             raise ValueError(f"Unsupported vector database type: {vdb_type}")
         
@@ -295,9 +297,14 @@ class RAGKernel:
         检索
         返回：(结果列表, 检索类型)
         """
+        logger.info(f"[RAGKernel] Search called: kb_id={kb_id}, query='{query[:50]}...', top_k={top_k}")
+        
         store = self.get_vector_store(kb_id)
         if not store:
+            logger.error(f"[RAGKernel] Vector store not found for kb_id: {kb_id}")
             raise ValueError(f"Vector store not found for kb_id: {kb_id}")
+        
+        logger.info(f"[RAGKernel] Vector store type: {store.__class__.__name__}")
         
         query_vector = None
         search_type = "keyword"
@@ -305,12 +312,31 @@ class RAGKernel:
         # Generate query embedding if available
         if self.embedder:
             try:
+                logger.info(f"[RAGKernel] Generating query embedding with {self.embedder.__class__.__name__}...")
                 vectors = self.embedder.embed([query])
                 if vectors and len(vectors) > 0:
                     query_vector = vectors[0]
                     search_type = "vector"
+                    logger.info(f"[RAGKernel] Query embedding generated, dimension: {len(query_vector)}")
             except Exception as e:
-                logger.error(f"Query embedding failed: {e}")
+                logger.error(f"[RAGKernel] Query embedding failed: {e}")
+        else:
+            logger.info(f"[RAGKernel] No embedder configured, using keyword search")
         
-        results = store.search(query, query_vector=query_vector, top_k=top_k)
+        # SeekDB 支持混合检索：只要有 query_vector 就使用混合检索
+        # 无论 Embedder 是什么类型（OpenAI/SeekDB/其他），只要向量存在即可
+        if store.__class__.__name__ == 'SeekDBVector' and query_vector:
+            search_type = "hybrid"
+            logger.info(f"[RAGKernel] Using HYBRID search (vector + full-text) for SeekDB")
+            logger.info(f"[RAGKernel] Hybrid search combines semantic similarity with keyword matching")
+            results = store.search(query, query_vector=query_vector, top_k=top_k, search_type='hybrid')
+        else:
+            logger.info(f"[RAGKernel] Using {search_type} search")
+            if search_type == "vector":
+                logger.info(f"[RAGKernel] Vector search: semantic similarity only")
+            else:
+                logger.info(f"[RAGKernel] Keyword search: text matching only")
+            results = store.search(query, query_vector=query_vector, top_k=top_k)
+        
+        logger.info(f"[RAGKernel] Search completed, found {len(results)} results")
         return results, search_type

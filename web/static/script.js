@@ -247,12 +247,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('modal-kb-name').value;
         const desc = document.getElementById('modal-kb-desc').value;
         const vdbType = document.getElementById('modal-kb-vdb').value;
-        const embedderName = document.getElementById('modal-kb-embedder').value || null;
+        const embedderName = document.getElementById('modal-kb-embedder').value;
         const chunkSize = parseInt(document.getElementById('modal-kb-chunk-size').value);
         const chunkOverlap = parseInt(document.getElementById('modal-kb-chunk-overlap').value);
         const btn = document.getElementById('btn-create-kb-confirm');
 
         if (!name) return showToast('请输入知识库名称', 'error');
+        if (!embedderName) return showToast('请选择 Embedding 模型（在"模型配置"页面添加）', 'error');
 
         setLoading(btn, true);
         try {
