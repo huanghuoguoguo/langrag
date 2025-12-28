@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangRAG 控制台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            LangRAG
+        </div>
+
+        <div class="nav-item active" data-target="kb-list">
+            <span>知识库列表</span>
+        </div>
+        <div class="nav-item" data-target="kb-detail" style="display:none;">
+            <span>知识库详情</span>
+        </div>
+        <div class="nav-item" data-target="models">
+            <span>模型配置</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- KB List Section -->
+        <div id="kb-list" class="section active">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
+                <div>
+                    <h1>知识库列表</h1>
+                    <p class="subtitle">管理您的所有知识库</p>
+                </div>
+                <button id="btn-show-create-modal"
+                    style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));">
+                    + 创建知识库
+                </button>
+            </div>
+
+            <div class="container">
+                <div id="kb-list-container">
+                    <!-- Knowledge bases will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- KB Detail Section -->
+        <div id="kb-detail" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
+                <div>
+                    <h1 id="kb-detail-name">知识库名称</h1>
+                    <p class="subtitle" id="kb-detail-desc">描述</p>
+                </div>
+                <button id="btn-back-to-list" class="secondary">
+                    ← 返回列表
+                </button>
+            </div>
+
+            <div class="container">
+                <!-- KB Info Card -->
+                <div class="card">
+                    <h2>知识库信息</h2>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                        <div>
+                            <label style="margin-bottom:0.25rem;">ID</label>
+                            <div id="kb-info-id" style="color:var(--text-main); font-family:monospace;"></div>
+                        </div>
+                        <div>
+                            <label style="margin-bottom:0.25rem;">向量数据库</label>
+                            <div id="kb-info-vdb" style="color:var(--text-main);"></div>
+                        </div>
+                        <div>
+                            <label style="margin-bottom:0.25rem;">Embedding 模型</label>
+                            <div id="kb-info-embedder" style="color:var(--text-main);"></div>
+                        </div>
+                        <div>
+                            <label style="margin-bottom:0.25rem;">分块大小</label>
+                            <div id="kb-info-chunk" style="color:var(--text-main);"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Documents Card -->
+                <div class="card">
+                    <h2>上传文档</h2>
+                    <div id="dropzone" class="dropzone">
+                        <p>将文件拖拽至此，或点击选择文件</p>
+                        <input type="file" id="file-input" multiple style="display:none">
+                    </div>
+
+                    <div id="file-list" class="file-list"></div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button id="btn-upload">
+                            开始处理
+                            <span class="loader"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Documents List Card -->
+                <div class="card">
+                    <h2>已上传文档</h2>
+                    <div id="documents-list">
+                        <!-- Documents will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Search Test Card -->
+                <div class="card">
+                    <h2>检索测试</h2>
+                    <div class="form-group">
+                        <label>查询语句</label>
+                        <div style="display:flex; gap:0.5rem;">
+                            <input type="text" id="search-query" placeholder="请输入您的问题...">
+                            <button id="btn-search">搜索 <span class="loader"></span></button>
+                        </div>
+                    </div>
+
+                    <div id="search-results">
+                        <!-- Results will appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Section -->
+        <div id="models" class="section">
+            <h1>模型配置</h1>
+            <p class="subtitle">配置 Embedding 模型（OpenAI 兼容）</p>
+
+            <div class="container">
+                <div class="card">
+                    <h2>已配置模型</h2>
+                    <div id="embedder-list">
+                        <!-- Embedders will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>添加新模型</h2>
+                    <div class="form-group">
+                        <label>配置名称 *</label>
+                        <input type="text" id="emb-name" placeholder="例如：seekdb-default">
+                    </div>
+                    <div class="form-group">
+                        <label>Embedder 类型 *</label>
+                        <select id="emb-type">
+                            <option value="openai">OpenAI 兼容 API</option>
+                            <option value="seekdb">SeekDB 内置模型</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="emb-base-url-group">
+                        <label>Base URL *</label>
+                        <input type="text" id="emb-base-url" placeholder="https://api.openai.com/v1">
+                    </div>
+                    <div class="form-group" id="emb-api-key-group">
+                        <label>API Key *</label>
+                        <input type="password" id="emb-api-key" placeholder="sk-...">
+                    </div>
+                    <div class="form-group" id="emb-model-group">
+                        <label>Model Name *</label>
+                        <input type="text" id="emb-model" placeholder="text-embedding-3-small">
+                    </div>
+                    <div id="seekdb-info"
+                        style="display:none; padding:1rem; background:rgba(99,102,241,0.1); border-radius:var(--radius); margin-bottom:1rem;">
+                        <p style="margin:0; color:var(--text-main);">
+                            <strong>SeekDB 内置模型</strong><br>
+                            <span style="font-size:0.9rem; color:var(--text-muted);">
+                                使用 pyseekdb 的默认 embedding function<br>
+                                模型：all-MiniLM-L6-v2 (384维)<br>
+                                完全离线，无需 API Key<br>
+                                <span style="color:var(--primary-color);">⚠️ CPU 运行，大文档处理较慢（建议使用 OpenAI API
+                                    以获得更快速度）</span>
+                            </span>
+                        </p>
+                    </div>
+                    <button id="btn-save-config">保存配置 <span class="loader"></span></button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Create KB Modal -->
+    <div id="create-kb-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>创建知识库</h2>
+                <span class="modal-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>名称 *</label>
+                    <input type="text" id="modal-kb-name" placeholder="例如：2024财务文档">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="modal-kb-desc" rows="3" placeholder="关于该数据集的描述..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>向量数据库 *</label>
+                    <select id="modal-kb-vdb">
+                        <option value="chroma">ChromaDB</option>
+                        <option value="duckdb">DuckDB</option>
+                        <option value="seekdb">SeekDB（支持混合检索）</option>
+                    </select>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文），检索效果更好
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>Embedding 模型 *</label>
+                    <select id="modal-kb-embedder" required>
+                        <option value="">请选择 Embedder...</option>
+                        <!-- Will be populated dynamically -->
+                    </select>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        💡 必须配置 Embedder（在"模型配置"页面添加）<br>
+                        💡 SeekDB 向量库 + 任何 Embedder = 混合检索
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>分块大小 (字符数)</label>
+                    <input type="number" id="modal-kb-chunk-size" value="1000" min="100" max="4000" step="100">
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        推荐：1000-2000（较大的 chunk 可减少总数，提升处理速度）
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>分块重叠 (字符数)</label>
+                    <input type="number" id="modal-kb-chunk-overlap" value="100" min="0" max="500" step="50">
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+                        推荐：chunk_size 的 10-20%
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary modal-close">取消</button>
+                <button id="btn-create-kb-confirm">
+                    创建
+                    <span class="loader"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
