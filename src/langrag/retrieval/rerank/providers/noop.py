@@ -2,8 +2,7 @@
 
 from loguru import logger
 
-from ...core.query import Query
-from ...core.search_result import SearchResult
+from langrag.entities.search_result import SearchResult
 from ..base import BaseReranker
 
 
@@ -16,7 +15,7 @@ class NoOpReranker(BaseReranker):
 
     def rerank(
         self,
-        query: Query,  # noqa: ARG002
+        query: str,  # noqa: ARG002
         results: list[SearchResult],
         top_k: int | None = None,  # noqa: ARG002
     ) -> list[SearchResult]:

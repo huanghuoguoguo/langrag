@@ -132,8 +132,8 @@ class RecursiveCharacterChunker(BaseChunker):
                     "chunk_index": i,
                     "chunk_size": len(chunk_text),
                     "chunking_method": "recursive_character",
-                    "type": DocumentType.CHUNK,
                 },
+                type=DocumentType.CHUNK,
             )
             chunks.append(chunk)
             char_position += len(chunk_text)
