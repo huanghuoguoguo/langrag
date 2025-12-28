@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from ..core.document import Document
+from langrag.entities.document import Document
 
 
 class BaseParser(ABC):

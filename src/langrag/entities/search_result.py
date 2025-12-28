@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from .chunk import Chunk
+from .document import Document
 
 
 class SearchResult(BaseModel):
@@ -13,7 +13,7 @@ class SearchResult(BaseModel):
         score: Relevance score in range [0, 1]
     """
 
-    chunk: Chunk
+    chunk: Document
     score: float = Field(..., ge=0.0, le=1.0)
 
     model_config = {

@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from ..core.chunk import Chunk
-from ..core.document import Document
+
+from langrag.entities.document import Document
 
 
 class BaseChunker(ABC):
@@ -14,7 +14,7 @@ class BaseChunker(ABC):
     """
 
     @abstractmethod
-    def split(self, documents: list[Document]) -> list[Chunk]:
+    def split(self, documents: list[Document]) -> list[Document]:
         """Split documents into chunks.
 
         Args:

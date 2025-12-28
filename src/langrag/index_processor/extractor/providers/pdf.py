@@ -14,7 +14,7 @@ except ImportError:
     PDF_AVAILABLE = False
     logger.warning("pypdf not installed. PDF parsing will not be available.")
 
-from ...core.document import Document
+from langrag.entities.document import Document
 from ..base import BaseParser
 
 
@@ -106,7 +106,7 @@ class PdfParser(BaseParser):
                     logger.warning(f"No text content extracted from {path}")
 
                 doc = Document(
-                    content=content,
+                    page_content=content,
                     metadata={
                         "source": str(path.absolute()),
                         "filename": path.name,

@@ -6,8 +6,8 @@ RecursiveCharacterTextSplitter, prioritizing semantic boundaries.
 
 from loguru import logger
 
-from ...core.chunk import Chunk
-from ...core.document import Document
+
+from langrag.entities.document import Document, DocumentType
 from ..base import BaseChunker
 
 
@@ -79,7 +79,7 @@ class RecursiveCharacterChunker(BaseChunker):
             f"separators={len(self.separators)}"
         )
 
-    def split(self, documents: list[Document]) -> list[Chunk]:
+    def split(self, documents: list[Document]) -> list[Document]:
         """Split documents into chunks using recursive splitting.
 
         Args:
@@ -95,16 +95,16 @@ class RecursiveCharacterChunker(BaseChunker):
             chunks.extend(doc_chunks)
             logger.debug(
                 f"Split document {doc.id} into {len(doc_chunks)} chunks "
-                f"(avg size: {sum(len(c.content) for c in doc_chunks) / len(doc_chunks):.0f})"
+                f"(avg size: {sum(len(c.page_content) for c in doc_chunks) / len(doc_chunks):.0f})"
             )
 
         logger.info(
             f"Created {len(chunks)} chunks from {len(documents)} documents "
-            f"(avg size: {sum(len(c.content) for c in chunks) / len(chunks):.0f})"
+            f"(avg size: {sum(len(c.page_content) for c in chunks) / len(chunks):.0f})"
         )
         return chunks
 
-    def _split_document(self, doc: Document) -> list[Chunk]:
+    def _split_document(self, doc: Document) -> list[Document]:
         """Split a single document into chunks.
 
         Args:
@@ -113,7 +113,7 @@ class RecursiveCharacterChunker(BaseChunker):
         Returns:
             List of chunks from this document
         """
-        text = doc.content
+        text = doc.page_content
 
         # Split text recursively
         text_chunks = self._split_text_recursive(text, self.separators)
@@ -124,14 +124,15 @@ class RecursiveCharacterChunker(BaseChunker):
 
         for i, chunk_text in enumerate(text_chunks):
             # Find actual position in original text (approximate)
-            chunk = Chunk(
-                content=chunk_text,
-                source_doc_id=doc.id,
+            chunk = Document(
+                page_content=chunk_text,
                 metadata={
                     **doc.metadata,
+                    "source_doc_id": doc.id,
                     "chunk_index": i,
                     "chunk_size": len(chunk_text),
                     "chunking_method": "recursive_character",
+                    "type": DocumentType.CHUNK,
                 },
             )
             chunks.append(chunk)

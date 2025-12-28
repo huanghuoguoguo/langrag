@@ -1,122 +1,55 @@
 """
 LangRAG - A modular Retrieval-Augmented Generation framework.
-
-This package provides a clean, extensible architecture for building RAG systems
-with pluggable components and type-based configuration.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-# Core entities
-from .chunker import BaseChunker, ChunkerFactory, FixedSizeChunker, RecursiveCharacterChunker
-from .compressor import BaseCompressor, CompressorFactory
-from .config.factory import ComponentFactory
+# Entities
+from .entities.document import Document, DocumentType
+from .entities.dataset import Dataset, RetrievalContext
+from .entities.search_result import SearchResult
 
-# Configuration
-from .config.models import ComponentConfig, RAGConfig, StorageRole
-from .core.chunk import Chunk
-from .core.document import Document
-from .core.query import Query
-from .core.search_result import SearchResult
-from .embedder import BaseEmbedder, EmbedderFactory, MockEmbedder
+# Indexing Components
+from .index_processor.extractor.base import BaseParser
+from .index_processor.extractor.providers.simple_text import SimpleTextParser
+from .index_processor.splitter.base import BaseChunker
+from .index_processor.splitter.providers.recursive_character import RecursiveCharacterChunker
+from .index_processor.processor.base import BaseIndexProcessor
 
-# Engine (high-level orchestrator)
-from .engine import RAGEngine
+# Retrieval Components
+from .retrieval.workflow import RetrievalWorkflow
+from .datasource.service import RetrievalService
 
-# Pipelines
-from .indexing import IndexingPipeline
+# LLM & Embedding
+from .llm.embedder.base import BaseEmbedder
+from .llm.embedder.factory import EmbedderFactory
 
-# Knowledge base management
-from .knowledge import KnowledgeBase, KnowledgeBaseManager
-from .llm import BaseLLM, LLMFactory
-
-# Modular components
-from .parser import BaseParser, ParserFactory, SimpleTextParser
-from .reranker import BaseReranker, NoOpReranker, RerankerFactory
-
-# Retrieval system
-from .retrieval import (
-    BaseRetrievalProvider,
-    FullTextSearchProvider,
-    HybridSearchProvider,
-    Retriever,
-    VectorSearchProvider,
-)
-
-# Utilities
-from .utils import cosine_similarity, reciprocal_rank_fusion, weighted_rrf
-from .vector_store import (
-    BaseVectorStore,
-    InMemoryVectorStore,
-    SearchMode,
-    VectorStoreCapabilities,
-    VectorStoreFactory,
-    VectorStoreManager,
-)
+# Data Source
+from .datasource.vdb.base import BaseVector
 
 __all__ = [
-    # Version
-    "__version__",
-    # Core
+    # Entities
     "Document",
-    "Chunk",
-    "Query",
+    "DocumentType",
+    "Dataset",
+    "RetrievalContext",
     "SearchResult",
-    # Parser
+    
+    # Indexing
     "BaseParser",
     "SimpleTextParser",
-    "ParserFactory",
-    # Chunker
     "BaseChunker",
-    "FixedSizeChunker",
     "RecursiveCharacterChunker",
-    "ChunkerFactory",
-    # Embedder
-    "BaseEmbedder",
-    "MockEmbedder",
-    "EmbedderFactory",
-    # Vector Store
-    "BaseVectorStore",
-    "VectorStoreCapabilities",
-    "SearchMode",
-    "InMemoryVectorStore",
-    "VectorStoreFactory",
-    "VectorStoreManager",
-    # Reranker
-    "BaseReranker",
-    "NoOpReranker",
-    "RerankerFactory",
-    # Compressor
-    "BaseCompressor",
-    "CompressorFactory",
+    "BaseIndexProcessor",
+    
+    # Retrieval
+    "RetrievalWorkflow",
+    "RetrievalService",
+    
     # LLM
-    "BaseLLM",
-    "LLMFactory",
-    # Config
-    "RAGConfig",
-    "ComponentConfig",
-    "StorageRole",
-    "ComponentFactory",
-    # Knowledge Base
-    "KnowledgeBase",
-    "KnowledgeBaseManager",
-    # Pipelines
-    "IndexingPipeline",
-    # Retrieval system
-    "Retriever",
-    "BaseRetrievalProvider",
-    "VectorSearchProvider",
-    "FullTextSearchProvider",
-    "HybridSearchProvider",
-    # Engine
-    "RAGEngine",
-    # Utilities
-    "cosine_similarity",
-    "reciprocal_rank_fusion",
-    "weighted_rrf",
+    "BaseEmbedder",
+    "EmbedderFactory",
+    
+    # Data Source
+    "BaseVector",
 ]
-
-
-def hello() -> str:
-    """Legacy function - kept for backward compatibility."""
-    return "Hello from langrag!"

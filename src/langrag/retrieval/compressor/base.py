@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..core.search_result import SearchResult
+from langrag.entities.search_result import SearchResult
 
 
 class BaseCompressor(ABC):

@@ -16,7 +16,7 @@ except ImportError:
     MARKDOWN_AVAILABLE = False
     logger.warning("markdown/beautifulsoup4 not installed. Markdown parsing will be limited.")
 
-from ...core.document import Document
+from langrag.entities.document import Document
 from ..base import BaseParser
 
 
@@ -79,7 +79,7 @@ class MarkdownParser(BaseParser):
             parsed_content = self._parse_simple(content)
 
         doc = Document(
-            content=parsed_content,
+            page_content=parsed_content,
             metadata={
                 "source": str(path.absolute()),
                 "filename": path.name,

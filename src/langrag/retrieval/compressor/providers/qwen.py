@@ -5,7 +5,7 @@ from typing import Any
 
 from loguru import logger
 
-from ...core.search_result import SearchResult
+from langrag.entities.search_result import SearchResult
 from ..base import BaseCompressor
 
 try:
@@ -131,8 +131,8 @@ class QwenCompressor(BaseCompressor):
                 final_results.append(result)
         
         # 计算压缩统计
-        original_length = sum(len(r.chunk.content) for r in results)
-        compressed_length = sum(len(r.chunk.content) for r in final_results)
+        original_length = sum(len(r.chunk.page_content) for r in results)
+        compressed_length = sum(len(r.chunk.page_content) for r in final_results)
         actual_ratio = compressed_length / original_length if original_length > 0 else 1.0
         
         logger.info(
@@ -163,21 +163,22 @@ class QwenCompressor(BaseCompressor):
         async with semaphore:
             try:
                 compressed_content = await self._call_qwen_api(
-                    query, result.chunk.content, target_ratio
+                    query, result.chunk.page_content, target_ratio
                 )
                 
                 # 创建新的 Chunk 和 SearchResult（保持不可变性）
-                from ...core.chunk import Chunk
+                from langrag.entities.document import Document
                 
-                compressed_chunk = Chunk(
+                compressed_chunk = Document(
                     id=result.chunk.id,
-                    content=compressed_content,
-                    embedding=result.chunk.embedding,
-                    source_doc_id=result.chunk.source_doc_id,
+                    page_content=compressed_content,
+                    vector=result.chunk.vector,
+                    # source_doc_id=result.chunk.source_doc_id, # Document doesn't have source_doc_id field directly anymore, relies on metadata
                     metadata={
                         **result.chunk.metadata,
+                        "source_doc_id": result.chunk.metadata.get("source_doc_id"),
                         "compressed": True,
-                        "original_length": len(result.chunk.content),
+                        "original_length": len(result.chunk.page_content),
                         "compressed_length": len(compressed_content),
                     },
                 )
