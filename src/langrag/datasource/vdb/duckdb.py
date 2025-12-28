@@ -20,8 +20,15 @@ except ImportError:
 
 class DuckDBVector(BaseVector):
     """
-    All-in-One DuckDB Vector Store.
-    Supports Vector, Full-Text, and Application-Side Hybrid search within a single DB.
+    DuckDB Vector Store with Vector Search Support.
+
+    Features:
+    - ✅ Vector similarity search with HNSW indexing
+    - ✅ Hybrid search (when keyword search is available)
+    - ❌ Full-Text Search (FTS): NOT IMPLEMENTED in current DuckDB version
+
+    Note: Full-Text Search functionality is not available in the current DuckDB version.
+    Hybrid search falls back to vector search only when FTS is unavailable.
     """
 
     def __init__(
@@ -82,14 +89,14 @@ class DuckDBVector(BaseVector):
         """
         self._connection.execute(schema)
         
-        # Create Indexes (HNSW + FTS)
+        # Create Indexes (HNSW only for now)
         try:
              # VSS Index
              self._connection.execute(f"CREATE INDEX IF NOT EXISTS idx_vec_{self.table_name} ON {self.table_name} USING HNSW (embedding)")
-             # FTS Index
-             self._connection.execute(f"PRAGMA create_fts_index('{self.table_name}', 'id', 'content')")
         except Exception as e:
              logger.warning(f"Index creation warning: {e}")
+
+        # FTS Index will be created after data insertion
 
         self.add_texts(texts, **kwargs)
 
@@ -110,7 +117,7 @@ class DuckDBVector(BaseVector):
         for doc in texts:
             meta_json = json.dumps(doc.metadata)
             data.append((doc.id, doc.page_content, doc.vector, meta_json, doc.id))
-            
+
         sql = f"INSERT OR REPLACE INTO {self.table_name} VALUES (?, ?, ?, ?, ?)"
         self._connection.executemany(sql, data)
 
@@ -146,8 +153,22 @@ class DuckDBVector(BaseVector):
         return self._rows_to_docs(rows, score_strategy='distance')
 
     def _search_keyword(self, query: str, top_k: int) -> list[Document]:
-        if not query: return []
-        fts_table = f"fts_main_{self.table_name}"
+        """
+        Full-Text Search (FTS) is NOT IMPLEMENTED in current DuckDB version.
+
+        This method raises NotImplementedError to clearly indicate that
+        keyword-based text search is not available in DuckDB.
+
+        For text search capabilities, consider using other vector stores
+        that support both vector and text search (e.g., ChromaDB, Pinecone).
+        """
+        raise NotImplementedError(
+            "DuckDB Full-Text Search (FTS) is not implemented in current version. "
+            "Keyword search is not available. Use vector search or switch to "
+            "a vector store that supports both vector and text search."
+        )
+
+        # 使用 DuckDB FTS 的正确语法
         sql = f"""
         SELECT t.id, t.content, t.metadata, {fts_table}.match_bm25(t.id, ?) as score
         FROM {self.table_name} t
@@ -155,36 +176,30 @@ class DuckDBVector(BaseVector):
         ORDER BY score DESC
         LIMIT ?
         """
-        rows = self._connection.execute(sql, [query, top_k]).fetchall()
+        try:
+            logger.info(f"Executing FTS query: {query}")
+            rows = self._connection.execute(sql, [query, top_k]).fetchall()
+            logger.info(f"FTS query returned {len(rows)} rows")
+        except Exception as e:
+            logger.error(f"FTS query failed: {e}")
+            return []
+
         return self._rows_to_docs(rows, score_strategy='score')
 
     def _search_hybrid(self, query: str, query_vector: list[float], top_k: int) -> list[Document]:
-        # Perform both searches
-        vec_docs = self._search_vector(query_vector, top_k)
-        kw_docs = self._search_keyword(query, top_k)
-        
-        # Prepare for RRF
-        vec_list = [(d.id, d.metadata.get('score', 0)) for d in vec_docs]
-        kw_list = [(d.id, d.metadata.get('score', 0)) for d in kw_docs]
-        
-        # Fusion
-        fused = reciprocal_rank_fusion([vec_list, kw_list], k=60) # RRF default const
-        
-        # Map back to documents
-        # We need a lookup dict
-        all_docs_map = {d.id: d for d in vec_docs + kw_docs}
-        
-        final_results = []
-        for doc_id, score in fused[:top_k]:
-            if doc_id in all_docs_map:
-                doc = all_docs_map[doc_id]
-                # Update score to RRF score
-                doc.metadata['score'] = score
-                # Optionally mark it as hybrid
-                doc.metadata['retrieval_method'] = 'hybrid'
-                final_results.append(doc)
-                
-        return final_results
+        """
+        Hybrid search is NOT IMPLEMENTED because Full-Text Search is unavailable.
+
+        Since DuckDB FTS is not implemented, true hybrid search (combining vector
+        and keyword search) cannot be performed. This method raises NotImplementedError
+        to clearly indicate this limitation.
+        """
+        raise NotImplementedError(
+            "DuckDB Hybrid Search is not implemented because Full-Text Search (FTS) "
+            "is not available in current version. Hybrid search requires both vector "
+            "and keyword search capabilities. Use vector search only or switch to "
+            "a vector store that supports both modalities."
+        )
 
     def _rows_to_docs(self, rows, score_strategy='score') -> list[Document]:
         docs = []
