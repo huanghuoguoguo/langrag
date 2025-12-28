@@ -13,6 +13,7 @@ dependencies = [
     "duckdb>=1.0.0",
     "fastapi>=0.128.0",
     "loguru>=0.7.3",
+    "openai>=2.14.0",
     "pydantic>=2.12.5",
     "pyseekdb>=1.0.0b6",
     "python-multipart>=0.0.21",

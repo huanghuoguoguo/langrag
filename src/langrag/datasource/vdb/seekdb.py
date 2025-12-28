@@ -65,7 +65,26 @@ class SeekDBVector(BaseVector):
                  user="root", 
                  password=""
              )
-        
+
+        self._escape_table = str.maketrans({
+            '\x00': '',
+            '\\': '\\\\',
+            '"': '\\"',
+            '\n': '\\n',
+            '\r': '\\r',
+            '\t': '\\t',
+        })
+
+    def _clean_metadata(self, meta: dict[str, Any]) -> dict[str, Any]:
+        """SeekDB metadata doesn't support \\ and ", insert will error 3104/3140"""
+        return {
+            k: v.translate(self._escape_table) if isinstance(v, str)
+            else v if v is None or isinstance(v, (int, float, bool))
+            else str(v)
+            for k, v in meta.items()
+            if v is not None
+        }
+
     def create(self, texts: list[Document], **kwargs) -> None:
         """Create collection and add texts."""
         # SeekDB creates collection via client.create_collection
@@ -91,6 +110,20 @@ class SeekDBVector(BaseVector):
         if not texts: 
             return
             
+        # Check if collection exists, if not create it using the dimension from the first text
+        if not self._client.has_collection(self.collection_name):
+             from pyseekdb import HNSWConfiguration
+             # Infer dimension from first text vector, default to 384 if not available
+             dim = len(texts[0].vector) if texts and texts[0].vector else 384
+             
+             logger.info(f"Creating SeekDB collection '{self.collection_name}' with dimension {dim}")
+             config = HNSWConfiguration(dimension=dim, distance="cosine")
+             self._client.create_collection(
+                 name=self.collection_name, 
+                 configuration=config,
+                 embedding_function=None # We handle embeddings externally
+             )
+            
         coll = self._client.get_collection(self.collection_name, embedding_function=None)
         
         ids = [doc.id for doc in texts]
@@ -98,11 +131,10 @@ class SeekDBVector(BaseVector):
         
         metadatas = []
         for doc in texts:
-            # Copy metadata and inject content for retrieval (SeekDB might store content in separate column or metadata)
-            # Legacy code stored content in metadata.
+            # Copy metadata and inject content for retrieval
             m = doc.metadata.copy()
             m['content'] = doc.page_content # Store content so we can retrieve it
-            metadatas.append(m)
+            metadatas.append(self._clean_metadata(m))
 
         coll.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
 

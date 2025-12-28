@@ -26,6 +26,9 @@
         <div class="nav-item" data-target="kb-detail" style="display:none;">
             <span>知识库详情</span>
         </div>
+        <div class="nav-item" data-target="chat-page">
+            <span>AI 对话</span>
+        </div>
         <div class="nav-item" data-target="models">
             <span>模型配置</span>
         </div>
@@ -131,64 +134,192 @@
                         <!-- Results will appear here -->
                     </div>
                 </div>
+
+
+            </div>
+        </div>
+
+        <!-- Chat Page Section -->
+        <div id="chat-page" class="section">
+            <div style="display: grid; grid-template-columns: 350px 1fr; gap: 2rem; height: calc(100vh - 4rem);">
+
+                <!-- Chat Settings (Left) -->
+                <div style="display:flex; flex-direction:column; gap:1.5rem;">
+
+                    <div class="card" style="flex:1; display:flex; flex-direction:column; margin-bottom:0;">
+                        <h2>配置</h2>
+
+                        <div class="form-group">
+                            <label>LLM 模型</label>
+                            <div
+                                style="font-size:0.9rem; color:var(--text-main); background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:var(--radius);">
+                                <div id="active-llm-display">检测中...</div>
+                            </div>
+                            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
+                                请在“模型配置”页面切换或激活模型
+                            </p>
+                        </div>
+
+                        <div class="form-group" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+                            <label>选择知识库 (多选)</label>
+                            <div id="chat-kb-list"
+                                style="overflow-y:auto; flex:1; border:1px solid var(--border-color); border-radius:var(--radius); padding:0.5rem; background:var(--bg-dark);">
+                                <!-- KB Checkboxes will be rendered here -->
+                                <p style="color:var(--text-muted); padding:0.5rem;">加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Area (Right) -->
+                <div class="card"
+                    style="margin-bottom:0; display:flex; flex-direction:column; height:100%; padding:0; overflow:hidden;">
+                    <div
+                        style="padding:1.5rem; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.1);">
+                        <h2 style="margin:0; font-size:1.2rem;">多知识库问答</h2>
+                    </div>
+
+                    <div class="chat-container"
+                        style="border:none; border-radius:0; flex:1; height:auto; background:transparent;">
+                        <div id="chat-messages" class="chat-messages">
+                            <div class="message assistant">
+                                <div class="avatar">AI</div>
+                                <div class="message-content">你好！请先在左侧选择一个或多个知识库，然后开始提问。</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="输入问题..." style="flex:1;">
+                            <button id="btn-send">发送 <span class="loader"></span></button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
         <!-- Models Section -->
         <div id="models" class="section">
             <h1>模型配置</h1>
-            <p class="subtitle">配置 Embedding 模型（OpenAI 兼容）</p>
+            <p class="subtitle">配置 Embedding 和 LLM 模型</p>
 
             <div class="container">
-                <div class="card">
-                    <h2>已配置模型</h2>
-                    <div id="embedder-list">
-                        <!-- Embedders will be loaded here -->
+
+                <!-- Embedder Block -->
+                <div style="margin-bottom: 3rem;">
+                    <h2
+                        style="margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center;">
+                        <span
+                            style="background:var(--primary-color); width:8px; height:8px; border-radius:50%; margin-right:0.75rem; display:inline-block;"></span>
+                        Embedding 模型
+                    </h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+                        <div class="card">
+                            <h3>已配置列表</h3>
+                            <div id="embedder-list">
+                                <!-- Embedders will be loaded here -->
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>添加新配置</h3>
+                            <div class="form-group">
+                                <label>配置名称 *</label>
+                                <input type="text" id="emb-name" placeholder="例如：seekdb-default">
+                            </div>
+                            <div class="form-group">
+                                <label>类型 *</label>
+                                <select id="emb-type">
+                                    <option value="openai">OpenAI 兼容 API</option>
+                                    <option value="seekdb">SeekDB 内置模型</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="emb-base-url-group">
+                                <label>Base URL *</label>
+                                <input type="text" id="emb-base-url" placeholder="https://api.openai.com/v1">
+                            </div>
+                            <div class="form-group" id="emb-api-key-group">
+                                <label>API Key *</label>
+                                <input type="password" id="emb-api-key" placeholder="sk-...">
+                            </div>
+                            <div class="form-group" id="emb-model-group">
+                                <label>Model Name *</label>
+                                <input type="text" id="emb-model" placeholder="text-embedding-3-small">
+                            </div>
+                            <div id="seekdb-info"
+                                style="display:none; padding:1rem; background:rgba(99,102,241,0.1); border-radius:var(--radius); margin-bottom:1rem;">
+                                <p style="margin:0; color:var(--text-main);">
+                                    <strong>SeekDB 内置模型</strong><br>
+                                    <span style="font-size:0.9rem; color:var(--text-muted);">
+                                        使用 pyseekdb 的默认 embedding function<br>
+                                        模型：all-MiniLM-L6-v2 (384维)<br>
+                                        完全离线，无需 API Key<br>
+                                        <span style="color:var(--primary-color);">⚠️ CPU 运行，大文档处理较慢（建议使用 OpenAI API
+                                            以获得更快速度）</span>
+                                    </span>
+                                </p>
+                            </div>
+                            <button id="btn-save-config">保存 Embedder <span class="loader"></span></button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="card">
-                    <h2>添加新模型</h2>
-                    <div class="form-group">
-                        <label>配置名称 *</label>
-                        <input type="text" id="emb-name" placeholder="例如：seekdb-default">
+                <!-- LLM Block -->
+                <div>
+                    <h2
+                        style="margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center;">
+                        <span
+                            style="background:var(--success); width:8px; height:8px; border-radius:50%; margin-right:0.75rem; display:inline-block;"></span>
+                        LLM (对话模型)
+                    </h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+                        <div class="card">
+                            <h3>已配置列表</h3>
+                            <div id="llm-list">
+                                <p style="color:var(--text-muted);">加载中...</p>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>添加新配置</h3>
+                            <div class="form-group">
+                                <label>供应商 (Provider)</label>
+                                <select id="llm-provider">
+                                    <option value="kimi">Moonshot AI (Kimi)</option>
+                                    <option value="custom">Custom (OpenAI 兼容)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>配置名称 *</label>
+                                <input type="text" id="llm-name" placeholder="例如：kimi-default">
+                            </div>
+                            <div class="form-group">
+                                <label>Base URL *</label>
+                                <input type="text" id="llm-base-url" placeholder="https://api.moonshot.cn/v1">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key *</label>
+                                <input type="password" id="llm-api-key" placeholder="sk-...">
+                            </div>
+                            <div class="form-group">
+                                <label>Model Name *</label>
+                                <input type="text" id="llm-model" placeholder="kimi-k2-turbo-preview">
+                            </div>
+                            <div class="form-group">
+                                <label>Temperature</label>
+                                <input type="number" id="llm-temp" value="0.7" step="0.1" min="0" max="2">
+                            </div>
+                            <div class="form-group">
+                                <label>Max Tokens</label>
+                                <input type="number" id="llm-tokens" value="2048" step="128">
+                            </div>
+                            <button id="btn-save-llm">保存 LLM <span class="loader"></span></button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Embedder 类型 *</label>
-                        <select id="emb-type">
-                            <option value="openai">OpenAI 兼容 API</option>
-                            <option value="seekdb">SeekDB 内置模型</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="emb-base-url-group">
-                        <label>Base URL *</label>
-                        <input type="text" id="emb-base-url" placeholder="https://api.openai.com/v1">
-                    </div>
-                    <div class="form-group" id="emb-api-key-group">
-                        <label>API Key *</label>
-                        <input type="password" id="emb-api-key" placeholder="sk-...">
-                    </div>
-                    <div class="form-group" id="emb-model-group">
-                        <label>Model Name *</label>
-                        <input type="text" id="emb-model" placeholder="text-embedding-3-small">
-                    </div>
-                    <div id="seekdb-info"
-                        style="display:none; padding:1rem; background:rgba(99,102,241,0.1); border-radius:var(--radius); margin-bottom:1rem;">
-                        <p style="margin:0; color:var(--text-main);">
-                            <strong>SeekDB 内置模型</strong><br>
-                            <span style="font-size:0.9rem; color:var(--text-muted);">
-                                使用 pyseekdb 的默认 embedding function<br>
-                                模型：all-MiniLM-L6-v2 (384维)<br>
-                                完全离线，无需 API Key<br>
-                                <span style="color:var(--primary-color);">⚠️ CPU 运行，大文档处理较慢（建议使用 OpenAI API
-                                    以获得更快速度）</span>
-                            </span>
-                        </p>
-                    </div>
-                    <button id="btn-save-config">保存配置 <span class="loader"></span></button>
                 </div>
+
             </div>
         </div>
+
 
     </div>
 
@@ -258,7 +389,7 @@
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="script.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>

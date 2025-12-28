@@ -133,11 +133,31 @@ class RAGKernel:
         self.embedder: Optional[BaseEmbedder] = None
         self.vector_stores: dict[str, BaseVector] = {}
         
+        # LLM Client (OpenAI API Compatible)
+        self.llm_client = None
+        self.llm_config = {}
+        
         # Register custom embedder type
         try:
             EmbedderFactory.register("web_openai", WebOpenAIEmbedder)
         except Exception:
             pass
+
+    def set_llm(self, base_url: str, api_key: str, model: str, temperature: float = 0.7, max_tokens: int = 2048):
+        """配置 LLM 客户端"""
+        try:
+            from openai import AsyncOpenAI
+            self.llm_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self.llm_config = {
+                "model": model,
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            logger.info(f"LLM configured: {model} (base_url={base_url})")
+        except ImportError:
+            logger.error("openai package not installed. Cannot configure LLM.")
+        except Exception as e:
+            logger.error(f"Failed to configure LLM: {e}")
     
     def set_embedder(self, embedder_type: str, model: str = "", base_url: str = "", api_key: str = ""):
         """设置 Embedder（外部注入）"""
@@ -340,3 +360,127 @@ class RAGKernel:
         
         logger.info(f"[RAGKernel] Search completed, found {len(results)} results")
         return results, search_type
+
+    def multi_search(
+        self,
+        kb_ids: List[str],
+        query: str,
+        top_k: int = 5
+    ) -> tuple[List[LangRAGDocument], str]:
+        """
+        多知识库检索
+        """
+        all_results = []
+        primary_search_type = "keyword"
+        
+        # Determine search type and query vector once
+        query_vector = None
+        if self.embedder:
+            try:
+                vectors = self.embedder.embed([query])
+                if vectors:
+                    query_vector = vectors[0]
+                    primary_search_type = "vector"
+            except Exception as e:
+                logger.error(f"Query embedding failed: {e}")
+        
+        for kb_id in kb_ids:
+            store = self.get_vector_store(kb_id)
+            if not store:
+                logger.warning(f"Vector store not found for kb_id: {kb_id}, skipping")
+                continue
+                
+            # Determine per-store search type
+            current_search_type = primary_search_type
+            if store.__class__.__name__ == 'SeekDBVector' and query_vector:
+                current_search_type = "hybrid"
+                
+            try:
+                results = store.search(query, query_vector=query_vector, top_k=top_k, search_type=current_search_type)
+                # Add KB ID to metadata
+                for doc in results:
+                    doc.metadata['kb_id'] = kb_id
+                all_results.extend(results)
+                
+                # Update return search type if we used hybrid anywhere
+                if current_search_type == "hybrid":
+                    primary_search_type = "hybrid"
+            except Exception as e:
+                logger.error(f"Search failed for KB {kb_id}: {e}")
+        
+        # Sort combined results by score (descending)
+        # Note: Scores might not be perfectly comparable across different vector stores if they use different metrics,
+        # but within similar stores it's acceptable.
+        all_results.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
+        
+        return all_results[:top_k], primary_search_type
+
+    async def chat(
+        self,
+        kb_ids: List[str],
+        query: str,
+        history: List[dict] = None
+    ) -> dict:
+        """
+        RAG 对话 (支持多知识库)
+        """
+        if not self.llm_client:
+            raise ValueError("LLM is not configured")
+
+        # 1. Retrieve
+        if not kb_ids:
+             # Allowed to chat without context if no KB selected
+             results = []
+             search_type = "none"
+        else:
+            results, search_type = self.multi_search(kb_ids, query, top_k=5)
+        
+        # 2. Construct Prompt
+        if results:
+            context_text = "\n\n".join([f"--- Source {i+1} (KB: {doc.metadata.get('kb_id','?')}) ---\n{doc.page_content}" for i, doc in enumerate(results)])
+            system_prompt = f"""You are a helpful AI assistant capable of answering questions based on the provided context.
+Use the context below to answer the user's question clearly and accurately.
+If the answer is not in the context, use your own knowledge but prefer the context.
+
+Context:
+{context_text}
+"""
+        else:
+            system_prompt = "You are a helpful AI assistant."
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add recent history (e.g. last 4 messages to avoid token limit)
+        if history:
+            messages.extend(history[-4:])
+            
+        messages.append({"role": "user", "content": query})
+        
+        logger.info(f"[RAGKernel] Sending request to LLM: model={self.llm_config['model']}")
+        
+        # 3. Generate
+        try:
+            response = await self.llm_client.chat.completions.create(
+                model=self.llm_config["model"],
+                messages=messages,
+                temperature=self.llm_config["temperature"],
+                max_tokens=self.llm_config["max_tokens"]
+            )
+            
+            answer = response.choices[0].message.content
+            
+            return {
+                "answer": answer,
+                "sources": [
+                    {
+                        "content": doc.page_content,
+                        "score": doc.metadata.get('score', 0),
+                        "source": doc.metadata.get('source', 'unknown'),
+                        "kb_id": doc.metadata.get('kb_id', 'unknown')
+                    }
+                    for doc in results
+                ]
+            }
+        except Exception as e:
+            logger.error(f"[RAGKernel] LLM generation failed: {e}")
+            raise e

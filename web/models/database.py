@@ -49,3 +49,18 @@ class EmbedderConfig(SQLModel, table=True):
     model: str  # 模型名称
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LLMConfig(SQLModel, table=True):
+    """LLM 模型配置表 (OpenAI 兼容接口)"""
+    __tablename__ = "llm_configs"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)  # 配置名称 (如 Kimi, GPT-4)
+    base_url: str = "https://api.moonshot.cn/v1"  # 默认 Base URL
+    api_key: str
+    model: str = "kimi-k2-turbo-preview"  # 模型名称
+    temperature: float = 0.7
+    max_tokens: int = 2048
+    is_active: bool = False  # 是否为当前默认对话模型
+    created_at: datetime = Field(default_factory=datetime.utcnow)
