@@ -8,7 +8,7 @@
 | 任务 ID | 任务名称 | 范围 (Scope) | 详细描述 |
 | :--- | :--- | :--- | :--- |
 | **1.1** | ✅ **Post-Processing** | `src/langrag/retrieval/` | 实现 `post_processor.py`，包含 `ScoreThreshold` 和 `Deduplication` 逻辑。在 `Workflow` 中集成。 |
-| **1.2** | **Config Implementation** | `src/langrag/config/` | 实现 `settings.py`，加载 `.env` 配置，支持 Chroma/DuckDB 路径配置。 |
+| **1.2** | ✅ **Config Implementation** | `src/langrag/config/` | 实现 `settings.py`，加载 `.env` 配置，支持 Chroma/DuckDB 路径配置。 |
 | **1.3** | **Unit Testing** | `tests/` | 为 `Entities`, `ChromaVector`, `DuckDBVector`, `WORKFLOW` 编写单元测试，覆盖率 > 80%。 |
 
 ## Phase 2: Advanced Features (高级特性)
