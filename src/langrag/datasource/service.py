@@ -1,5 +1,5 @@
 import concurrent.futures
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
@@ -19,31 +19,24 @@ class RetrievalService:
         query_vector: list[float] | None = None,
         retrieval_method: str = "semantic_search", # semantic_search, keyword_search, hybrid_search
         top_k: int = 4,
-        vector_store_cls: type[BaseVector] = None, # Dependency Injection ideally
+        vector_manager: Any = None, # Optional injection
         reranking_model: dict | None = None,
     ) -> list[Document]:
         
-        # 1. Initialize Datasource (Should use a Factory here)
-        # For now, we assume vector_store_cls is passed in or we pick a default
-        # 1. Initialize Datasource (Should use a Factory here)
-        # For now, we assume vector_store_cls is passed in or we pick a default
-        if vector_store_cls is None:
-             from langrag.datasource.vdb.factory import VectorStoreFactory
-             vector_store = VectorStoreFactory.get_vector_store(dataset)
-        else:
-             vector_store = vector_store_cls(dataset)
+        # 1. Initialize Manager
+        if vector_manager is None:
+             from langrag.datasource.vdb.global_manager import get_vector_manager
+             vector_manager = get_vector_manager()
         
-        # 2. Execute Search
+        # 2. Execute Search via Manager
         if retrieval_method == "semantic_search":
-             return vector_store.search(query, query_vector, top_k=top_k, search_type="similarity")
+             return vector_manager.search(dataset, query, query_vector, top_k=top_k, search_type="similarity")
              
         elif retrieval_method == "hybrid_search":
-             # If the underlying VDB supports hybrid naturally, call it.
-             # Otherwise, we might need manual RRF here (but we aim to push down to VDB)
-             return vector_store.search(query, query_vector, top_k=top_k, search_type="hybrid")
+             return vector_manager.search(dataset, query, query_vector, top_k=top_k, search_type="hybrid")
              
         elif retrieval_method == "keyword_search":
-             # Call keyword store (omitted for brevity, would be similar to vector_store)
+             # Manager could route to keyword store logic if implemented
              pass
              
         return []

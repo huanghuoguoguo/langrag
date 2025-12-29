@@ -1,5 +1,6 @@
 """Component factory for dynamic loading using type-based configuration."""
 
+from typing import Any
 from loguru import logger
 
 from langrag.index_processor.splitter import BaseChunker, ChunkerFactory
@@ -8,8 +9,7 @@ from langrag.llm.embedder import BaseEmbedder, EmbedderFactory
 from langrag.llm import BaseLLM, LLMFactory
 from langrag.index_processor.extractor import BaseParser, ParserFactory
 from langrag.retrieval.rerank import BaseReranker, RerankerFactory
-# VectorStoreFactory is currently being refactored
-# from ..vector_store import BaseVectorStore, VectorStoreFactory 
+from langrag.datasource.vdb.factory import VectorStoreFactory
 
 from .models import ComponentConfig
 
@@ -39,11 +39,18 @@ class ComponentFactory:
         return EmbedderFactory.create(config.type, **config.params)
 
     @staticmethod
-    def create_vector_store(config: ComponentConfig):
-        """Create a vector store from configuration."""
-        # logger.info(f"Creating vector store: {config.type}")
-        # return VectorStoreFactory.create(config.type, **config.params)
-        raise NotImplementedError("Vector store factory is under construction")
+    def create_vector_store(config: ComponentConfig, dataset: Any) -> Any:
+        """Create a vector store from configuration.
+        
+        Args:
+            config: Component configuration
+            dataset: The dataset instance (Dataset type, typed as Any to avoid circular imports if necessary)
+            
+        Returns:
+            BaseVector instance
+        """
+        logger.info(f"Creating vector store: {config.type}")
+        return VectorStoreFactory.create(config.type, dataset, **config.params)
 
     @staticmethod
     def create_reranker(config: ComponentConfig) -> BaseReranker:
