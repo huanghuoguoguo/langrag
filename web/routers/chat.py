@@ -54,8 +54,14 @@ async def chat(
         # Convert Pydantic models to dicts for internal use
         history_dicts = [{"role": m.role, "content": m.content} for m in req.history]
         
+        target_kb_ids = req.kb_ids
+        # Auto-select all KBs if none provided
+        if not target_kb_ids:
+            all_kbs = KBService.list_kbs(session)
+            target_kb_ids = [kb.kb_id for kb in all_kbs]
+            
         result = await rag_kernel.chat(
-            kb_ids=req.kb_ids,
+            kb_ids=target_kb_ids,
             query=req.query,
             history=history_dicts
         )

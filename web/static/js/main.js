@@ -289,14 +289,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function sendMessage() {
         // Collect selected KB IDs
-        const selectedKBs = Array.from(document.querySelectorAll('#chat-kb-list input[type="checkbox"]:checked'))
-            .map(cb => cb.value);
+        // Mode: Auto Select All (Smart Routing)
+        const selectedKBs = []; // Empty -> Auto Select All in Backend
 
         // Validations
-        if (selectedKBs.length === 0) {
-            // showToast('请至少选择一个知识库', 'info');
-            // Allow chat without KB (Pure LLM)
-        }
+        // if (selectedKBs.length === 0) { ... } // Allow empty -> Auto Select All
 
         const input = document.getElementById('chat-input');
         const query = input.value.trim();

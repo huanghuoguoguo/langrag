@@ -23,6 +23,7 @@ class Dataset(BaseModel):
     # Metadata
     tenant_id: str | None = None
     created_at: int | None = None
+    vdb_type: str | None = None # e.g. "chroma", "duckdb"
     
     model_config = {
         "frozen": False
