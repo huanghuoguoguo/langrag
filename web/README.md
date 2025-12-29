@@ -45,8 +45,8 @@ web/
 ## 运行
 
 ```bash
-# 从项目根目录运行
-uv run python web/app.py
+# 从项目根目录运行 (使用 -m 以确保模块路径正确)
+uv run python -m web.app
 ```
 
 访问：http://localhost:8000

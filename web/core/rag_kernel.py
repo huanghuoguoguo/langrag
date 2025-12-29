@@ -137,6 +137,11 @@ class RAGKernel:
         self.llm_client = None
         self.llm_config = {}
         
+        # Agentic Components
+        self.router = None
+        self.rewriter = None
+        self.workflow = None
+        
         # Register custom embedder type
         try:
             EmbedderFactory.register("web_openai", WebOpenAIEmbedder)
@@ -147,6 +152,12 @@ class RAGKernel:
         """配置 LLM 客户端"""
         try:
             from openai import AsyncOpenAI
+            from web.core.llm_adapter import WebLLMAdapter
+            from langrag.retrieval.router.llm_router import LLMRouter
+            from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
+            from langrag.retrieval.workflow import RetrievalWorkflow
+            
+            # 1. Update Web LLM Client (for Chat endpoint)
             self.llm_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
             self.llm_config = {
                 "model": model,
@@ -154,10 +165,34 @@ class RAGKernel:
                 "max_tokens": max_tokens
             }
             logger.info(f"LLM configured: {model} (base_url={base_url})")
+            
+            # 2. Inject into LangRAG Core
+            # Create Adapter to bridge core -> web client
+            # We pass the same client but adapter handles interface matching
+            # Note: Adapter currently creates its own sync client internally for core compatibility
+            # In a real async migration, we'd pass self.llm_client directly if interfaces matched async
+            web_llm_adapter = WebLLMAdapter(self.llm_client, model=model)
+            
+            # Initialize Agentic Components
+            self.router = LLMRouter(llm=web_llm_adapter)
+            self.rewriter = LLMRewriter(llm=web_llm_adapter)
+            
+            # Initialize Workflow with injected components
+            self.workflow = RetrievalWorkflow(
+                router=self.router,
+                rewriter=self.rewriter,
+                # vector_store_cls is determined dynamically or via factory inside/outside
+                # Workflow largely uses datasets and RetrievalService so we don't strictly need to pass store cls here 
+                # unless using the default one.
+            )
+            logger.info("LangRAG Workflow initialized with Agentic components (Router, Rewriter)")
+            
         except ImportError:
             logger.error("openai package not installed. Cannot configure LLM.")
         except Exception as e:
             logger.error(f"Failed to configure LLM: {e}")
+            import traceback
+            traceback.print_exc()
     
     def set_embedder(self, embedder_type: str, model: str = "", base_url: str = "", api_key: str = ""):
         """设置 Embedder（外部注入）"""
@@ -319,47 +354,106 @@ class RAGKernel:
         """
         logger.info(f"[RAGKernel] Search called: kb_id={kb_id}, query='{query[:50]}...', top_k={top_k}")
         
-        store = self.get_vector_store(kb_id)
-        if not store:
-            logger.error(f"[RAGKernel] Vector store not found for kb_id: {kb_id}")
-            raise ValueError(f"Vector store not found for kb_id: {kb_id}")
-        
-        logger.info(f"[RAGKernel] Vector store type: {store.__class__.__name__}")
-        
-        query_vector = None
-        search_type = "keyword"
-        
-        # Generate query embedding if available
-        if self.embedder:
-            try:
-                logger.info(f"[RAGKernel] Generating query embedding with {self.embedder.__class__.__name__}...")
-                vectors = self.embedder.embed([query])
-                if vectors and len(vectors) > 0:
-                    query_vector = vectors[0]
-                    search_type = "vector"
-                    logger.info(f"[RAGKernel] Query embedding generated, dimension: {len(query_vector)}")
-            except Exception as e:
-                logger.error(f"[RAGKernel] Query embedding failed: {e}")
-        else:
-            logger.info(f"[RAGKernel] No embedder configured, using keyword search")
-        
-        # SeekDB 支持混合检索：只要有 query_vector 就使用混合检索
-        # 无论 Embedder 是什么类型（OpenAI/SeekDB/其他），只要向量存在即可
-        if store.__class__.__name__ == 'SeekDBVector' and query_vector:
-            search_type = "hybrid"
-            logger.info(f"[RAGKernel] Using HYBRID search (vector + full-text) for SeekDB")
-            logger.info(f"[RAGKernel] Hybrid search combines semantic similarity with keyword matching")
-            results = store.search(query, query_vector=query_vector, top_k=top_k, search_type='hybrid')
-        else:
-            logger.info(f"[RAGKernel] Using {search_type} search")
-            if search_type == "vector":
-                logger.info(f"[RAGKernel] Vector search: semantic similarity only")
+        # 0. Check dependencies
+        if not self.workflow:
+            logger.warning("[RAGKernel] Workflow not initialized (LLM probably not set), falling back to manual search.")
+            # Fallback to manual search below (legacy code structure kept for safety or simplicity)
+            # For strict agentic adherence, we should require workflow.
+            
+            # --- Legacy Manual Path Start ---
+            store = self.get_vector_store(kb_id)
+            if not store:
+                logger.error(f"[RAGKernel] Vector store not found for kb_id: {kb_id}")
+                raise ValueError(f"Vector store not found for kb_id: {kb_id}")
+            
+            query_vector = None
+            search_type = "keyword"
+            
+            # Generate query embedding if available
+            if self.embedder:
+                try:
+                    vectors = self.embedder.embed([query])
+                    if vectors:
+                        query_vector = vectors[0]
+                        search_type = "vector"
+                except Exception as e:
+                    logger.error(f"Query embedding failed: {e}")
+            
+            if store.__class__.__name__ == 'SeekDBVector' and query_vector:
+                search_type = "hybrid"
+                results = store.search(query, query_vector=query_vector, top_k=top_k, search_type='hybrid')
             else:
-                logger.info(f"[RAGKernel] Keyword search: text matching only")
-            results = store.search(query, query_vector=query_vector, top_k=top_k)
-        
-        logger.info(f"[RAGKernel] Search completed, found {len(results)} results")
-        return results, search_type
+                results = store.search(query, query_vector=query_vector, top_k=top_k)
+            
+            return results, search_type
+            # --- Legacy Manual Path End ---
+
+        # 1. Use Workflow (Agentic Path)
+        try:
+             # Construct minimal Dataset object
+             # We rely on RetrievalService getting the STORE from factory, but here stores are in self.vector_stores
+             # This is a little tricky: Core uses VectorStoreFactory or explicit class.
+             # But here we manage stores instance manually in self.vector_stores.
+             # To bridge this, we can patch/override how RetrievalService gets the store,
+             # OR we register our stores into the Factory if possible, 
+             # OR we pass the specific store instance if RetrievalService supported it (it supports cls).
+             
+             # Easier fix: The Workflow calls RetrievalService.
+             # RetrievalService.retrieve calls VectorStoreFactory.get_vector_store(dataset)
+             # So we need to ensure Factory returns OUR store instance for this dataset.
+             # BUT Factory typically creates news ones.
+             
+             # HACK/ADAPTER: To use our pre-loaded stores, we might need a custom logical injection.
+             # Let's bypass the strict Workflow.retrieve loop and invoke functionality directly? 
+             # No, that defeats the purpose of Workflow logic (Router/Rewriter).
+             
+             # Solution: Re-implement the key steps of Workflow HERE using the components we have.
+             # (Since RetrievalService is tightly coupled to Factory/Class instatiation currently).
+             
+             # 1.1 Rewrite
+             final_query = query
+             if self.rewriter:
+                 final_query = self.rewriter.rewrite(query)
+                 logger.info(f" >>> [Agentic RAG] Query Rewrite: '{query}' -> '{final_query}'")
+                 print(f" >>> [Agentic RAG] Query Rewrite: '{query}' -> '{final_query}'")
+
+             # 1.2 Route (skip if single KB)
+             # Single KB search doesn't really need routing, but let's keep logic consistent
+             
+             # 1.3 Retrieval (Manual dispatch to our stores)
+             store = self.get_vector_store(kb_id)
+             if not store:
+                raise ValueError(f"Store not found: {kb_id}")
+                
+             # Embed query for retrieval
+             query_vec = None
+             if self.embedder:
+                 try:
+                    vecs = self.embedder.embed([final_query]) # Use rewritten query
+                    if vecs: query_vec = vecs[0]
+                 except Exception as e:
+                     logger.error(f"Embed failed: {e}")
+                     
+             # Execute search on store directly
+             # TODO: Support Hybrid decision logic here similar to workflow
+             search_type = "keyword"
+             if store.__class__.__name__ == 'SeekDBVector' and query_vec:
+                 search_type = "hybrid" 
+                 results = store.search(final_query, query_vector=query_vec, top_k=top_k, search_type='hybrid')
+             elif query_vec:
+                 search_type = "vector"
+                 results = store.search(final_query, query_vector=query_vec, top_k=top_k)
+             else:
+                 results = store.search(final_query, top_k=top_k)
+
+             # 1.4 Post Process (Rerank/Dedupe) - Optional / Future
+             # If we had a Reranker injected, we would call it here.
+             
+             return results, search_type
+
+        except Exception as e:
+            logger.error(f"[RAGKernel] Agentic search failed: {e}")
+            raise e
 
     def multi_search(
         self,
@@ -433,7 +527,39 @@ class RAGKernel:
              results = []
              search_type = "none"
         else:
-            results, search_type = self.multi_search(kb_ids, query, top_k=5)
+            final_query = query
+            if self.rewriter:
+                try:
+                    final_query = self.rewriter.rewrite(query)
+                    logger.info(f" >>> [Agentic RAG] Chat Rewrite: '{query}' -> '{final_query}'")
+                    print(f" >>> [Agentic RAG] Chat Rewrite: '{query}' -> '{final_query}'")
+                except Exception as e:
+                    logger.error(f"Chat rewrite failed: {e}")
+            
+            # Agentic Router (Filter KBs)
+            search_kb_ids = kb_ids
+            if self.router and len(kb_ids) > 1:
+                try:
+                    # Construct Dataset objects for routing
+                    # Note: We ideally need descriptions, but using ID as name for now
+                    candidate_datasets = [
+                        Dataset(name=kid, collection_name=kid, description=f"Knowledge base: {kid}") 
+                        for kid in kb_ids
+                    ]
+                    
+                    selected_datasets = self.router.route(final_query, candidate_datasets)
+                    selected_ids = [d.name for d in selected_datasets]
+                    
+                    if selected_ids and len(selected_ids) < len(kb_ids):
+                         search_kb_ids = selected_ids
+                         logger.info(f" >>> [Agentic RAG] Router filtered KBs: {kb_ids} -> {search_kb_ids}")
+                         print(f" >>> [Agentic RAG] Router filtered KBs: {kb_ids} -> {search_kb_ids}")
+                    else:
+                         logger.info(f" >>> [Agentic RAG] Router selected all KBs (or failed to filter)")
+                except Exception as e:
+                    logger.error(f"Chat router failed: {e}")
+
+            results, search_type = self.multi_search(search_kb_ids, final_query, top_k=5)
         
         # 2. Construct Prompt
         if results:

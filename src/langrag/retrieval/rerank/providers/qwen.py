@@ -10,8 +10,8 @@ from loguru import logger
 from ..base import BaseReranker
 
 if TYPE_CHECKING:
-    from ...core.query import Query
-    from ...core.search_result import SearchResult
+    from langrag.entities.query import Query
+    from langrag.entities.search_result import SearchResult
 
 
 class QwenReranker(BaseReranker):
@@ -184,7 +184,7 @@ class QwenReranker(BaseReranker):
         Returns:
             重排序后的结果列表
         """
-        from ...core.search_result import SearchResult
+        from langrag.entities.search_result import SearchResult
 
         results_data = api_response.get("results", [])
 
