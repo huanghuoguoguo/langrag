@@ -28,16 +28,16 @@ export function renderKBList(kbs, container) {
 
 export function renderKBCheckboxes(kbs, container) {
     if (kbs.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">暂无知识库</p>';
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">暂无可用知识库</p>';
     } else {
         container.innerHTML = kbs.map(kb => `
-            <label style="display:flex; align-items:center; gap:0.5rem; padding:0.5rem; cursor:pointer;" class="kb-checkbox-item">
-                <input type="checkbox" value="${kb.id}">
+            <div style="display:flex; align-items:center; gap:0.75rem; padding:0.75rem 0.5rem; border-bottom:1px solid rgba(255,255,255,0.05);">
+                <span style="width:8px; height:8px; background:var(--success); border-radius:50%; box-shadow: 0 0 5px var(--success);"></span>
                 <div>
-                    <div style="font-size:0.9rem;">${kb.name}</div>
-                    <div style="font-size:0.8rem; color:var(--text-muted);">${kb.vdb_type}</div>
+                    <div style="font-size:0.9rem; font-weight:500;">${kb.name}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">${kb.vdb_type} · Ready</div>
                 </div>
-            </label>
+            </div>
         `).join('');
     }
 }

@@ -43,6 +43,8 @@ class LLMRouter(BaseRouter):
         
         try:
             response = self.llm.chat([{"role": "user", "content": prompt}])
+            logger.info(f"[LLMRouter] Raw Response: {response}")
+            
             # Basic parsing of JSON from text
             # Often LLMs wrap in ```json ... ```
             content = response.strip()
@@ -50,7 +52,8 @@ class LLMRouter(BaseRouter):
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
-                
+            
+            logger.info(f"[LLMRouter] Parsed JSON Content: {content}")
             data = json.loads(content)
             names = data.get("dataset_names", [])
             
