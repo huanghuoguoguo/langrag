@@ -40,8 +40,8 @@
 
 | 任务 ID | 任务名称 | 范围 (Scope) | 详细描述 |
 | :--- | :--- | :--- | :--- |
-| **4.1** | **LLM Router** | `src/langrag/retrieval/router/` | 实现基于 Function Calling 的 Intent Router。 |
-| **4.2** | **Query Rewrite** | `src/langrag/retrieval/` | 在 Workflow 入口增加 Query Rewrite 模块。 |
+| **4.1** | ✅ **LLM Router** | `src/langrag/retrieval/router/` | 实现基于 Function Calling 的 Intent Router。 |
+| **4.2** | ✅ **Query Rewrite** | `src/langrag/retrieval/` | 在 Workflow 入口增加 Query Rewrite 模块。 |
 
 ---
 **执行建议**:

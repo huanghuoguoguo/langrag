@@ -19,10 +19,12 @@ class RetrievalWorkflow:
         self, 
         router=None,   # BaseRouter
         reranker=None, # BaseReranker
+        rewriter=None, # BaseRewriter
         vector_store_cls=None
     ):
         self.router = router
         self.reranker = reranker
+        self.rewriter = rewriter
         self.vector_store_cls = vector_store_cls
         self.post_processor = PostProcessor()
         # Callbacks (lazy init or passed)
@@ -56,6 +58,15 @@ class RetrievalWorkflow:
             run_id = self.callback_manager.on_retrieve_start(query=query)
             
         try:
+            # 0.5. Query Rewrite
+            original_query = query
+            if self.rewriter:
+                try:
+                    query = self.rewriter.rewrite(query)
+                    logger.info(f"Query rewritten: '{original_query}' -> '{query}'")
+                except Exception as e:
+                    logger.error(f"Query rewrite failed: {e}")
+
             # 1. Routing (Agentic Step)
             # If router is present and we have multiple datasets, asking router which ones to query.
             selected_datasets = datasets
@@ -64,6 +75,8 @@ class RetrievalWorkflow:
                     selected_datasets = self.router.route(query, datasets)
                     logger.info(f"Router selected {len(selected_datasets)} datasets: {[d.name for d in selected_datasets]}")
                 except Exception as e:
+                    # If routing fails, we should arguably check if we should fallback to all or empty?
+                    # Current logic falls back to all which is safe.
                     logger.warning(f"Router failed, falling back to all datasets: {e}")
 
             if not selected_datasets:
