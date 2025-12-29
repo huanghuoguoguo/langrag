@@ -25,10 +25,13 @@ class RetrievalService:
         
         # 1. Initialize Datasource (Should use a Factory here)
         # For now, we assume vector_store_cls is passed in or we pick a default
+        # 1. Initialize Datasource (Should use a Factory here)
+        # For now, we assume vector_store_cls is passed in or we pick a default
         if vector_store_cls is None:
-             raise ValueError("vector_store_cls must be provided")
-             
-        vector_store = vector_store_cls(dataset)
+             from langrag.datasource.vdb.factory import VectorStoreFactory
+             vector_store = VectorStoreFactory.get_vector_store(dataset)
+        else:
+             vector_store = vector_store_cls(dataset)
         
         # 2. Execute Search
         if retrieval_method == "semantic_search":

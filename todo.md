@@ -18,9 +18,9 @@
 
 | 任务 ID | 任务名称 | 范围 (Scope) | 详细描述 |
 | :--- | :--- | :--- | :--- |
-| **2.1** | **Parent-Child Indexing** | `src/langrag/index_processor/` | 实现 `ParentChildProcessor`。需要引入 DocStore (Key-Value) 存储父文档。 |
-| **2.2** | **Rerank Integration** | `src/langrag/retrieval/` | 实现 `Rerank` Adapter，对接 BGE/Cohere 模型。在 `Workflow` 中正式启用 Rerank 步骤。 |
-| **2.3** | **Datasource Factory** | `src/langrag/datasource/` | 实现 `DatasourceFactory`，支持根据 Dataset 配置动态选择 VDB 后端。 |
+| **2.1** | ✅ **Parent-Child Indexing** | `src/langrag/index_processor/` | 实现 `ParentChildProcessor`。需要引入 DocStore (Key-Value) 存储父文档。 |
+| **2.2** | ✅ **Rerank Integration** | `src/langrag/retrieval/` | 实现 `Rerank` Adapter，对接 BGE/Cohere 模型。在 `Workflow` 中正式启用 Rerank 步骤。 |
+| **2.3** | ✅ **Datasource Factory** | `src/langrag/datasource/` | 实现 `DatasourceFactory`，支持根据 Dataset 配置动态选择 VDB 后端。 |
 
 ## Phase 3: Ecosystem & Observability (生态与底座)
 **目标**: 增强系统扩展性，支持更多文件格式，增加可观测性。

@@ -84,10 +84,28 @@ class RetrievalWorkflow:
         # 3. Reranking (Optimization)
         if self.reranker and all_documents:
             try:
-                # Convert Document objects to format expected by Reranker if needed
-                # Reranker should return sorted list of Documents
-                # all_documents = self.reranker.rerank(query, all_documents, top_n=rerank_top_k or top_k)
-                pass # Placeholder for reranker call
+                # Convert Document objects to SearchResult
+                from langrag.entities.search_result import SearchResult
+                
+                search_results = [
+                    SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+                    for doc in all_documents
+                ]
+                
+                reranked_results = self.reranker.rerank(
+                    query, 
+                    search_results, 
+                    top_k=rerank_top_k or top_k
+                )
+                
+                # Update all_documents with reranked documents and their new scores
+                all_documents = []
+                for res in reranked_results:
+                    doc = res.chunk
+                    # Update score in metadata (important for PostProcessor)
+                    doc.metadata['score'] = res.score
+                    all_documents.append(doc)
+                    
             except Exception as e:
                 logger.error(f"Reranking failed: {e}")
 
