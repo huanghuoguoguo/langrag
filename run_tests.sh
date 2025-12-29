@@ -8,7 +8,7 @@ set -e
 echo "🧪 Setting up test environment..."
 
 # Check if uv is installed
-if ! command -v uv &> /dev/null; then
+if ! command -v uv >/dev/null 2>&1; then
     echo "❌ Error: uv is not installed"
     echo "Please install uv: https://github.com/astral-sh/uv"
     exit 1
