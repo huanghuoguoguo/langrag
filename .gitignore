@@ -14,3 +14,4 @@ __pycache__/
 py.typed
 data
 storage/
+.coverage
