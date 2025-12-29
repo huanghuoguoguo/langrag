@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from langrag.entities.dataset import Dataset, RetrievalContext
 from langrag.datasource.service import RetrievalService
+from langrag.retrieval.post_processor import PostProcessor
 # from langrag.retrieval.router.base import BaseRouter
 # from langrag.retrieval.rerank.base import BaseReranker
 
@@ -23,6 +24,7 @@ class RetrievalWorkflow:
         self.router = router
         self.reranker = reranker
         self.vector_store_cls = vector_store_cls
+        self.post_processor = PostProcessor()
 
     def retrieve(
         self, 
@@ -89,16 +91,15 @@ class RetrievalWorkflow:
             except Exception as e:
                 logger.error(f"Reranking failed: {e}")
 
-        # 4. Context Formatting & Filtering
+        # 4. Post Processing (Deduplication & Thresholding)
+        all_documents = self.post_processor.run(all_documents, score_threshold=score_threshold)
+
+        # 5. Context Formatting
         results = []
         for doc in all_documents:
-            # We assume embedding distance was converted to similarity score by VDB
-            # If doc.metadata.get('score') is missing, we might need to handle it.
+            # Score is guaranteed to be >= threshold
             score = doc.metadata.get('score', 0.0)
-            
-            if score < score_threshold:
-                continue
-                
+
             results.append(RetrievalContext(
                 document_id=doc.metadata.get('document_id', 'unknown'),
                 content=doc.page_content,
@@ -106,7 +107,7 @@ class RetrievalWorkflow:
                 metadata=doc.metadata
             ))
 
-        # Basic sort if no reranker was used
+        # Basic sort if no reranker was used (and if PostProcessor didn't reorder, which it doesn't)
         if not self.reranker:
             results.sort(key=lambda x: x.score, reverse=True)
             
