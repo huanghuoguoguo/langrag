@@ -345,12 +345,14 @@
                         <option value="chroma">ChromaDB</option>
                         <option value="duckdb">DuckDB</option>
                         <option value="seekdb">SeekDB（支持混合检索）</option>
+                        <option value="web_search">🌐 互联网搜索（实时联网）</option>
                     </select>
                     <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
-                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文），检索效果更好
+                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文），检索效果更好<br>
+                        🌐 <strong>互联网搜索</strong> 使用 DuckDuckGo 实时搜索，无需上传文档
                     </p>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="modal-kb-embedder-group">
                     <label>Embedding 模型 *</label>
                     <select id="modal-kb-embedder" required>
                         <option value="">请选择 Embedder...</option>
@@ -361,14 +363,14 @@
                         💡 SeekDB 向量库 + 任何 Embedder = 混合检索
                     </p>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="modal-kb-chunk-size-group">
                     <label>分块大小 (字符数)</label>
                     <input type="number" id="modal-kb-chunk-size" value="1000" min="100" max="4000" step="100">
                     <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
                         推荐：1000-2000（较大的 chunk 可减少总数，提升处理速度）
                     </p>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="modal-kb-chunk-overlap-group">
                     <label>分块重叠 (字符数)</label>
                     <input type="number" id="modal-kb-chunk-overlap" value="100" min="0" max="500" step="50">
                     <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">

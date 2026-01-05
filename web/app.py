@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     try:
         kbs = KBService.list_kbs(session)
         for kb in kbs:
-            rag_kernel.create_vector_store(kb.kb_id, kb.collection_name, kb.vdb_type)
+            rag_kernel.create_vector_store(kb.kb_id, kb.collection_name, kb.vdb_type, name=kb.name)
             logger.info(f"Restored vector store for KB: {kb.kb_id} (type: {kb.vdb_type})")
             
         # Restore active Embedder

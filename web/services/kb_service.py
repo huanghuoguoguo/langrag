@@ -44,7 +44,7 @@ class KBService:
         session.refresh(kb)
         
         # Initialize vector store in RAG kernel
-        rag_kernel.create_vector_store(kb_id, collection_name, vdb_type)
+        rag_kernel.create_vector_store(kb_id, collection_name, vdb_type, name=name)
         
         return kb
     

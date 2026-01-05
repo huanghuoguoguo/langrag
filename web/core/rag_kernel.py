@@ -138,6 +138,8 @@ class RAGKernel:
     """
     def __init__(self):
         self.embedder: Optional[BaseEmbedder] = None
+        self.vector_stores: dict[str, BaseVector] = {}
+        self.kb_names: dict[str, str] = {}  # kb_id -> human-readable name
         
         # LLM Client (OpenAI API Compatible)
         self.llm_client = None
@@ -146,9 +148,6 @@ class RAGKernel:
         
         # Reranker
         self.reranker: Optional[BaseReranker] = None
-        
-        # Data Stores
-        self.vector_stores: dict[str, BaseVector] = {}
         
         # Use SQLite for persistent KV storage
         from web.config import DATA_DIR
@@ -236,7 +235,7 @@ class RAGKernel:
             logger.error(f"Failed to set reranker: {e}")
             raise e
     
-    def create_vector_store(self, kb_id: str, collection_name: str, vdb_type: str) -> BaseVector:
+    def create_vector_store(self, kb_id: str, collection_name: str, vdb_type: str, name: Optional[str] = None) -> BaseVector:
         """为知识库创建向量存储"""
         logger.info(f"[RAGKernel] Creating vector store: kb_id={kb_id}, type={vdb_type}, collection={collection_name}")
         
@@ -246,7 +245,7 @@ class RAGKernel:
         dataset = Dataset(
             id=kb_id,
             tenant_id="default",
-            name=kb_id,
+            name=name or kb_id,
             description="",
             indexing_technique="high_quality",
             collection_name=collection_name
@@ -267,10 +266,15 @@ class RAGKernel:
             store = SeekDBVector(dataset, mode="embedded", db_path=str(SEEKDB_DIR))
             logger.info(f"[RAGKernel] SeekDB data directory: {SEEKDB_DIR}")
             logger.info(f"[RAGKernel] SeekDB supports hybrid search (vector + full-text)")
+        elif vdb_type == "web_search":
+            from langrag.datasource.vdb.web import WebVector
+            store = WebVector(dataset)
+            logger.info(f"[RAGKernel] Web Search Vector Store initialized")
         else:
             raise ValueError(f"Unsupported vector database type: {vdb_type}")
         
         self.vector_stores[kb_id] = store
+        self.kb_names[kb_id] = name or kb_id
         logger.info(f"[RAGKernel] Vector store created and registered for kb_id={kb_id}")
         logger.info(f"[RAGKernel] Total vector stores: {len(self.vector_stores)}")
         return store
@@ -763,10 +767,22 @@ class RAGKernel:
                 try:
                     # Construct Dataset objects for routing
                     # Note: We ideally need descriptions, but using ID as name for now
-                    candidate_datasets = [
-                        Dataset(name=kid, collection_name=kid, description=f"Knowledge base: {kid}") 
-                        for kid in kb_ids
-                    ]
+                    candidate_datasets = []
+                    for kid in kb_ids:
+                        store = self.get_vector_store(kid)
+                        description = f"Knowledge base: {kid}"
+                        
+                        # Dynamically generate better description based on store type
+                        if store:
+                            store_type = store.__class__.__name__
+                            if store_type == "WebVector":
+                                description = "Internet Search Engine. Use this for questions about current events, latest news, public information, or release dates (e.g. Python version, iPhone specs)."
+                            elif "SeekDB" in store_type or "Chroma" in store_type:
+                                description = f"Local Private Knowledge Base ({kid}). Use this for internal documents, company policy, or specific domain knowledge."
+                        
+                        candidate_datasets.append(
+                            Dataset(name=kid, collection_name=kid, description=description)
+                        )
                     
                     selected_datasets = self.router.route(final_query, candidate_datasets)
                     selected_ids = [d.name for d in selected_datasets]
@@ -809,7 +825,11 @@ Context:
                 "content": doc.page_content,
                 "score": doc.metadata.get('score', 0),
                 "source": doc.metadata.get('source', 'unknown'),
-                "kb_id": doc.metadata.get('kb_id', 'unknown')
+                "kb_id": doc.metadata.get('kb_id', 'unknown'),
+                "kb_name": self.kb_names.get(doc.metadata.get('kb_id'), 'Unknown'),
+                "title": doc.metadata.get('title'),
+                "link": doc.metadata.get('link'),
+                "type": doc.metadata.get('type')
             }
             for doc in results
         ]

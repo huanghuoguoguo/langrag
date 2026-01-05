@@ -170,6 +170,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Form Handlers ---
 
+    // VDB Type Change Handler - Show/Hide fields based on type
+    const vdbTypeSelect = document.getElementById('modal-kb-vdb');
+    const embedderGroup = document.getElementById('modal-kb-embedder-group');
+    const chunkSizeGroup = document.getElementById('modal-kb-chunk-size-group');
+    const chunkOverlapGroup = document.getElementById('modal-kb-chunk-overlap-group');
+
+    if (vdbTypeSelect) {
+        vdbTypeSelect.addEventListener('change', () => {
+            const vdbType = vdbTypeSelect.value;
+            if (vdbType === 'web_search') {
+                // Hide embedder and chunk config for web search
+                if (embedderGroup) embedderGroup.style.display = 'none';
+                if (chunkSizeGroup) chunkSizeGroup.style.display = 'none';
+                if (chunkOverlapGroup) chunkOverlapGroup.style.display = 'none';
+            } else {
+                // Show all fields for local VDBs
+                if (embedderGroup) embedderGroup.style.display = 'block';
+                if (chunkSizeGroup) chunkSizeGroup.style.display = 'block';
+                if (chunkOverlapGroup) chunkOverlapGroup.style.display = 'block';
+            }
+        });
+    }
+
     // Create KB
     document.getElementById('btn-create-kb-confirm').addEventListener('click', async () => {
         const name = document.getElementById('modal-kb-name').value;
@@ -181,18 +204,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = document.getElementById('btn-create-kb-confirm');
 
         if (!name) return showToast('请输入知识库名称', 'error');
-        if (!embedderName) return showToast('请选择 Embedding 模型', 'error');
+
+        // Skip embedder validation for web_search
+        if (vdbType !== 'web_search' && !embedderName) {
+            return showToast('请选择 Embedding 模型', 'error');
+        }
 
         setLoading(btn, true);
         try {
-            await api.createKB({
+            const payload = {
                 name,
                 description: desc,
-                vdb_type: vdbType,
-                embedder_name: embedderName,
-                chunk_size: chunkSize,
-                chunk_overlap: chunkOverlap
-            });
+                vdb_type: vdbType
+            };
+
+            // Only include embedder and chunk config for non-web types
+            if (vdbType !== 'web_search') {
+                payload.embedder_name = embedderName;
+                payload.chunk_size = chunkSize;
+                payload.chunk_overlap = chunkOverlap;
+            }
+
+            await api.createKB(payload);
             showToast('知识库创建成功！');
             modal.classList.remove('active');
 
