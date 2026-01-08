@@ -47,7 +47,7 @@ class TestParentChildProcessor:
         ]
         
         # Embedder
-        embedder.embed_documents.return_value = [[0.1]*10, [0.2]*10, [0.3]*10]
+        embedder.embed.return_value = [[0.1]*10, [0.2]*10, [0.3]*10]
         
         # Run
         dataset = Dataset(name="ds", collection_name="col")
