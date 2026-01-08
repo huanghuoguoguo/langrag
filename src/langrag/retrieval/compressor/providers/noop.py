@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from ...core.search_result import SearchResult
+from langrag.entities.search_result import SearchResult
 from ..base import BaseCompressor
 
 
