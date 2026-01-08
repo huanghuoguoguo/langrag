@@ -14,11 +14,14 @@ from langrag import (
     Document as LangRAGDocument,
     SimpleTextParser,
     QAIndexProcessor,
+    ParagraphIndexProcessor,
+    ParentChildIndexProcessor,
     RecursiveCharacterChunker,
     BaseVector,
     BaseEmbedder,
     EmbedderFactory
 )
+from langrag.datasource.kv.sqlite import SQLiteKV
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +135,20 @@ class RAGKernel:
     """
     def __init__(self):
         self.embedder: Optional[BaseEmbedder] = None
-        self.vector_stores: dict[str, BaseVector] = {}
         
         # LLM Client (OpenAI API Compatible)
         self.llm_client = None
         self.llm_config = {}
         self.llm_adapter = None # Store adapter for internal components
+        
+        # Data Stores
+        self.vector_stores: dict[str, BaseVector] = {}
+        
+        # Use SQLite for persistent KV storage
+        from web.config import DATA_DIR
+        kv_path = DATA_DIR / "kv_store.sqlite"
+        self.kv_store = SQLiteKV(db_path=str(kv_path))
+        logger.info(f"[RAGKernel] KV Store initialized at {kv_path}")
         
         # Agentic Components
         self.router = None
@@ -270,6 +281,37 @@ class RAGKernel:
                      doc.id = doc.metadata["original_doc_id"]
                      doc.metadata["document_id"] = doc.metadata["original_doc_id"]
 
+    def _process_parent_child_results(self, results: List[LangRAGDocument]):
+        """
+        Post-process results for Parent-Child Indexing:
+        Swap the retrieved Child Chunk (content) with the Parent Chunk (from KV Store).
+        Deduplicate parents.
+        """
+        # Collect parent IDs
+        parent_ids = []
+        for doc in results:
+            if "parent_id" in doc.metadata:
+                parent_ids.append(doc.metadata["parent_id"])
+        
+        if not parent_ids:
+             return results
+             
+        # Fetch parents (batch get)
+        # Note: In-Memory KV is synchronous, but mget is structured for batching
+        parents_content = self.kv_store.mget(parent_ids)
+        parent_map = dict(zip(parent_ids, parents_content))
+        
+        # Replace content
+        for doc in results:
+            pid = doc.metadata.get("parent_id")
+            if pid and pid in parent_map and parent_map[pid]:
+                # Swap content
+                doc.page_content = parent_map[pid]
+                # Update ID to parent ID to facilitate proper deduplication downstream
+                # (If we don't, we might have multiple chunks showing same parent text)
+                doc.id = pid
+                doc.metadata["is_parent"] = True
+                
     def get_vector_store(self, kb_id: str) -> Optional[BaseVector]:
         """获取知识库的向量存储"""
         return self.vector_stores.get(kb_id)
@@ -360,7 +402,35 @@ class RAGKernel:
              # QA processor produces roughly 1 Q per chunk
              # We return a placeholder count since we don't get exact from processor yet
              return len(raw_docs) * 2 # Crude estimate
+        
+        elif indexing_technique == 'parent_child':
+             logger.info(f"[RAGKernel] Using Parent-Child Indexing Technique")
+             if not self.embedder:
+                 raise ValueError("Embedder not configured, cannot use Parent-Child indexing")
              
+             # Strategies:
+             # Parent: Large chunks (e.g. chunk_size * 2 or fixed ~1000)
+             # Child: Small chunks (e.g. chunk_size / 2 or fixed ~200)
+             # We will use simple configuration derived from args
+             
+             parent_chunk_size = chunk_size * 2
+             child_chunk_size = chunk_size // 2  # Smaller for retrieval
+             if child_chunk_size < 100: child_chunk_size = 200
+             
+             parent_splitter = RecursiveCharacterChunker(chunk_size=parent_chunk_size, chunk_overlap=chunk_overlap)
+             child_splitter = RecursiveCharacterChunker(chunk_size=child_chunk_size, chunk_overlap=chunk_overlap // 2)
+             
+             processor = ParentChildIndexProcessor(
+                 vector_store=store,
+                 kv_store=self.kv_store,
+                 embedder=self.embedder,
+                 parent_splitter=parent_splitter,
+                 child_splitter=child_splitter
+             )
+             
+             processor.process(store.dataset, raw_docs)
+             return len(raw_docs) * 4 # Crude estimate
+
         else:
             # Default / High Quality (Original Logic)
             
@@ -438,6 +508,7 @@ class RAGKernel:
                 results = store.search(query, query_vector=query_vector, top_k=top_k)
             
             self._process_qa_results(results)
+            self._process_parent_child_results(results)
             return results, search_type
             # --- Legacy Manual Path End ---
 
@@ -503,6 +574,7 @@ class RAGKernel:
              # If we had a Reranker injected, we would call it here.
              
              self._process_qa_results(results)
+             self._process_parent_child_results(results)
              return results, search_type
 
         except Exception as e:
@@ -562,6 +634,7 @@ class RAGKernel:
         all_results.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
         
         self._process_qa_results(all_results)
+        self._process_parent_child_results(all_results)
         return all_results[:top_k], primary_search_type
 
     async def chat(

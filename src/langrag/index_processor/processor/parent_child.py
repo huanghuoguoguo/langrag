@@ -68,7 +68,7 @@ class ParentChildIndexProcessor(BaseIndexProcessor):
         # 5. Embed Children
         if child_chunks:
             texts = [c.page_content for c in child_chunks]
-            embeddings = self.embedder.embed_documents(texts)
+            embeddings = self.embedder.embed(texts)
             for i, chunk in enumerate(child_chunks):
                 chunk.vector = embeddings[i]
                 
