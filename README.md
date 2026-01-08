@@ -38,13 +38,13 @@ The `web/` directory contains a **demo application** that showcases how to integ
 | | Smart Chunking | Recursive Character Splitter with overlap |
 | | Parent-Child Indexing | Hierarchical retrieval for long documents |
 | | QA Indexing | Question-Answer pair extraction for precise matching |
-| **Storage** | Vector Stores | DuckDB (persistent), ChromaDB, SeekDB (hybrid) |
+| **Storage** | Vector Stores | DuckDB (persistent, vector-only), ChromaDB, SeekDB (hybrid) |
 | | KV Store | SQLite-based persistent key-value storage |
 | | Web Search | Real-time web integration (Bing, Google, DuckDuckGo) |
 | **Retrieval** | Agentic Router | LLM-powered knowledge base selection |
 | | Query Rewriter | Semantic query optimization |
 | | Reranker | Cohere, Qwen, NoOp providers |
-| | Hybrid Search | Vector + Full-text (with SeekDB) |
+| | Hybrid Search | Vector + Full-text with SeekDB (DuckDB: vector-only) |
 | **Generation** | Streaming | Server-Sent Events for real-time responses |
 | | LLM Abstraction | OpenAI-compatible interface with injection |
 | **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (84 tests, 61% coverage) |
