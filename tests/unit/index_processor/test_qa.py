@@ -16,9 +16,10 @@ class TestQAIndexProcessor:
         # Mock Chat response
         llm.chat.return_value = "Generated Question?"
         # Mock Embed
-        llm.embed_documents.return_value = [[0.1]*10]
+        embedder = MagicMock()
+        embedder.embed_documents.return_value = [[0.1]*10]
         
-        processor = QAIndexProcessor(vdb, llm, splitter)
+        processor = QAIndexProcessor(vdb, llm, embedder, splitter)
         dataset = Dataset(name="ds", collection_name="col")
         
         processor.process(dataset, [Document(page_content="doc")])

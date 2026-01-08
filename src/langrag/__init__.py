@@ -15,6 +15,8 @@ from .index_processor.extractor.providers.simple_text import SimpleTextParser
 from .index_processor.splitter.base import BaseChunker
 from .index_processor.splitter.providers.recursive_character import RecursiveCharacterChunker
 from .index_processor.processor.base import BaseIndexProcessor
+from .index_processor.processor.paragraph import ParagraphIndexProcessor
+from .index_processor.processor.qa import QAIndexProcessor
 
 # Retrieval Components
 from .retrieval.workflow import RetrievalWorkflow
@@ -41,6 +43,8 @@ __all__ = [
     "BaseChunker",
     "RecursiveCharacterChunker",
     "BaseIndexProcessor",
+    "ParagraphIndexProcessor",
+    "QAIndexProcessor",
     
     # Retrieval
     "RetrievalWorkflow",

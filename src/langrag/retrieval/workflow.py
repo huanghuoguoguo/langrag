@@ -107,6 +107,26 @@ class RetrievalWorkflow:
                 except Exception as e:
                     logger.error(f"Error retrieving from dataset {dataset.name}: {e}")
 
+            # 2.5. QA Indexing Handling (Swap Question -> Answer)
+            # If we retrieved a "Question" document, we want to return the "Answer" (original text)
+            # and use the original document ID for deduplication.
+            for doc in all_documents:
+                if doc.metadata.get("is_qa"):
+                    # Swap content
+                    question_text = doc.page_content
+                    # Store question in metadata for potential debugging or UI display
+                    doc.metadata["matched_question"] = question_text
+                    
+                    # Restore original answer as content
+                    if "answer" in doc.metadata:
+                        doc.page_content = doc.metadata["answer"]
+                    
+                    # Restore original doc ID for correct deduplication
+                    if "original_doc_id" in doc.metadata:
+                        doc.id = doc.metadata["original_doc_id"]
+                        # Also update metadata doc_id to match (if downstream relies on it)
+                        doc.metadata["document_id"] = doc.metadata["original_doc_id"]
+
             # 3. Reranking (Optimization)
             if self.reranker and all_documents:
                 if self.callback_manager:

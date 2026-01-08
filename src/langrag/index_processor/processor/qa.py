@@ -4,6 +4,7 @@ from langrag.entities.document import Document
 from langrag.index_processor.processor.base import BaseIndexProcessor
 from langrag.datasource.vdb.base import BaseVector
 from langrag.llm.base import BaseLLM
+from langrag.llm.embedder.base import BaseEmbedder
 from loguru import logger
 
 QA_GEN_PROMPT = """
@@ -23,10 +24,12 @@ class QAIndexProcessor(BaseIndexProcessor):
         self,
         vector_store: BaseVector,
         llm: BaseLLM,
+        embedder: BaseEmbedder,
         splitter: Any = None
     ):
         self.vector_store = vector_store
         self.llm = llm
+        self.embedder = embedder
         self.splitter = splitter
 
     def process(self, dataset: Dataset, documents: list[Document], **kwargs) -> None:
@@ -72,7 +75,7 @@ class QAIndexProcessor(BaseIndexProcessor):
 
         # 3. Embed (Questions)
         texts = [d.page_content for d in qa_documents]
-        embeddings = self.llm.embed_documents(texts)
+        embeddings = self.embedder.embed(texts)
         for i, doc in enumerate(qa_documents):
             doc.vector = embeddings[i]
 
