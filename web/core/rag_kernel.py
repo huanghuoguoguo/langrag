@@ -732,10 +732,12 @@ class RAGKernel:
         self,
         kb_ids: List[str],
         query: str,
-        history: List[dict] = None
-    ) -> dict:
+        history: List[dict] = None,
+        stream: bool = False
+    ) -> dict | object:
         """
         RAG 对话 (支持多知识库)
+        If stream=True, returns an AsyncGenerator yielding chunks (str or dict).
         """
         if not self.llm_client:
             raise ValueError("LLM is not configured")
@@ -801,31 +803,62 @@ Context:
             
         messages.append({"role": "user", "content": query})
         
-        logger.info(f"[RAGKernel] Sending request to LLM: model={self.llm_config['model']}")
-        
         # 3. Generate
-        try:
-            response = await self.llm_client.chat.completions.create(
-                model=self.llm_config["model"],
-                messages=messages,
-                temperature=self.llm_config["temperature"],
-                max_tokens=self.llm_config["max_tokens"]
-            )
-            
-            answer = response.choices[0].message.content
-            
-            return {
-                "answer": answer,
-                "sources": [
-                    {
-                        "content": doc.page_content,
-                        "score": doc.metadata.get('score', 0),
-                        "source": doc.metadata.get('source', 'unknown'),
-                        "kb_id": doc.metadata.get('kb_id', 'unknown')
-                    }
-                    for doc in results
-                ]
+        sources_list = [
+            {
+                "content": doc.page_content,
+                "score": doc.metadata.get('score', 0),
+                "source": doc.metadata.get('source', 'unknown'),
+                "kb_id": doc.metadata.get('kb_id', 'unknown')
             }
-        except Exception as e:
-            logger.error(f"[RAGKernel] LLM generation failed: {e}")
-            raise e
+            for doc in results
+        ]
+
+        logger.info(f"[RAGKernel] Sending request to LLM: model={self.llm_config['model']}, stream={stream}")
+
+        if stream:
+             # Streaming Logic
+             async def stream_generator():
+                 # Yield sources first as JSON line
+                 import json
+                 yield json.dumps({"type": "sources", "data": sources_list}) + "\n"
+                 
+                 try:
+                    stream_resp = await self.llm_client.chat.completions.create(
+                        model=self.llm_config["model"],
+                        messages=messages,
+                        temperature=self.llm_config["temperature"],
+                        max_tokens=self.llm_config["max_tokens"],
+                        stream=True
+                    )
+                    
+                    async for chunk in stream_resp:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            yield json.dumps({"type": "content", "data": content}) + "\n"
+                            
+                 except Exception as e:
+                     logger.error(f"[RAGKernel] LLM streaming generation failed: {e}")
+                     yield json.dumps({"type": "error", "data": str(e)}) + "\n"
+
+             return stream_generator()
+
+        else:
+            # Sync Logic
+            try:
+                response = await self.llm_client.chat.completions.create(
+                    model=self.llm_config["model"],
+                    messages=messages,
+                    temperature=self.llm_config["temperature"],
+                    max_tokens=self.llm_config["max_tokens"]
+                )
+                
+                answer = response.choices[0].message.content
+                
+                return {
+                    "answer": answer,
+                    "sources": sources_list
+                }
+            except Exception as e:
+                logger.error(f"[RAGKernel] LLM generation failed: {e}")
+                raise e

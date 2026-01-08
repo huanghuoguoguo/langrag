@@ -25,6 +25,14 @@ class BaseLLM(ABC):
         """
         pass
 
+    @abstractmethod
+    def stream_chat(self, messages: list[dict], **kwargs):
+        """
+        Stream chat completion.
+        Returns a generator yielding tokens.
+        """
+        pass
+
 
 class ModelManager(ABC):
     """

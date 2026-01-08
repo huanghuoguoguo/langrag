@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     kb_ids: List[str] = []
     query: str
     history: List[Message] = []
+    stream: bool = False
 
 
 class SourceItem(BaseModel):
@@ -41,15 +42,13 @@ def get_rag_kernel():
     return rag_kernel
 
 
-@router.post("", response_model=ChatResponse)
+@router.post("", response_model=None)
 async def chat(
     req: ChatRequest,
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """执行 RAG 对话"""
-    # Verify KBs exist (optional, kernel will skip invalid ones)
-    
+    """执行 RAG 对话 (Support Streaming)"""
     try:
         # Convert Pydantic models to dicts for internal use
         history_dicts = [{"role": m.role, "content": m.content} for m in req.history]
@@ -63,8 +62,13 @@ async def chat(
         result = await rag_kernel.chat(
             kb_ids=target_kb_ids,
             query=req.query,
-            history=history_dicts
+            history=history_dicts,
+            stream=req.stream
         )
+
+        if req.stream:
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(result, media_type="text/event-stream")
         
         return ChatResponse(
             answer=result["answer"],
