@@ -13,6 +13,7 @@ from langrag import (
     Dataset,
     Document as LangRAGDocument,
     SimpleTextParser,
+    QAIndexProcessor,
     RecursiveCharacterChunker,
     BaseVector,
     BaseEmbedder,
@@ -136,6 +137,7 @@ class RAGKernel:
         # LLM Client (OpenAI API Compatible)
         self.llm_client = None
         self.llm_config = {}
+        self.llm_adapter = None # Store adapter for internal components
         
         # Agentic Components
         self.router = None
@@ -172,6 +174,7 @@ class RAGKernel:
             # Note: Adapter currently creates its own sync client internally for core compatibility
             # In a real async migration, we'd pass self.llm_client directly if interfaces matched async
             web_llm_adapter = WebLLMAdapter(self.llm_client, model=model)
+            self.llm_adapter = web_llm_adapter # Store for use in processors
             
             # Initialize Agentic Components
             self.router = LLMRouter(llm=web_llm_adapter)
@@ -246,6 +249,27 @@ class RAGKernel:
         logger.info(f"[RAGKernel] Total vector stores: {len(self.vector_stores)}")
         return store
     
+    def _process_qa_results(self, results: List[LangRAGDocument]):
+        """
+        Post-process results for QA Indexing:
+        Swap the indexed Question (content) with the original Answer (metadata).
+        """
+        for doc in results:
+             if doc.metadata.get("is_qa"):
+                 # Swap content
+                 question_text = doc.page_content
+                 # Store question in metadata
+                 doc.metadata["matched_question"] = question_text
+                 
+                 # Restore original answer
+                 if "answer" in doc.metadata:
+                     doc.page_content = doc.metadata["answer"]
+                 
+                 # Restore original doc ID
+                 if "original_doc_id" in doc.metadata:
+                     doc.id = doc.metadata["original_doc_id"]
+                     doc.metadata["document_id"] = doc.metadata["original_doc_id"]
+
     def get_vector_store(self, kb_id: str) -> Optional[BaseVector]:
         """获取知识库的向量存储"""
         return self.vector_stores.get(kb_id)
@@ -255,13 +279,14 @@ class RAGKernel:
         file_path: Path, 
         kb_id: str,
         chunk_size: int = 500,
-        chunk_overlap: int = 50
+        chunk_overlap: int = 50,
+        indexing_technique: str = "high_quality"
     ) -> int:
         """
         处理文档：解析 -> 分块 -> 嵌入 -> 存储
         返回生成的 chunk 数量
         """
-        logger.info(f"[RAGKernel] process_document called with kb_id={kb_id}, file={file_path}")
+        logger.info(f"[RAGKernel] process_document called with kb_id={kb_id}, file={file_path}, technique={indexing_technique}")
         logger.info(f"[RAGKernel] Current vector_stores keys: {list(self.vector_stores.keys())}")
         
         store = self.get_vector_store(kb_id)
@@ -311,36 +336,63 @@ class RAGKernel:
         
         raw_docs = parser.parse(file_path)
         logger.info(f"[RAGKernel] Parsed {len(raw_docs)} raw documents")
-        
-        # 2. Chunk
-        logger.info(f"[RAGKernel] Step 2: Chunking with size={chunk_size}, overlap={chunk_overlap}...")
-        chunker = RecursiveCharacterChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        chunks = chunker.split(raw_docs)
-        logger.info(f"[RAGKernel] Created {len(chunks)} chunks")
-        
-        # 3. Embed (if configured)
-        if self.embedder:
-            text_list = [c.page_content for c in chunks]
-            try:
-                logger.info(f"[RAGKernel] Step 3: Embedding {len(text_list)} chunks with {self.embedder.__class__.__name__}...")
-                vectors = self.embedder.embed(text_list)
-                logger.info(f"[RAGKernel] Received {len(vectors)} embedding vectors")
-                for doc, vec in zip(chunks, vectors):
-                    doc.vector = vec  # Store in vector field, not metadata
-                logger.info(f"[RAGKernel] Embeddings attached to chunks")
-            except Exception as e:
-                logger.error(f"[RAGKernel] Embedding error: {e}")
-                logger.exception("[RAGKernel] Embedding traceback:")
-                raise e  # Fail if embedding fails
+
+        # 2. Processing Strategy
+        if indexing_technique == 'qa':
+             logger.info(f"[RAGKernel] Using QA Indexing Technique")
+             if not self.llm_adapter:
+                  raise ValueError("LLM not configured, cannot use QA indexing")
+             if not self.embedder:
+                  raise ValueError("Embedder not configured, cannot use QA indexing")
+             
+             chunker = RecursiveCharacterChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+             
+             processor = QAIndexProcessor(
+                  vector_store=store,
+                  llm=self.llm_adapter,
+                  embedder=self.embedder,
+                  splitter=chunker
+             )
+             
+             processor.process(store.dataset, raw_docs)
+             
+             # Estimate chunk count (or exact if we tracked it)
+             # QA processor produces roughly 1 Q per chunk
+             # We return a placeholder count since we don't get exact from processor yet
+             return len(raw_docs) * 2 # Crude estimate
+             
         else:
-            logger.info(f"[RAGKernel] Step 3: No embedder configured, skipping embedding")
-        
-        # 4. Store
-        logger.info(f"[RAGKernel] Step 4: Storing chunks in vector store...")
-        store.add_texts(chunks)
-        logger.info(f"[RAGKernel] Successfully stored {len(chunks)} chunks")
-        
-        return len(chunks)
+            # Default / High Quality (Original Logic)
+            
+            # 2. Chunk
+            logger.info(f"[RAGKernel] Step 2: Chunking with size={chunk_size}, overlap={chunk_overlap}...")
+            chunker = RecursiveCharacterChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            chunks = chunker.split(raw_docs)
+            logger.info(f"[RAGKernel] Created {len(chunks)} chunks")
+            
+            # 3. Embed (if configured)
+            if self.embedder:
+                text_list = [c.page_content for c in chunks]
+                try:
+                    logger.info(f"[RAGKernel] Step 3: Embedding {len(text_list)} chunks with {self.embedder.__class__.__name__}...")
+                    vectors = self.embedder.embed(text_list)
+                    logger.info(f"[RAGKernel] Received {len(vectors)} embedding vectors")
+                    for doc, vec in zip(chunks, vectors):
+                        doc.vector = vec  # Store in vector field, not metadata
+                    logger.info(f"[RAGKernel] Embeddings attached to chunks")
+                except Exception as e:
+                    logger.error(f"[RAGKernel] Embedding error: {e}")
+                    logger.exception("[RAGKernel] Embedding traceback:")
+                    raise e  # Fail if embedding fails
+            else:
+                logger.info(f"[RAGKernel] Step 3: No embedder configured, skipping embedding")
+            
+            # 4. Store
+            logger.info(f"[RAGKernel] Step 4: Storing chunks in vector store...")
+            store.add_texts(chunks)
+            logger.info(f"[RAGKernel] Successfully stored {len(chunks)} chunks")
+            
+            return len(chunks)
     
     def search(
         self, 
@@ -385,6 +437,7 @@ class RAGKernel:
             else:
                 results = store.search(query, query_vector=query_vector, top_k=top_k)
             
+            self._process_qa_results(results)
             return results, search_type
             # --- Legacy Manual Path End ---
 
@@ -449,6 +502,7 @@ class RAGKernel:
              # 1.4 Post Process (Rerank/Dedupe) - Optional / Future
              # If we had a Reranker injected, we would call it here.
              
+             self._process_qa_results(results)
              return results, search_type
 
         except Exception as e:
@@ -507,6 +561,7 @@ class RAGKernel:
         # but within similar stores it's acceptable.
         all_results.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
         
+        self._process_qa_results(all_results)
         return all_results[:top_k], primary_search_type
 
     async def chat(

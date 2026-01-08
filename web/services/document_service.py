@@ -77,7 +77,8 @@ class DocumentService:
                 file_path,
                 kb_id=doc.kb_id,
                 chunk_size=kb.chunk_size,
-                chunk_overlap=kb.chunk_overlap
+                chunk_overlap=kb.chunk_overlap,
+                indexing_technique=kb.indexing_technique
             )
             
             logger.info(f"[DocumentService] RAG kernel processing completed. Chunks created: {chunk_count}")
