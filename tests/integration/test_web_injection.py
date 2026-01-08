@@ -43,6 +43,14 @@ class MockWebLLM(BaseLLM):
             
         return "I am a helpful assistant."
 
+    def stream_chat(self, messages: list[dict], **kwargs):
+        # Simulate streaming
+        yield "I "
+        yield "am "
+        yield "a "
+        yield "helpful "
+        yield "assistant."
+
 
 # --- 2. Integration Test: Injecting Web LLM into LangRAG ---
 
