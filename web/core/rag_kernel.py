@@ -132,14 +132,18 @@ class SeekDBEmbedder(BaseEmbedder):
 
 class RAGKernel:
     """
-    RAG 内核封装
-    负责与 langrag 核心库交互
-    使用真实的向量数据库（chroma/duckdb/seekdb）
+    RAGKernel
+    RAG Kernel Wrapper - Interfaces with the core langrag library.
+    Uses WebVectorStoreManager to manage VDB instances.
     """
     def __init__(self):
         self.embedder: Optional[BaseEmbedder] = None
         self.vector_stores: dict[str, BaseVector] = {}
         self.kb_names: dict[str, str] = {}  # kb_id -> human-readable name
+        
+        # Use our new Manager
+        from web.core.vdb_manager import WebVectorStoreManager
+        self.vdb_manager = WebVectorStoreManager()
         
         # LLM Client (OpenAI API Compatible)
         self.llm_client = None
@@ -185,10 +189,6 @@ class RAGKernel:
             logger.info(f"LLM configured: {model} (base_url={base_url})")
             
             # 2. Inject into LangRAG Core
-            # Create Adapter to bridge core -> web client
-            # We pass the same client but adapter handles interface matching
-            # Note: Adapter currently creates its own sync client internally for core compatibility
-            # In a real async migration, we'd pass self.llm_client directly if interfaces matched async
             web_llm_adapter = WebLLMAdapter(self.llm_client, model=model)
             self.llm_adapter = web_llm_adapter # Store for use in processors
             
@@ -200,9 +200,6 @@ class RAGKernel:
             self.workflow = RetrievalWorkflow(
                 router=self.router,
                 rewriter=self.rewriter,
-                # vector_store_cls is determined dynamically or via factory inside/outside
-                # Workflow largely uses datasets and RetrievalService so we don't strictly need to pass store cls here 
-                # unless using the default one.
             )
             logger.info("LangRAG Workflow initialized with Agentic components (Router, Rewriter)")
             
@@ -237,46 +234,21 @@ class RAGKernel:
     
     def create_vector_store(self, kb_id: str, collection_name: str, vdb_type: str, name: Optional[str] = None) -> BaseVector:
         """为知识库创建向量存储"""
-        logger.info(f"[RAGKernel] Creating vector store: kb_id={kb_id}, type={vdb_type}, collection={collection_name}")
-        
-        # Import config for data directories
-        from web.config import CHROMA_DIR, DUCKDB_DIR, SEEKDB_DIR
-        
         dataset = Dataset(
             id=kb_id,
             tenant_id="default",
             name=name or kb_id,
             description="",
             indexing_technique="high_quality",
-            collection_name=collection_name
+            collection_name=collection_name,
+            vdb_type=vdb_type
         )
+        store = self.vdb_manager.create_store(dataset)
         
-        # Import vector store based on type with configured paths
-        if vdb_type == "chroma":
-            from langrag.datasource.vdb.chroma import ChromaVector
-            store = ChromaVector(dataset, persist_directory=str(CHROMA_DIR))
-            logger.info(f"[RAGKernel] ChromaDB data directory: {CHROMA_DIR}")
-        elif vdb_type == "duckdb":
-            from langrag.datasource.vdb.duckdb import DuckDBVector
-            store = DuckDBVector(dataset, persist_directory=str(DUCKDB_DIR))
-            logger.info(f"[RAGKernel] DuckDB data directory: {DUCKDB_DIR}")
-        elif vdb_type == "seekdb":
-            from langrag.datasource.vdb.seekdb import SeekDBVector
-            # SeekDB uses db_path instead of persist_directory
-            store = SeekDBVector(dataset, mode="embedded", db_path=str(SEEKDB_DIR))
-            logger.info(f"[RAGKernel] SeekDB data directory: {SEEKDB_DIR}")
-            logger.info(f"[RAGKernel] SeekDB supports hybrid search (vector + full-text)")
-        elif vdb_type == "web_search":
-            from langrag.datasource.vdb.web import WebVector
-            store = WebVector(dataset)
-            logger.info(f"[RAGKernel] Web Search Vector Store initialized")
-        else:
-            raise ValueError(f"Unsupported vector database type: {vdb_type}")
-        
+        # Also register in local tracking for backwards compatibility
         self.vector_stores[kb_id] = store
         self.kb_names[kb_id] = name or kb_id
-        logger.info(f"[RAGKernel] Vector store created and registered for kb_id={kb_id}")
-        logger.info(f"[RAGKernel] Total vector stores: {len(self.vector_stores)}")
+        logger.info(f"[RAGKernel] Vector store created via manager and registered for kb_id={kb_id}")
         return store
     
     def _process_qa_results(self, results: List[LangRAGDocument]):
@@ -332,8 +304,12 @@ class RAGKernel:
                 doc.metadata["is_parent"] = True
                 
     def get_vector_store(self, kb_id: str) -> Optional[BaseVector]:
-        """获取知识库的向量存储"""
-        return self.vector_stores.get(kb_id)
+        """获取知识库的向量存储，优先从本地字典查找"""
+        # First check local cache for backwards compatibility
+        if kb_id in self.vector_stores:
+            return self.vector_stores[kb_id]
+        # Then try manager
+        return self.vdb_manager.get_store_by_id(kb_id) if hasattr(self.vdb_manager, 'get_store_by_id') else None
     
     def process_document(
         self, 
@@ -353,7 +329,6 @@ class RAGKernel:
         store = self.get_vector_store(kb_id)
         if not store:
             logger.error(f"[RAGKernel] Vector store not found for kb_id: {kb_id}")
-            logger.error(f"[RAGKernel] Available stores: {list(self.vector_stores.keys())}")
             raise ValueError(f"Vector store not found for kb_id: {kb_id}")
         
         logger.info(f"[RAGKernel] Vector store found for kb_id: {kb_id}")

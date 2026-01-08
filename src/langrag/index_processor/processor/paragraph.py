@@ -16,12 +16,12 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
 
     def __init__(
         self, 
-        vector_store: BaseVector, 
-        embedder: Any, # BaseEmbedder
+        embedder: Any, 
+        vector_manager: Any = None, 
         splitter: Any = None,
         cleaner: Cleaner = None
     ):
-        self.vector_store = vector_store
+        self.vector_manager = vector_manager
         self.embedder = embedder
         self.splitter = splitter # TODO: Use Factory to get default splitter if None
         self.cleaner = cleaner or Cleaner()
@@ -69,7 +69,12 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
             chunk.vector = embeddings[i]
 
         # 5. Save to VDB
-        self.vector_store.create(all_chunks)
+        manager = self.vector_manager
+        if manager is None:
+             from langrag.datasource.vdb.global_manager import get_vector_manager
+             manager = get_vector_manager()
+             
+        manager.add_texts(dataset, all_chunks)
         
         # 6. Save to Keyword Store (Optional / Economy Mode)
         # if dataset.indexing_technique == 'economy': ...

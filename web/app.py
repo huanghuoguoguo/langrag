@@ -28,6 +28,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing database...")
     init_db()
+
+    # Inject Web VDB Manager into LangRAG Core
+    logger.info("Injecting WebVectorStoreManager into LangRAG Factory...")
+    from langrag.datasource.vdb.global_manager import set_vector_manager
+    # rag_kernel is globally imported from web.core.context
+    set_vector_manager(rag_kernel.vdb_manager)
     
     # Restore vector stores for existing knowledge bases
     logger.info("Restoring vector stores for existing knowledge bases...")

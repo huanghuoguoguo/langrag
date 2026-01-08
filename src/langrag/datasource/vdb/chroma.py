@@ -12,10 +12,34 @@ class ChromaVector(BaseVector):
     Chroma Vector Store Implementation.
     """
 
-    def __init__(self, dataset: Dataset, persist_directory: str = "./chroma_db"):
+    def __init__(
+        self, 
+        dataset: Dataset, 
+        persist_directory: str | None = None, 
+        host: str | None = None, 
+        port: int | None = None,
+        ssl: bool = False,
+        headers: dict[str, str] | None = None,
+        **kwargs
+    ):
         super().__init__(dataset)
-        self.persist_directory = persist_directory
-        self._client: ClientAPI = chromadb.PersistentClient(path=persist_directory)
+        
+        if host and port:
+            # Remote connection
+            self._client = chromadb.HttpClient(
+                host=host, 
+                port=port,
+                ssl=ssl,
+                headers=headers,
+                settings=ChromaSettings(anonymized_telemetry=False)
+            )
+        else:
+            # Local persistence
+            path = persist_directory or "./chroma_db"
+            self._client = chromadb.PersistentClient(
+                path=path,
+                settings=ChromaSettings(anonymized_telemetry=False)
+            )
         
         # Get or create collection
         # We enforce cosine distance for consistency
