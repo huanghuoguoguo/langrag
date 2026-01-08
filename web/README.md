@@ -1,56 +1,207 @@
-# LangRAG Web Application
+# LangRAG Web Demo
 
-业务层应用，使用 `langrag` 核心库作为 RAG 引擎。
+> ⚠️ **This is a DEMO application**, not a production-ready product.
 
-## 架构设计
+This directory contains a web application that demonstrates how to integrate and drive the **LangRAG kernel**. It serves as:
+
+1. **Reference Implementation**: Shows best practices for using LangRAG in a real application.
+2. **Interactive Playground**: A visual interface to experiment with RAG features.
+3. **Integration Example**: Demonstrates dependency injection, LLM configuration, and multi-KB management.
+
+---
+
+## Purpose
+
+The LangRAG core library (`src/langrag/`) is a **RAG kernel** — it provides primitives but doesn't manage business logic. This demo shows how a real application would:
+
+- Manage knowledge base metadata (names, descriptions, configurations)
+- Handle user authentication and sessions (placeholder)
+- Configure LLM and Embedder credentials
+- Orchestrate document upload and processing
+- Provide a chat interface with streaming responses
+
+---
+
+## Architecture
 
 ```
 web/
-├── app.py              # FastAPI 应用入口
-├── core/               # 核心组件
-│   ├── database.py     # 数据库连接与初始化
-│   └── rag_kernel.py   # RAG 内核封装（与 langrag 交互）
-├── models/             # 数据模型
-│   └── database.py     # SQLModel 业务实体
-├── services/           # 业务逻辑层
-│   ├── kb_service.py       # 知识库服务
-│   ├── document_service.py # 文档处理服务
-│   └── embedder_service.py # 模型配置服务
-├── routers/            # API 路由
-│   ├── kb.py           # 知识库 API
-│   ├── document.py     # 文档上传 API
-│   ├── search.py       # 检索 API
-│   └── config.py       # 配置 API
-├── static/             # 前端静态文件
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-└── data/               # SQLite 数据库文件（自动创建）
-    └── app.db
+├── app.py              # FastAPI application entry point
+├── config.py           # Configuration (data paths, settings)
+├── core/               # Core integration layer
+│   ├── database.py     # SQLite database connection
+│   ├── rag_kernel.py   # RAGKernel wrapper (drives langrag)
+│   ├── llm_adapter.py  # LLM adapter for injection
+│   ├── vdb_manager.py  # Vector store manager
+│   └── context.py      # Request context and dependencies
+├── models/             # SQLModel entities
+│   └── database.py     # KnowledgeBase, Document, LLMConfig models
+├── services/           # Business logic layer
+│   ├── kb_service.py       # Knowledge base CRUD
+│   ├── document_service.py # Document processing
+│   └── embedder_service.py # Model configuration
+├── routers/            # FastAPI routers (API endpoints)
+│   ├── kb.py           # /api/kb/* - Knowledge base management
+│   ├── document.py     # /api/document/* - Document upload
+│   ├── search.py       # /api/search/* - Retrieval testing
+│   ├── chat.py         # /api/chat - RAG chat with streaming
+│   └── config.py       # /api/config - LLM/Embedder settings
+├── static/             # Frontend (Vanilla JS SPA)
+│   ├── index.html      # Main HTML
+│   ├── css/            # Stylesheets
+│   └── js/             # JavaScript modules
+└── data/               # Persistent storage (auto-created)
+    ├── app.db          # SQLite business database
+    ├── kv_store.sqlite # Parent-Child KV store
+    ├── chroma/         # ChromaDB data
+    ├── duckdb/         # DuckDB vector files
+    └── seekdb/         # SeekDB data
 ```
 
-## 分层说明
+---
 
-### 1. langrag 核心层
-- 提供 RAG 基础能力：文档解析、分块、向量检索
-- 不管理业务数据和模型配置
-- 通过依赖注入接收外部组件（Embedder、VectorStore）
+## How It Drives LangRAG
 
-### 2. 业务层（本应用）
-- 管理知识库元数据（名称、描述、配置）
-- 管理文档记录（文件名、状态、处理时间）
-- 管理模型配置（API Key、Base URL）
-- 使用 SQLite 持久化业务数据
+### 1. Dependency Injection
 
-## 运行
+The demo injects LLM and Embedder into LangRAG components:
+
+```python
+# web/core/rag_kernel.py
+from langrag.retrieval.router.llm_router import LLMRouter
+from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
+
+class RAGKernel:
+    def set_llm(self, base_url, api_key, model, ...):
+        # Create adapter that implements BaseLLM
+        self.llm_adapter = WebLLMAdapter(base_url, api_key, model)
+        
+        # Inject into LangRAG components
+        self.router = LLMRouter(llm=self.llm_adapter)
+        self.rewriter = LLMRewriter(llm=self.llm_adapter)
+```
+
+### 2. Vector Store Management
+
+```python
+# Create knowledge base with specific VDB type
+store = kernel.create_vector_store(
+    kb_id="kb_123",
+    name="My Knowledge Base",
+    vdb_type="seekdb"  # or "duckdb", "chroma", "web_search"
+)
+```
+
+### 3. Document Processing
+
+```python
+# Process document through LangRAG pipeline
+chunk_count = kernel.process_document(
+    file_path=Path("document.pdf"),
+    kb_id="kb_123",
+    indexing_technique="parent_child"  # or "high_quality", "qa"
+)
+```
+
+### 4. RAG Chat with Streaming
+
+```python
+# Streaming chat response
+async for chunk in kernel.chat(kb_ids=["kb_123"], query="What is...", stream=True):
+    # chunk is JSON: {"type": "sources", "data": [...]} or {"type": "content", "data": "..."}
+    yield chunk
+```
+
+---
+
+## Running the Demo
+
+### Prerequisites
+
+- Python 3.11+
+- uv (recommended) or pip
+
+### Quick Start
 
 ```bash
-# 从项目根目录运行 (使用 -m 以确保模块路径正确)
-uv run python -m web.app
+# From project root
+cd langrag
+
+# Install dependencies
+uv sync --dev
+
+# Start the server
+./web/start.sh
+# Or: uv run python -m web.app
 ```
 
-访问：http://localhost:8000
+### Access
 
-## API 文档
+- **Web UI**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs (Swagger)
+- **ReDoc**: http://localhost:8000/redoc
 
-启动后访问：http://localhost:8000/docs
+---
+
+## Key Features Demonstrated
+
+| Feature | Location | Description |
+|---------|----------|-------------|
+| Multi-KB Management | `/api/kb/*` | Create, list, delete knowledge bases |
+| Document Upload | `/api/document/upload/{kb_id}` | Upload and process documents |
+| Indexing Strategies | `rag_kernel.py` | Paragraph, Parent-Child, QA indexing |
+| Vector Store Types | `create_vector_store()` | DuckDB, ChromaDB, SeekDB, Web Search |
+| Streaming Chat | `/api/chat` | SSE-based streaming responses |
+| LLM Configuration | `/api/config/llm` | Dynamic LLM provider setup |
+| Embedder Configuration | `/api/config/embedder` | OpenAI or SeekDB embeddings |
+| Hybrid Search | SeekDB integration | Vector + Full-text search |
+| Web Search KB | `web_search` type | Real-time web integration |
+
+---
+
+## Customization
+
+To build your own application on top of LangRAG:
+
+1. **Copy** `web/core/rag_kernel.py` as a starting point.
+2. **Inject** your own LLM and Embedder implementations.
+3. **Replace** the SQLite business layer with your database.
+4. **Extend** the routers for your specific API needs.
+
+---
+
+## Not Included (Demo Limitations)
+
+This demo intentionally omits:
+
+- ❌ User authentication and authorization
+- ❌ Rate limiting and quotas
+- ❌ Production-grade error handling
+- ❌ Horizontal scaling considerations
+- ❌ Monitoring and observability
+
+For production use, you should add these on top of the LangRAG kernel.
+
+---
+
+## API Reference
+
+See the auto-generated OpenAPI docs at `/docs` after starting the server.
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/kb` | List all knowledge bases |
+| POST | `/api/kb` | Create knowledge base |
+| POST | `/api/document/upload/{kb_id}` | Upload document |
+| POST | `/api/search/semantic/{kb_id}` | Search in KB |
+| POST | `/api/chat` | RAG chat (supports streaming) |
+| POST | `/api/config/llm` | Configure LLM provider |
+| POST | `/api/config/embedder` | Configure Embedder |
+
+---
+
+## License
+
+MIT License — Same as LangRAG core.

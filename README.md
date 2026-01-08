@@ -1,131 +1,216 @@
-# LangRAG
+<p align="center">
+  <img src="docs/logo.png" alt="LangRAG Logo" width="200"/>
+</p>
 
-LangRAG 是一个模块化的检索增强生成（RAG）框架，提供可插拔的组件和类型化的配置，支持从简单的 demo 到复杂的生产级应用。
+<h1 align="center">LangRAG</h1>
 
-## 功能特性
+<p align="center">
+  <strong>A Modular, Production-Ready RAG Kernel for Building Intelligent Knowledge Systems</strong>
+</p>
 
-- **模块化架构**: 清晰分离索引（Indexing）、检索（Retrieval）、数据源（Datasource）和实体（Entities）。
-- **类型化配置**: 使用 Pydantic 进行严格的配置验证。
-- **灵活的数据流**: 支持自定义的解析器、分块器、嵌入器和向量存储。
-- **完整的 RAG 流程**: 包含文档提取、清洗、切分、向量化、存储、检索、重排序等完整链路。
-- **易于测试**: 提供 Mock 组件和内存存储，方便进行单元测试和端到端集成测试。
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#roadmap">Roadmap</a> •
+  <a href="#comparison">Comparison</a>
+</p>
 
-## 项目结构
+---
+
+## What is LangRAG?
+
+**LangRAG** is a **RAG (Retrieval-Augmented Generation) Kernel** — a modular, extensible core library designed to power intelligent knowledge systems. Unlike end-to-end RAG applications, LangRAG focuses on providing **high-quality, reusable RAG primitives** that can be integrated into any application.
+
+> 🎯 **Core Philosophy**: LangRAG is NOT an application. It's a **kernel** that your application drives.
+
+The `web/` directory contains a **demo application** that showcases how to integrate LangRAG into a real-world system.
+
+---
+
+## Features
+
+### ✅ Implemented (v0.1)
+
+| Category | Feature | Description |
+|----------|---------|-------------|
+| **Indexing** | Multi-Format Parsing | PDF, DOCX, Markdown, HTML, TXT |
+| | Smart Chunking | Recursive Character Splitter with overlap |
+| | Parent-Child Indexing | Hierarchical retrieval for long documents |
+| | QA Indexing | Question-Answer pair extraction for precise matching |
+| **Storage** | Vector Stores | DuckDB (persistent), ChromaDB, SeekDB (hybrid) |
+| | KV Store | SQLite-based persistent key-value storage |
+| | Web Search | Real-time web integration (Bing, Google, DuckDuckGo) |
+| **Retrieval** | Agentic Router | LLM-powered knowledge base selection |
+| | Query Rewriter | Semantic query optimization |
+| | Reranker | Cohere, Qwen, NoOp providers |
+| | Hybrid Search | Vector + Full-text (with SeekDB) |
+| **Generation** | Streaming | Server-Sent Events for real-time responses |
+| | LLM Abstraction | OpenAI-compatible interface with injection |
+| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (84 tests, 61% coverage) |
+
+### 🔧 Architecture Highlights
+
+- **Dependency Injection**: LLM, Embedder, and VectorStore are injected, not managed internally.
+- **Factory Pattern**: Easily register and create custom components.
+- **Async-First**: Core APIs support async/await for high concurrency.
+- **Type-Safe**: Pydantic models for all configurations and entities.
+
+---
+
+## Architecture
 
 ```
 src/langrag/
-├── config/            # 配置管理 (Pydantic models)
-├── datasource/        # 数据源抽象 (Vector DB, Keyword DB)
-├── entities/          # 核心领域实体 (Document, Dataset, SearchResult)
-├── index_processor/   # 索引处理管道 (Extractor, Splitter, Cleaner)
-├── llm/               # LLM 适配层 (Embedder, Chat Model)
-├── retrieval/         # 检索工作流 (Workflow, Router, Reranker)
-└── utils/             # 通用工具
+├── config/            # Configuration management (Pydantic)
+├── core/              # Callbacks and event system
+├── datasource/        # Storage abstractions
+│   ├── kv/            # Key-Value stores (InMemory, SQLite)
+│   └── vdb/           # Vector databases (Chroma, DuckDB, SeekDB, Web)
+├── entities/          # Domain models (Document, Dataset, SearchResult)
+├── index_processor/   # Indexing pipeline
+│   ├── extractor/     # Document parsers (PDF, DOCX, MD, HTML, TXT)
+│   ├── splitter/      # Text chunkers (Recursive, FixedSize)
+│   ├── processor/     # Index strategies (Paragraph, ParentChild, QA)
+│   └── cleaner/       # Text normalization
+├── llm/               # LLM abstractions
+│   └── embedder/      # Embedding providers
+├── retrieval/         # Retrieval pipeline
+│   ├── router/        # Knowledge base routing
+│   ├── rewriter/      # Query rewriting
+│   ├── rerank/        # Result reranking
+│   ├── compressor/    # Context compression
+│   └── workflow.py    # Orchestration
+└── utils/             # Utilities (RRF, similarity, async helpers)
 ```
 
-## 安装
+---
+
+## Quick Start
+
+### Installation
 
 ```bash
-# 克隆项目
-git clone <repository-url>
+git clone https://github.com/huanghuoguoguo/langrag.git
 cd langrag
 
-# 安装依赖（使用 uv）
+# Install with uv (recommended)
 uv sync --dev
 ```
 
-## 快速开始
-
-### 1. 启动 Web 界面 (推荐)
-
-LangRAG 提供了一个功能完整的 Web 管理界面，支持可视化的知识库管理、文档上传、配置和检索测试。
-
-**功能亮点：**
-- **可视化管理**: 直观的知识库列表和详情页。
-- **多向量库支持**: 支持 ChromaDB, DuckDB (Persistent), SeekDB (Hybrid Search)。
-- **灵活的 Embedder**: 支持 OpenAI 兼容接口及 SeekDB 本地内置模型。
-- **混合检索**: 配合 SeekDB 实现向量+全文的混合检索。
-- **持久化存储**: 所有业务数据和向量数据均持久化存储于 `web/data` 目录。
-
-**启动方式：**
+### Option 1: Run the Web Demo
 
 ```bash
-# 方式一：使用启动脚本
-chmod +x web/start.sh
 ./web/start.sh
-
-# 方式二：直接运行模块
-uv run python -m web.app
+# Or: uv run python -m web.app
 ```
 
-启动后访问: [http://localhost:8000](http://localhost:8000)
+Visit: [http://localhost:8000](http://localhost:8000)
 
-### 2. 运行脚本 Demo (CLI)
-
-LangRAG 提供了一个开箱即用的 `main.py` 演示脚本，它会使用内存向量存储演示完整的索引和检索流程。
-
-```bash
-uv run python main.py
-```
-
-### 2. 代码示例
-
-以下是一个简化的使用示例：
+### Option 2: Use as a Library
 
 ```python
-from langrag.entities.dataset import Dataset
-from langrag.index_processor.extractor import SimpleTextParser
-from langrag.index_processor.splitter import RecursiveCharacterChunker
-from langrag.retrieval.workflow import RetrievalWorkflow
-from tests.utils.in_memory_vector_store import InMemoryVectorStore
+from langrag import (
+    Dataset,
+    SimpleTextParser,
+    RecursiveCharacterChunker,
+    ParentChildIndexProcessor
+)
+from langrag.datasource.vdb.duckdb import DuckDBVector
+from langrag.datasource.kv.sqlite import SQLiteKV
 
-# 1. 准备数据源
-dataset = Dataset(name="demo", collection_name="demo_collection")
-store = InMemoryVectorStore(dataset)
-
-# 2. 索引文档 (ETL)
+# 1. Parse documents
 parser = SimpleTextParser()
-chunker = RecursiveCharacterChunker(chunk_size=200, chunk_overlap=20)
+docs = parser.parse("knowledge_base.txt")
 
-docs = parser.parse("README.md")
-chunks = chunker.split(docs)
+# 2. Create dataset and stores
+dataset = Dataset(name="my_kb", collection_name="my_collection")
+vector_store = DuckDBVector(dataset, database_path="./vectors.duckdb")
+kv_store = SQLiteKV(db_path="./parents.sqlite")
 
-# 模拟 Embedding (实际使用中会自动调用 Embedder)
-for chunk in chunks:
-    chunk.vector = [0.1] * 384 
+# 3. Index with Parent-Child strategy
+processor = ParentChildIndexProcessor(
+    vector_store=vector_store,
+    kv_store=kv_store,
+    embedder=my_embedder,  # Inject your embedder
+    parent_splitter=...,
+    child_splitter=...
+)
+processor.process(dataset, docs)
 
-store.add_texts(chunks)
-
-# 3. 检索 (Retrieval)
-workflow = RetrievalWorkflow()
-# 注意：实际使用中 RetrieveService 会自动连接 VectorStore
-# 这里演示直接调用 Store 搜索
-results = store.search("RAG架构", query_vector=[0.1]*384)
-
-print(f"Top Result: {results[0].page_content}")
+# 4. Search
+results = vector_store.search("your query", query_vector=[...], top_k=5)
 ```
 
-## 开发与测试
+---
 
-本项目包含完善的测试套件（Unit, Integration, Smoke, E2E）。
+## Roadmap
+
+### v0.2 (Q1 2026)
+- [ ] **LLM Judge**: Automated retrieval quality evaluation
+- [ ] **Multi-Tenant**: Full tenant isolation with namespace support
+- [ ] **Observability**: OpenTelemetry tracing integration
+- [ ] **Docker**: Official Docker image and Compose file
+
+### v0.3 (Q2 2026) todo......
+- [ ] **Graph RAG**: Knowledge graph integration
+- [ ] **Adaptive Retrieval**: Dynamic strategy selection based on query type
+- [ ] **Caching Layer**: Semantic caching for repeated queries
+- [ ] **Evaluation Benchmark**: Built-in eval datasets (BEIR, MTEB)
+
+### Future
+- [ ] **Multi-Modal**: Image and audio document support
+- [ ] **Agents**: Tool-use and multi-step reasoning
+- [ ] **Cloud Connectors**: S3, GCS, Azure Blob for document ingestion
+
+---
+
+## Comparison with Other RAG Frameworks
+
+| Feature | LangRAG | LangChain | LlamaIndex | Haystack |
+|---------|---------|-----------|------------|----------|
+| **Focus** | RAG Kernel | General LLM Framework | Data Framework | Production Pipelines |
+| **Philosophy** | Inject, Don't Manage | All-in-one | Index-centric | Component-based |
+| **Parent-Child Indexing** | ✅ Built-in | ❌ Manual | ✅ Supported | ❌ Manual |
+| **QA Indexing** | ✅ Built-in | ❌ N/A | ❌ N/A | ❌ N/A |
+| **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Pipelines |
+| **Hybrid Search** | ✅ SeekDB | ❌ External | ✅ External | ✅ External |
+| **Streaming** | ✅ Native SSE | ✅ Callbacks | ✅ Streaming | ✅ Streaming |
+| **Web Search Integration** | ✅ Multi-provider | ✅ Tools | ✅ Tools | ✅ Nodes |
+| **Lightweight** | ✅ ~2k LOC core | ❌ Large | ❌ Large | ⚠️ Medium |
+| **Type Safety** | ✅ Pydantic | ⚠️ Partial | ✅ Pydantic | ✅ Pydantic |
+
+### Why Choose LangRAG?
+
+1. **Kernel, Not Framework**: LangRAG gives you RAG primitives without imposing an application structure.
+2. **Injection-First**: Your app owns the LLM, Embedder, and storage. LangRAG just orchestrates.
+3. **Advanced Indexing**: Built-in Parent-Child and QA indexing strategies out of the box.
+4. **Production-Tested**: Comprehensive test suite with edge case coverage.
+5. **Minimal Dependencies**: Core library has minimal external dependencies.
+
+---
+
+## Development
 
 ```bash
-# 运行所有测试
+# Run all tests
 uv run pytest tests/
 
-# 运行冒烟测试（快速验证核心路径）
+# Run smoke tests (fast sanity check)
 uv run pytest tests/smoke/
 
-# 运行端到端测试
-uv run pytest tests/e2e/
-
-# 查看覆盖率
-uv run pytest tests/ --cov=src/langrag --cov-report=term-missing
+# Run with coverage
+./run_tests.sh
 ```
 
-### 添加新组件
+---
 
-1. 在相应模块（如 `index_processor/extractor`）中继承基类（如 `BaseParser`）。
-2. 实现核心方法（如 `parse`）。
-3. 使用工厂模式注册（可选）。
-4. 添加对应的单元测试。
+## License
+
+MIT License
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for the RAG community</sub>
+</p>
