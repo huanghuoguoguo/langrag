@@ -45,6 +45,13 @@ reranker = [
     "httpx>=0.25.0",          # Qwen Reranker API 调用
 ]
 
+# Observability 扩展
+observability = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+]
+
 # 完整安装（所有扩展）
 all = [
     "pypdf>=3.0.0",
@@ -53,6 +60,9 @@ all = [
     "beautifulsoup4>=4.12.0",
     "chardet>=5.0.0",
     "httpx>=0.25.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
 ]
 
 # 开发依赖（供 pip 使用）
