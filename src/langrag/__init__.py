@@ -17,6 +17,7 @@ from .index_processor.splitter.providers.recursive_character import RecursiveCha
 from .index_processor.processor.base import BaseIndexProcessor
 from .index_processor.processor.paragraph import ParagraphIndexProcessor
 from .index_processor.processor.qa import QAIndexProcessor
+from .index_processor.processor.parent_child import ParentChildIndexProcessor
 
 # Retrieval Components
 from .retrieval.workflow import RetrievalWorkflow
@@ -45,6 +46,7 @@ __all__ = [
     "BaseIndexProcessor",
     "ParagraphIndexProcessor",
     "QAIndexProcessor",
+    "ParentChildIndexProcessor",
     
     # Retrieval
     "RetrievalWorkflow",

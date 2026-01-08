@@ -22,6 +22,9 @@ from langrag import (
     EmbedderFactory
 )
 from langrag.datasource.kv.sqlite import SQLiteKV
+from langrag.retrieval.rerank.base import BaseReranker
+from langrag.retrieval.rerank.factory import RerankerFactory
+from langrag.entities.search_result import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,9 @@ class RAGKernel:
         self.llm_config = {}
         self.llm_adapter = None # Store adapter for internal components
         
+        # Reranker
+        self.reranker: Optional[BaseReranker] = None
+        
         # Data Stores
         self.vector_stores: dict[str, BaseVector] = {}
         
@@ -220,6 +226,15 @@ class RAGKernel:
             logger.info("SeekDB embedder configured (all-MiniLM-L6-v2)")
         else:
             raise ValueError(f"Unsupported embedder type: {embedder_type}")
+
+    def set_reranker(self, provider: str, **kwargs):
+        """Set Rerank model."""
+        logger.info(f"[RAGKernel] Setting reranker: {provider}")
+        try:
+            self.reranker = RerankerFactory.create(provider, **kwargs)
+        except Exception as e:
+            logger.error(f"Failed to set reranker: {e}")
+            raise e
     
     def create_vector_store(self, kb_id: str, collection_name: str, vdb_type: str) -> BaseVector:
         """为知识库创建向量存储"""
@@ -501,14 +516,41 @@ class RAGKernel:
                 except Exception as e:
                     logger.error(f"Query embedding failed: {e}")
             
+            # Determine retrieval top_k (expand if reranker is active)
+            k = top_k * 5 if self.reranker else top_k
+
             if store.__class__.__name__ == 'SeekDBVector' and query_vector:
                 search_type = "hybrid"
-                results = store.search(query, query_vector=query_vector, top_k=top_k, search_type='hybrid')
+                results = store.search(query, query_vector=query_vector, top_k=k, search_type='hybrid')
             else:
-                results = store.search(query, query_vector=query_vector, top_k=top_k)
+                results = store.search(query, query_vector=query_vector, top_k=k)
             
             self._process_qa_results(results)
             self._process_parent_child_results(results)
+
+            # Rerank
+            if self.reranker and results:
+                # Convert to SearchResult objects for reranker
+                search_results = [
+                    SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+                    for doc in results
+                ]
+                
+                try:
+                    reranked = self.reranker.rerank(query, search_results, top_k=top_k)
+                    
+                    # Convert back to Document list & update scores
+                    final_results = []
+                    for res in reranked:
+                        doc = res.chunk
+                        doc.metadata['score'] = res.score
+                        final_results.append(doc)
+                    results = final_results
+                    search_type += "+rerank"
+                except Exception as e:
+                    logger.error(f"[RAGKernel] Rerank failed: {e}")
+                    results = results[:top_k] # Fallback to top_k original
+            
             return results, search_type
             # --- Legacy Manual Path End ---
 
@@ -558,23 +600,47 @@ class RAGKernel:
                  except Exception as e:
                      logger.error(f"Embed failed: {e}")
                      
+             # Determine retrieval top_k (expand if reranker is active)
+             k = top_k * 5 if self.reranker else top_k
+
              # Execute search on store directly
              # TODO: Support Hybrid decision logic here similar to workflow
              search_type = "keyword"
              if store.__class__.__name__ == 'SeekDBVector' and query_vec:
                  search_type = "hybrid" 
-                 results = store.search(final_query, query_vector=query_vec, top_k=top_k, search_type='hybrid')
+                 results = store.search(final_query, query_vector=query_vec, top_k=k, search_type='hybrid')
              elif query_vec:
                  search_type = "vector"
-                 results = store.search(final_query, query_vector=query_vec, top_k=top_k)
+                 results = store.search(final_query, query_vector=query_vec, top_k=k)
              else:
-                 results = store.search(final_query, top_k=top_k)
+                 results = store.search(final_query, top_k=k)
 
-             # 1.4 Post Process (Rerank/Dedupe) - Optional / Future
-             # If we had a Reranker injected, we would call it here.
-             
              self._process_qa_results(results)
              self._process_parent_child_results(results)
+
+             # Rerank
+             if self.reranker and results:
+                # Convert to SearchResult objects for reranker
+                search_results = [
+                    SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+                    for doc in results
+                ]
+                
+                try:
+                    reranked = self.reranker.rerank(final_query, search_results, top_k=top_k)
+                    
+                    # Convert back to Document list & update scores
+                    final_results = []
+                    for res in reranked:
+                        doc = res.chunk
+                        doc.metadata['score'] = res.score
+                        final_results.append(doc)
+                    results = final_results
+                    search_type += "+rerank"
+                except Exception as e:
+                    logger.error(f"[RAGKernel] Rerank failed (Agentic): {e}")
+                    results = results[:top_k]
+
              return results, search_type
 
         except Exception as e:
@@ -604,6 +670,9 @@ class RAGKernel:
             except Exception as e:
                 logger.error(f"Query embedding failed: {e}")
         
+        # Determine retrieval top_k (expand if reranker is active)
+        k = top_k * 5 if self.reranker else top_k
+        
         for kb_id in kb_ids:
             store = self.get_vector_store(kb_id)
             if not store:
@@ -616,7 +685,7 @@ class RAGKernel:
                 current_search_type = "hybrid"
                 
             try:
-                results = store.search(query, query_vector=query_vector, top_k=top_k, search_type=current_search_type)
+                results = store.search(query, query_vector=query_vector, top_k=k, search_type=current_search_type)
                 # Add KB ID to metadata
                 for doc in results:
                     doc.metadata['kb_id'] = kb_id
@@ -635,6 +704,28 @@ class RAGKernel:
         
         self._process_qa_results(all_results)
         self._process_parent_child_results(all_results)
+
+        # Rerank
+        if self.reranker and all_results:
+            # Convert to SearchResult objects for reranker
+            search_results = [
+                SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+                for doc in all_results
+            ]
+            
+            try:
+                reranked = self.reranker.rerank(query, search_results, top_k=top_k)
+                
+                # Convert back to Document list & update scores
+                final_results = []
+                for res in reranked:
+                    doc = res.chunk
+                    doc.metadata['score'] = res.score
+                    final_results.append(doc)
+                return final_results, primary_search_type + "+rerank"
+            except Exception as e:
+                logger.error(f"[RAGKernel] Rerank failed in multi-search: {e}")
+                
         return all_results[:top_k], primary_search_type
 
     async def chat(
