@@ -143,13 +143,27 @@ export function renderSearchResults(results, container) {
                 ? '<span class="badge success">向量检索</span>'
                 : (item.search_type === 'hybrid' ? '<span class="badge" style="background:purple;color:white;">混合检索</span>' : '<span class="badge">关键词</span>');
 
+            // Detect if this is a web source
+            const isWebSource = item.type === 'web_search' || (item.link && item.link.startsWith('http'));
+            const icon = isWebSource ? '🌐' : '📄';
+            const sourceDisplay = isWebSource && item.link
+                ? `<a href="${item.link}" target="_blank" rel="noopener noreferrer" 
+                     style="color:var(--primary); text-decoration:none;">
+                     ${item.title || item.source || '互联网来源'}
+                     <span style="margin-left:0.25rem;">↗</span>
+                   </a>`
+                : `${item.source || '未知'}`;
+
             el.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                     <div class="result-score">Score: ${item.score.toFixed(3)}</div>
                     ${typeLabel}
                 </div>
                 <div class="result-content">${item.content}</div>
-                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">来源: ${item.source || '未知'}</div>
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+                    <span style="font-size:1rem;">${icon}</span>
+                    <span>来源: ${sourceDisplay}</span>
+                </div>
             `;
             container.appendChild(el);
         });
@@ -165,7 +179,55 @@ export function appendMessage(container, role, content, sources = []) {
         contentHtml += '<div style="margin-top:1rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1); font-size:0.85rem;">';
         contentHtml += '<strong>参考来源:</strong><br>';
         sources.forEach((s, i) => {
-            contentHtml += `<div style="margin-top:0.5rem; color:var(--text-muted);">${i + 1}. ${s.source} (Score: ${s.score.toFixed(2)})</div>`;
+            // Detect if this is a web source
+            const isWebSource = s.type === 'web_search' || (s.link && s.link.startsWith('http'));
+            const icon = isWebSource ? '🌐' : '📄';
+            // Use kb_name if available, otherwise fallback to kb_id
+            const kbText = s.kb_name || s.kb_id;
+            const kbLabel = kbText ? ` <span class="badge" style="font-size:0.75rem;">${kbText}</span>` : '';
+
+            if (isWebSource && s.link) {
+                // Web source with clickable link
+                contentHtml += `
+                    <div style="margin-top:0.5rem; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:4px;">
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <span style="font-size:1.2rem;">${icon}</span>
+                            <div style="flex:1;">
+                                <div style="font-weight:500;">
+                                    ${s.title || `来源 ${i + 1}`}
+                                    ${kbLabel}
+                                </div>
+                                <a href="${s.link}" target="_blank" rel="noopener noreferrer" 
+                                   style="color:var(--primary); text-decoration:none; font-size:0.8rem; word-break:break-all;">
+                                    ${s.link}
+                                    <span style="margin-left:0.25rem;">↗</span>
+                                </a>
+                                <div style="color:var(--text-muted); font-size:0.75rem; margin-top:0.25rem;">
+                                    Score: ${s.score.toFixed(2)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Local document source
+                contentHtml += `
+                    <div style="margin-top:0.5rem; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:4px;">
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <span style="font-size:1.2rem;">${icon}</span>
+                            <div style="flex:1;">
+                                <div style="font-weight:500;">
+                                    ${s.source || `来源 ${i + 1}`}
+                                    ${kbLabel}
+                                </div>
+                                <div style="color:var(--text-muted); font-size:0.75rem; margin-top:0.25rem;">
+                                    Score: ${s.score.toFixed(2)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
         });
         contentHtml += '</div>';
     }

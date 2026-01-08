@@ -29,6 +29,10 @@ class SourceItem(BaseModel):
     score: float
     source: str
     kb_id: Optional[str] = None
+    kb_name: Optional[str] = None
+    title: Optional[str] = None
+    link: Optional[str] = None
+    type: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

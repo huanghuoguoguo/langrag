@@ -35,36 +35,11 @@ class SeekDBVector(BaseVector):
         self.mode = mode
         
         # Initialize Client
-        if mode == "embedded":
-             # Use current directory or config for embedded DB path
-             # Need to ensure dataset.collection_name is used as DB name or Table name
-             # Following legacy logic: db_name = collection_name
-             self.db_name = self.collection_name 
-             
-             # Attempt to create DB if not exists (AdminClient needed)
-             # MUST be done before creating the main client to avoid locking issues
-             try:
-                 admin = pyseekdb.AdminClient(path=db_path)
-                 existing = [d.name for d in admin.list_databases()]
-                 if self.db_name not in existing:
-                     admin.create_database(self.db_name)
-                 # release admin client
-                 del admin
-             except Exception as e:
-                 logger.warning(f"Failed to check/create SeekDB database: {e}")
-
-             self._client = pyseekdb.Client(path=db_path, database=self.db_name)
-
-        else:
-             if not host or not port:
-                 raise ValueError("Host and port required for server mode")
-             self._client = pyseekdb.Client(
-                 host=host, 
-                 port=port, 
-                 database=self.collection_name, 
-                 user="root", 
-                 password=""
-             )
+        self.db_path = db_path
+        self.host = host
+        self.port = port
+        self.db_name = self.collection_name
+        self._client_instance = None  # Lazy loaded
 
         self._escape_table = str.maketrans({
             '\x00': '',
@@ -74,6 +49,42 @@ class SeekDBVector(BaseVector):
             '\r': '\\r',
             '\t': '\\t',
         })
+
+    @property
+    def _client(self):
+        """Lazy load the client."""
+        if self._client_instance:
+            return self._client_instance
+            
+        logger.info(f"Lazy initializing SeekDB client: {self.db_name}")
+        
+        if self.mode == "embedded":
+             # Attempt to create DB if not exists (AdminClient needed)
+             # Only done once on first access
+             try:
+                 admin = pyseekdb.AdminClient(path=self.db_path)
+                 try:
+                     admin.get_database(self.db_name)
+                 except Exception:
+                     logger.info(f"Database '{self.db_name}' not found, creating...")
+                     admin.create_database(self.db_name)
+                 del admin
+             except Exception as e:
+                 logger.warning(f"Failed to check/create SeekDB database during lazy init: {e}")
+
+             self._client_instance = pyseekdb.Client(path=self.db_path, database=self.db_name)
+        else:
+             if not self.host or not self.port:
+                 raise ValueError("Host and port required for server mode")
+             self._client_instance = pyseekdb.Client(
+                 host=self.host, 
+                 port=self.port, 
+                 database=self.collection_name, 
+                 user="root", 
+                 password=""
+             )
+        
+        return self._client_instance
 
     def _clean_metadata(self, meta: dict[str, Any]) -> dict[str, Any]:
         """SeekDB metadata doesn't support \\ and ", insert will error 3104/3140"""
@@ -217,5 +228,6 @@ class SeekDBVector(BaseVector):
 
     def close(self) -> None:
         """Close the underlying client connection."""
-        if hasattr(self, '_client') and hasattr(self._client, '__exit__'):
-            self._client.__exit__(None, None, None)
+        if hasattr(self, '_client_instance') and self._client_instance and hasattr(self._client_instance, '__exit__'):
+            self._client_instance.__exit__(None, None, None)
+            self._client_instance = None

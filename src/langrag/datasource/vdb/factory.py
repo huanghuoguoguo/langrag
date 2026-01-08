@@ -30,5 +30,8 @@ class VectorStoreFactory:
             return DuckDBVector(dataset, database_path=settings.DUCKDB_PATH)
         elif type_name == "seekdb":
             return SeekDBVector(dataset)
+        elif type_name == "web_search":
+            from langrag.datasource.vdb.web import WebVector
+            return WebVector(dataset)
         else:
             raise ValueError(f"Unknown Vector Store Type: {type_name}")
