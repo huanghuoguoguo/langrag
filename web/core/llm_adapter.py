@@ -64,3 +64,43 @@ class WebLLMAdapter(BaseLLM):
         except Exception as e:
             logger.error(f"WebLLMAdapter chat failed: {e}")
             raise e
+
+    def stream_chat(self, messages: list[dict], **kwargs):
+        """
+        Sync implementation of streaming using httpx.stream.
+        Yields content chunks.
+        """
+        import httpx
+        import json
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": kwargs.get('temperature', 0.0),
+            "stream": True
+        }
+        
+        try:
+            with httpx.Client() as client:
+                with client.stream("POST", f"{self.base_url}chat/completions", json=payload, headers=headers, timeout=60.0) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str.strip() == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                content = chunk['choices'][0]['delta'].get('content', '')
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                pass
+        except Exception as e:
+            logger.error(f"WebLLMAdapter stream_chat failed: {e}")
+            raise e
