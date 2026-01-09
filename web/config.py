@@ -1,24 +1,266 @@
-"""Web应用配置"""
+"""
+Web Application Configuration Module.
+
+This module provides configuration management for the LangRAG Web application,
+built on top of pydantic-settings for type-safe, environment-aware configuration.
+
+Design Philosophy:
+-----------------
+The Web configuration extends the core LangRAG settings with web-specific
+configuration like database paths, API endpoints, and storage locations.
+
+    WebSettings (pydantic-settings)
+        ├── Inherits: Core LangRAG patterns
+        ├── Automatic .env loading
+        ├── WEB_ prefixed environment variables
+        └── Auto-creates data directories on load
+
+Configuration Hierarchy:
+-----------------------
+For a complete RAG web application, configuration flows like this:
+
+    Environment Variables / .env
+            │
+            ▼
+    ┌─────────────────────┐
+    │  langrag.config     │  Core library settings (LANGRAG_ prefix)
+    │  Settings           │  - QWEN_API_KEY, LOG_LEVEL, etc.
+    └─────────────────────┘
+            │
+            ▼
+    ┌─────────────────────┐
+    │  web.config         │  Web app settings (WEB_ prefix)
+    │  WebSettings        │  - Database paths, storage dirs
+    └─────────────────────┘
+
+Why Separate Settings?
+---------------------
+1. **Separation of Concerns**: Core library shouldn't know about web paths.
+2. **Deployment Flexibility**: Web settings can differ per deployment.
+3. **Testing Isolation**: Override web settings without affecting core.
+
+Example Usage:
+-------------
+    # Import settings singleton (auto-loads from environment)
+    from web.config import settings
+
+    # Access configuration
+    print(settings.DATA_DIR)
+    print(settings.DATABASE_URL)
+
+    # Backward-compatible module-level constants (deprecated)
+    from web.config import DATA_DIR, DATABASE_URL
+
+    # Override for testing
+    from web.config import WebSettings
+    test_settings = WebSettings(DATA_DIR=Path("/tmp/test_data"))
+
+Environment Variables:
+---------------------
+All web environment variables use the WEB_ prefix:
+- WEB_DATA_DIR: Root directory for web data storage
+- WEB_DB_DIR: SQLite database directory
+- WEB_CHROMA_DIR: ChromaDB storage directory
+- WEB_DUCKDB_DIR: DuckDB storage directory
+- WEB_SEEKDB_DIR: SeekDB storage directory
+"""
+
 from pathlib import Path
 
-# 项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 数据存储根目录
-DATA_DIR = PROJECT_ROOT / "web" / "data"
+# =============================================================================
+# Path Constants
+# =============================================================================
 
-# 各个组件的数据目录
-DB_DIR = DATA_DIR / "db"
-CHROMA_DIR = DATA_DIR / "chroma"
-DUCKDB_DIR = DATA_DIR / "duckdb"
-SEEKDB_DIR = DATA_DIR / "seekdb"
+# Project root directory detection
+# This file: web/config.py -> project root is parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# 确保目录存在
-DATA_DIR.mkdir(exist_ok=True)
-DB_DIR.mkdir(exist_ok=True)
-CHROMA_DIR.mkdir(exist_ok=True)
-DUCKDB_DIR.mkdir(exist_ok=True)
-SEEKDB_DIR.mkdir(exist_ok=True)
+# Default data directory (can be overridden via environment)
+_DEFAULT_DATA_DIR = _PROJECT_ROOT / "web" / "data"
 
-# SQLite 数据库路径
-DATABASE_URL = f"sqlite:///{DB_DIR / 'app.db'}"
+
+class WebSettings(BaseSettings):
+    """
+    Web application configuration settings.
+
+    This class provides type-safe configuration for the LangRAG Web application.
+    Values are automatically loaded from environment variables with the WEB_
+    prefix, or from a .env file in the project root.
+
+    The class automatically creates required directories on initialization,
+    ensuring the application can start without manual setup.
+
+    Attributes:
+        PROJECT_ROOT: Project root directory (computed, not configurable).
+        DATA_DIR: Root directory for all web data storage.
+        DB_DIR: Directory for SQLite database files.
+        CHROMA_DIR: Directory for ChromaDB vector storage.
+        DUCKDB_DIR: Directory for DuckDB storage.
+        SEEKDB_DIR: Directory for SeekDB vector storage.
+        DATABASE_URL: SQLAlchemy-compatible database URL.
+    """
+
+    model_config = SettingsConfigDict(
+        # Look for .env file in project root
+        env_file=str(_PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        # Use WEB_ prefix for web-specific environment variables
+        # e.g., WEB_DATA_DIR, WEB_CHROMA_DIR
+        env_prefix="WEB_",
+        extra="ignore",
+        # Make settings immutable after initialization
+        frozen=True,
+        # Allow Path type
+        arbitrary_types_allowed=True,
+        case_sensitive=False,
+    )
+
+    # ==========================================================================
+    # Path Configuration
+    # ==========================================================================
+
+    PROJECT_ROOT: Path = Field(
+        default=_PROJECT_ROOT,
+        description="Project root directory. Auto-detected, not typically overridden."
+    )
+
+    DATA_DIR: Path = Field(
+        default=_DEFAULT_DATA_DIR,
+        description="Root directory for all web data storage. "
+        "All other *_DIR paths are relative to this unless absolute."
+    )
+
+    DB_DIR: Path | None = Field(
+        default=None,
+        description="Directory for SQLite database files. "
+        "Defaults to DATA_DIR/db if not specified."
+    )
+
+    CHROMA_DIR: Path | None = Field(
+        default=None,
+        description="Directory for ChromaDB vector storage. "
+        "Defaults to DATA_DIR/chroma if not specified."
+    )
+
+    DUCKDB_DIR: Path | None = Field(
+        default=None,
+        description="Directory for DuckDB storage. "
+        "Defaults to DATA_DIR/duckdb if not specified."
+    )
+
+    SEEKDB_DIR: Path | None = Field(
+        default=None,
+        description="Directory for SeekDB vector storage. "
+        "Defaults to DATA_DIR/seekdb if not specified."
+    )
+
+    # ==========================================================================
+    # Validators
+    # ==========================================================================
+
+    @model_validator(mode="after")
+    def _set_defaults_and_create_dirs(self) -> "WebSettings":
+        """
+        Set default subdirectory paths and create all required directories.
+
+        This validator runs after all fields are set, allowing us to:
+        1. Set default paths based on DATA_DIR
+        2. Create directories if they don't exist
+
+        Note: We use object.__setattr__ because the model is frozen.
+        """
+        # Set default subdirectory paths if not explicitly configured
+        if self.DB_DIR is None:
+            object.__setattr__(self, "DB_DIR", self.DATA_DIR / "db")
+        if self.CHROMA_DIR is None:
+            object.__setattr__(self, "CHROMA_DIR", self.DATA_DIR / "chroma")
+        if self.DUCKDB_DIR is None:
+            object.__setattr__(self, "DUCKDB_DIR", self.DATA_DIR / "duckdb")
+        if self.SEEKDB_DIR is None:
+            object.__setattr__(self, "SEEKDB_DIR", self.DATA_DIR / "seekdb")
+
+        # Create all directories
+        # Using exist_ok=True and parents=True for robustness
+        self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self.DB_DIR.mkdir(parents=True, exist_ok=True)
+        self.CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        self.DUCKDB_DIR.mkdir(parents=True, exist_ok=True)
+        self.SEEKDB_DIR.mkdir(parents=True, exist_ok=True)
+
+        return self
+
+    # ==========================================================================
+    # Computed Properties
+    # ==========================================================================
+
+    @property
+    def DATABASE_URL(self) -> str:
+        """
+        SQLAlchemy-compatible database URL for the application database.
+
+        Returns:
+            SQLite database URL pointing to app.db in DB_DIR.
+        """
+        return f"sqlite:///{self.DB_DIR / 'app.db'}"
+
+    @property
+    def ASYNC_DATABASE_URL(self) -> str:
+        """
+        Async SQLAlchemy-compatible database URL.
+
+        For use with aiosqlite and async database engines.
+
+        Returns:
+            Async SQLite database URL.
+        """
+        return f"sqlite+aiosqlite:///{self.DB_DIR / 'app.db'}"
+
+
+# =============================================================================
+# Global Settings Instance
+# =============================================================================
+
+# Singleton settings instance, loaded at module import time.
+settings = WebSettings()
+
+
+def get_settings() -> WebSettings:
+    """
+    Get the global web settings instance.
+
+    Useful for dependency injection with FastAPI's Depends().
+
+    Returns:
+        The global WebSettings instance.
+
+    Example:
+        from fastapi import Depends
+        from web.config import get_settings, WebSettings
+
+        @app.get("/config")
+        def show_config(settings: WebSettings = Depends(get_settings)):
+            return {"data_dir": str(settings.DATA_DIR)}
+    """
+    return settings
+
+
+# =============================================================================
+# Backward Compatibility
+# =============================================================================
+
+# These module-level constants are provided for backward compatibility
+# with existing code that imports them directly.
+#
+# DEPRECATED: Prefer using `settings.DATA_DIR` etc. instead.
+# These will be removed in a future version.
+
+PROJECT_ROOT = settings.PROJECT_ROOT
+DATA_DIR = settings.DATA_DIR
+DB_DIR = settings.DB_DIR
+CHROMA_DIR = settings.CHROMA_DIR
+DUCKDB_DIR = settings.DUCKDB_DIR
+SEEKDB_DIR = settings.SEEKDB_DIR
+DATABASE_URL = settings.DATABASE_URL

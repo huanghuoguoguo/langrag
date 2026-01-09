@@ -1,15 +1,16 @@
 """Component factory for dynamic loading using type-based configuration."""
 
 from typing import Any
+
 from loguru import logger
 
-from langrag.index_processor.splitter import BaseChunker, ChunkerFactory
-from langrag.retrieval.compressor import BaseCompressor, CompressorFactory
-from langrag.llm.embedder import BaseEmbedder, EmbedderFactory
-from langrag.llm import BaseLLM, LLMFactory
-from langrag.index_processor.extractor import BaseParser, ParserFactory
-from langrag.retrieval.rerank import BaseReranker, RerankerFactory
 from langrag.datasource.vdb.factory import VectorStoreFactory
+from langrag.index_processor.extractor import BaseParser, ParserFactory
+from langrag.index_processor.splitter import BaseChunker, ChunkerFactory
+from langrag.llm import BaseLLM, LLMFactory
+from langrag.llm.embedder import BaseEmbedder, EmbedderFactory
+from langrag.retrieval.compressor import BaseCompressor, CompressorFactory
+from langrag.retrieval.rerank import BaseReranker, RerankerFactory
 
 from .models import ComponentConfig
 
@@ -41,11 +42,11 @@ class ComponentFactory:
     @staticmethod
     def create_vector_store(config: ComponentConfig, dataset: Any) -> Any:
         """Create a vector store from configuration.
-        
+
         Args:
             config: Component configuration
             dataset: The dataset instance (Dataset type, typed as Any to avoid circular imports if necessary)
-            
+
         Returns:
             BaseVector instance
         """
