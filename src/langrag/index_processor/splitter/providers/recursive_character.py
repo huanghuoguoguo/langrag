@@ -6,8 +6,8 @@ RecursiveCharacterTextSplitter, prioritizing semantic boundaries.
 
 from loguru import logger
 
-
 from langrag.entities.document import Document, DocumentType
+
 from ..base import BaseChunker
 
 

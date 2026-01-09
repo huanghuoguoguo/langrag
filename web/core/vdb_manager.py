@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 class WebVectorStoreManager(VectorManager):
     """
-    Web 层的向量数据库管理器。
-    负责管理 VDB 实例的生命周期，根据 Web 配置创建实例，并缓存实例。
-    实现了 LangRAG 的 BaseVectorStoreManager 接口，可注入核心层。
+    Web layer vector database manager.
+    Manages VDB instance lifecycle, creates instances based on Web configuration, and caches instances.
+    Implements LangRAG's BaseVectorStoreManager interface for injection into the core layer.
     """
 
     def __init__(self):
@@ -20,8 +20,8 @@ class WebVectorStoreManager(VectorManager):
 
     def get_vector_store(self, dataset: Dataset, **kwargs) -> BaseVector:
         """
-        获取或创建向量存储实例。
-        优先查找缓存。
+        Get or create a vector store instance.
+        Cache lookup takes priority.
         """
         kb_id = dataset.id
         if kb_id in self._stores:
@@ -30,10 +30,10 @@ class WebVectorStoreManager(VectorManager):
         return self.create_store(dataset)
 
     def create_store(self, dataset: Dataset) -> BaseVector:
-        """根据数据集配置创建 VDB 实例"""
+        """Create VDB instance based on dataset configuration"""
 
         # Local Mode Only
-        vdb_type = dataset.vdb_type or "seekdb" # 默认 SeekDB
+        vdb_type = dataset.vdb_type or "seekdb" # Default to SeekDB
 
         logger.info(f"[WebManager] Creating/Loading Local store for KB: {dataset.id}, type: {vdb_type}")
 

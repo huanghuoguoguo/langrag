@@ -1,6 +1,8 @@
-from langrag.llm.base import BaseLLM
-from .base import BaseRewriter
 from loguru import logger
+
+from langrag.llm.base import BaseLLM
+
+from .base import BaseRewriter
 
 REWRITE_PROMPT = """
 You are a search query optimizer. Rewrite the following user query to be more effective for semantic search retrieval. 
@@ -14,10 +16,10 @@ class LLMRewriter(BaseRewriter):
     """
     Rewriter using LLM.
     """
-    
+
     def __init__(self, llm: BaseLLM):
         self.llm = llm
-        
+
     def rewrite(self, query: str) -> str:
         prompt = REWRITE_PROMPT.format(query=query)
         try:

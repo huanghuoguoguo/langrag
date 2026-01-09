@@ -1,8 +1,9 @@
 import re
 
+
 class Cleaner:
     """Basic text cleaner."""
-    
+
     def clean(self, text: str) -> str:
         """Clean text by removing excessive whitespace and null characters."""
         if not text:

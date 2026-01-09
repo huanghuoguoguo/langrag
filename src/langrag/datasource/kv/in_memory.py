@@ -1,5 +1,7 @@
-from typing import Any, List, Optional
+from typing import Any
+
 from .base import BaseKVStore
+
 
 class InMemoryKV(BaseKVStore):
     """
@@ -10,12 +12,12 @@ class InMemoryKV(BaseKVStore):
     def __init__(self):
         self._store = {}
 
-    def mget(self, keys: List[str]) -> List[Optional[Any]]:
+    def mget(self, keys: list[str]) -> list[Any | None]:
         return [self._store.get(k) for k in keys]
 
     def mset(self, data: dict[str, Any]) -> None:
         self._store.update(data)
 
-    def delete(self, keys: List[str]) -> None:
+    def delete(self, keys: list[str]) -> None:
         for k in keys:
             self._store.pop(k, None)

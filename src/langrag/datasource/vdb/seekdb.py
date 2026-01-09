@@ -1,10 +1,9 @@
-import asyncio
 import logging
 from typing import Any
 
+from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
-from langrag.datasource.vdb.base import BaseVector
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +20,8 @@ class SeekDBVector(BaseVector):
     """
 
     def __init__(
-        self, 
-        dataset: Dataset, 
+        self,
+        dataset: Dataset,
         mode: str = "embedded",
         db_path: str = "./seekdb_data",
         host: str | None = None,
@@ -33,7 +32,7 @@ class SeekDBVector(BaseVector):
             raise ImportError("pyseekdb is required. Install with: pip install pyseekdb")
 
         self.mode = mode
-        
+
         # Initialize Client
         self.db_path = db_path
         self.host = host
@@ -55,9 +54,9 @@ class SeekDBVector(BaseVector):
         """Lazy load the client."""
         if self._client_instance:
             return self._client_instance
-            
+
         logger.info(f"Lazy initializing SeekDB client: {self.db_name}")
-        
+
         if self.mode == "embedded":
              # Attempt to create DB if not exists (AdminClient needed)
              # Only done once on first access
@@ -77,13 +76,13 @@ class SeekDBVector(BaseVector):
              if not self.host or not self.port:
                  raise ValueError("Host and port required for server mode")
              self._client_instance = pyseekdb.Client(
-                 host=self.host, 
-                 port=self.port, 
-                 database=self.collection_name, 
-                 user="root", 
+                 host=self.host,
+                 port=self.port,
+                 database=self.collection_name,
+                 user="root",
                  password=""
              )
-        
+
         return self._client_instance
 
     def _clean_metadata(self, meta: dict[str, Any]) -> dict[str, Any]:
@@ -103,43 +102,43 @@ class SeekDBVector(BaseVector):
         # Let's check existence first.
         if not self._client.has_collection(self.collection_name):
              from pyseekdb import HNSWConfiguration
-             # Dimension needs to be known. In Dify it comes from EmbeddingModel. 
+             # Dimension needs to be known. In Dify it comes from EmbeddingModel.
              # Here we might need to infer from texts or config.
              # Fallback to 768 or get from first text.
              dim = len(texts[0].vector) if texts and texts[0].vector else 768
-             
+
              config = HNSWConfiguration(dimension=dim, distance="cosine")
              self._client.create_collection(
-                 name=self.collection_name, 
+                 name=self.collection_name,
                  configuration=config,
                  embedding_function=None # We handle embeddings
              )
-        
+
         self.add_texts(texts, **kwargs)
 
     def add_texts(self, texts: list[Document], **kwargs) -> None:
-        if not texts: 
+        if not texts:
             return
-            
+
         # Check if collection exists, if not create it using the dimension from the first text
         if not self._client.has_collection(self.collection_name):
              from pyseekdb import HNSWConfiguration
              # Infer dimension from first text vector, default to 384 if not available
              dim = len(texts[0].vector) if texts and texts[0].vector else 384
-             
+
              logger.info(f"Creating SeekDB collection '{self.collection_name}' with dimension {dim}")
              config = HNSWConfiguration(dimension=dim, distance="cosine")
              self._client.create_collection(
-                 name=self.collection_name, 
+                 name=self.collection_name,
                  configuration=config,
                  embedding_function=None # We handle embeddings externally
              )
-            
+
         coll = self._client.get_collection(self.collection_name, embedding_function=None)
-        
+
         ids = [doc.id for doc in texts]
         embeddings = [doc.vector for doc in texts]
-        
+
         metadatas = []
         for doc in texts:
             # Copy metadata and inject content for retrieval
@@ -150,13 +149,13 @@ class SeekDBVector(BaseVector):
         coll.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
 
     def search(
-        self, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
     ) -> list[Document]:
-        
+
         coll = self._client.get_collection(self.collection_name, embedding_function=None)
         search_type = kwargs.get('search_type', 'similarity')
 
@@ -193,7 +192,7 @@ class SeekDBVector(BaseVector):
         # Parse Results
         if not res or not res.get('ids'):
             return []
-            
+
         # Handle nested lists
         ids = res['ids'][0] if isinstance(res['ids'][0], list) else res['ids']
         metas = res['metadatas'][0] if isinstance(res['metadatas'][0], list) else res['metadatas']
@@ -204,18 +203,18 @@ class SeekDBVector(BaseVector):
         for i, doc_id in enumerate(ids):
             meta = metas[i]
             score = 1.0 / (1.0 + float(dists[i])) if dists[i] is not None else 0.0
-            
+
             # Reconstruct Document
             content = meta.pop('content', '') # Extract content
             meta['score'] = score
-            
+
             doc = Document(
                 id=str(doc_id),
                 page_content=content,
                 metadata=meta
             )
             documents.append(doc)
-            
+
         return documents
 
     def delete_by_ids(self, ids: list[str]) -> None:

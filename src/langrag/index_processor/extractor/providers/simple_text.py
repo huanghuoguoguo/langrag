@@ -14,6 +14,7 @@ except ImportError:
 
 
 from langrag.entities.document import Document
+
 from ..base import BaseParser
 
 
@@ -23,19 +24,19 @@ class SimpleTextParser(BaseParser):
     This parser reads .txt files and returns a single Document
     containing the entire file content.
 
-    支持自动编码检测（如果安装了 chardet）。
+    Supports automatic encoding detection (if chardet is installed).
 
     Attributes:
         encoding: Character encoding to use (default: utf-8)
-        auto_detect_encoding: 是否自动检测编码
+        auto_detect_encoding: Whether to automatically detect encoding
     """
 
     def __init__(self, encoding: str = "utf-8", auto_detect_encoding: bool = True):
         """Initialize the text parser.
 
         Args:
-            encoding: 默认字符编码
-            auto_detect_encoding: 是否自动检测编码（需要 chardet）
+            encoding: Default character encoding
+            auto_detect_encoding: Whether to automatically detect encoding (requires chardet)
         """
         self.encoding = encoding
         self.auto_detect_encoding = auto_detect_encoding and CHARDET_AVAILABLE
@@ -64,7 +65,7 @@ class SimpleTextParser(BaseParser):
 
         logger.info(f"Parsing text file: {path}")
 
-        # 自动检测编码
+        # Automatically detect encoding
         encoding = self.encoding
         if self.auto_detect_encoding:
             try:
@@ -79,7 +80,7 @@ class SimpleTextParser(BaseParser):
                 logger.warning(f"Failed to detect encoding, using {self.encoding}: {e}")
                 encoding = self.encoding
 
-        # 读取文件
+        # Read file
         try:
             content = path.read_text(encoding=encoding, errors="ignore")
         except Exception as e:
