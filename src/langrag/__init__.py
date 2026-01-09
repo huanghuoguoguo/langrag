@@ -7,6 +7,9 @@ __version__ = "0.2.0"
 # Entities
 from .datasource.service import RetrievalService
 
+# Batch Processing
+from .batch import BatchConfig, BatchProcessor, BatchProgress, ProgressCallback
+
 # Cache
 from .cache import BaseCache, CacheEntry, SemanticCache
 
@@ -40,6 +43,12 @@ __all__ = [
     "Dataset",
     "RetrievalContext",
     "SearchResult",
+
+    # Batch Processing
+    "BatchConfig",
+    "BatchProcessor",
+    "BatchProgress",
+    "ProgressCallback",
 
     # Cache
     "BaseCache",

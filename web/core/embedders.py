@@ -54,6 +54,7 @@ class WebOpenAIEmbedder(BaseEmbedder):
         base_url: The API base URL (e.g., "https://api.openai.com/v1")
         api_key: API authentication key
         model: Model identifier (e.g., "text-embedding-3-small")
+        batch_size: Maximum texts per API call (default: 100)
 
     Why httpx instead of openai SDK:
         We use httpx directly for synchronous embedding calls because:
@@ -62,7 +63,13 @@ class WebOpenAIEmbedder(BaseEmbedder):
         3. Simpler error handling and timeout configuration
     """
 
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        batch_size: int = 100
+    ):
         """
         Initialize the OpenAI-compatible embedder.
 
@@ -70,19 +77,22 @@ class WebOpenAIEmbedder(BaseEmbedder):
             base_url: API endpoint base URL (trailing slash will be stripped)
             api_key: Authentication key for the API
             model: Model name to use for embeddings
+            batch_size: Maximum texts per API call (default: 100).
+                       Larger values are more efficient but may hit API limits.
         """
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
-        self.client = httpx.Client(timeout=30.0)
+        self.batch_size = batch_size
+        self.client = httpx.Client(timeout=60.0)
         self._dimension = 1536  # Default for text-embedding-3-small, updated on first call
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for a list of texts.
 
-        The OpenAI API may return results out of order, so we sort by index
-        to ensure the output order matches the input order.
+        For large input lists, texts are processed in batches to avoid
+        hitting API rate limits or request size limits.
 
         Args:
             texts: List of strings to embed
@@ -92,6 +102,45 @@ class WebOpenAIEmbedder(BaseEmbedder):
 
         Raises:
             Exception: If the API call fails (no fallback, fail fast)
+        """
+        if not texts:
+            return []
+
+        # Process in batches if needed
+        if len(texts) <= self.batch_size:
+            return self._embed_single_batch(texts)
+
+        # Batch processing for large inputs
+        all_embeddings = []
+        total_batches = (len(texts) + self.batch_size - 1) // self.batch_size
+
+        logger.info(
+            f"Processing {len(texts)} texts in {total_batches} batches "
+            f"(batch_size={self.batch_size})"
+        )
+
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i:i + self.batch_size]
+            batch_num = i // self.batch_size + 1
+
+            logger.debug(f"Embedding batch {batch_num}/{total_batches} ({len(batch)} texts)")
+            batch_embeddings = self._embed_single_batch(batch)
+            all_embeddings.extend(batch_embeddings)
+
+        return all_embeddings
+
+    def _embed_single_batch(self, texts: list[str]) -> list[list[float]]:
+        """
+        Embed a single batch of texts.
+
+        Args:
+            texts: List of strings to embed (should be <= batch_size)
+
+        Returns:
+            List of embedding vectors
+
+        Raises:
+            Exception: If the API call fails
         """
         url = f"{self.base_url}/embeddings"
         headers = {
