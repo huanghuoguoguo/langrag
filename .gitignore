@@ -16,3 +16,4 @@ data
 storage/
 .coverage
 coverage.xml
+site/
