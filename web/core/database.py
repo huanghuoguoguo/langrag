@@ -1,7 +1,8 @@
 """Database connection and session management."""
 
-from sqlmodel import SQLModel, create_engine, Session
 import logging
+
+from sqlmodel import Session, SQLModel, create_engine
 
 from web.config import DATABASE_URL, DB_DIR
 
