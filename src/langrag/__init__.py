@@ -7,6 +7,9 @@ __version__ = "0.2.0"
 # Entities
 from .datasource.service import RetrievalService
 
+# Cache
+from .cache import BaseCache, CacheEntry, SemanticCache
+
 # Data Source
 from .datasource.vdb.base import BaseVector
 from .entities.dataset import Dataset, RetrievalContext
@@ -37,6 +40,11 @@ __all__ = [
     "Dataset",
     "RetrievalContext",
     "SearchResult",
+
+    # Cache
+    "BaseCache",
+    "CacheEntry",
+    "SemanticCache",
 
     # Indexing
     "BaseParser",
