@@ -12,6 +12,7 @@
   <a href="#features">Features</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
+  <a href="#documentation">Documentation</a> •
   <a href="#roadmap">Roadmap</a> •
   <a href="#comparison">Comparison</a>
 </p>
@@ -30,7 +31,7 @@ The `web/` directory contains a **demo application** that showcases how to integ
 
 ## Features
 
-### ✅ Implemented (v0.1)
+### ✅ Implemented (v0.2)
 
 | Category | Feature | Description |
 |----------|---------|-------------|
@@ -38,16 +39,22 @@ The `web/` directory contains a **demo application** that showcases how to integ
 | | Smart Chunking | Recursive Character Splitter with overlap |
 | | Parent-Child Indexing | Hierarchical retrieval for long documents |
 | | QA Indexing | Question-Answer pair extraction for precise matching |
-| **Storage** | Vector Stores | DuckDB (persistent, vector-only), ChromaDB, SeekDB (hybrid) |
+| | Batch Processing | Efficient large-scale document indexing with progress tracking |
+| **Storage** | Vector Stores | DuckDB (persistent, hybrid search), ChromaDB, SeekDB (hybrid) |
 | | KV Store | SQLite-based persistent key-value storage |
 | | Web Search | Real-time web integration (Bing, Google, DuckDuckGo) |
-| **Retrieval** | Agentic Router | LLM-powered knowledge base selection |
+| **Retrieval** | Hybrid Search | Vector + BM25 Full-text with RRF fusion (DuckDB, SeekDB) |
+| | Agentic Router | LLM-powered knowledge base selection |
 | | Query Rewriter | Semantic query optimization |
 | | Reranker | Cohere, Qwen, NoOp providers |
-| | Hybrid Search | Vector + Full-text with SeekDB (DuckDB: vector-only) |
+| | Semantic Cache | Similarity-based query caching with TTL and LRU eviction |
+| **Evaluation** | LLM Judge | Faithfulness, Answer Relevancy, Context Relevancy metrics |
+| | Batch Evaluation | Evaluate multiple samples with progress callbacks |
+| | Evaluation Report | Aggregated statistics and per-sample results |
+| **Observability** | OpenTelemetry | Distributed tracing for retrieval and indexing pipelines |
 | **Generation** | Streaming | Server-Sent Events for real-time responses |
 | | LLM Abstraction | OpenAI-compatible interface with injection |
-| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (84 tests, 61% coverage) |
+| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (357 tests) |
 
 ### 🔧 Architecture Highlights
 
@@ -55,6 +62,7 @@ The `web/` directory contains a **demo application** that showcases how to integ
 - **Factory Pattern**: Easily register and create custom components.
 - **Async-First**: Core APIs support async/await for high concurrency.
 - **Type-Safe**: Pydantic models for all configurations and entities.
+- **Observable**: Built-in OpenTelemetry tracing support.
 
 ---
 
@@ -81,6 +89,11 @@ src/langrag/
 │   ├── rerank/        # Result reranking
 │   ├── compressor/    # Context compression
 │   └── workflow.py    # Orchestration
+├── cache/             # Semantic caching layer
+├── batch/             # Batch processing for large-scale indexing
+├── evaluation/        # LLM Judge evaluation framework
+│   └── metrics/       # Faithfulness, Answer/Context Relevancy
+├── observability/     # OpenTelemetry tracing integration
 └── utils/             # Utilities (RRF, similarity, async helpers)
 ```
 
@@ -144,21 +157,52 @@ results = vector_store.search("your query", query_vector=[...], top_k=5)
 
 ---
 
+## Documentation
+
+LangRAG uses MkDocs with Material theme for comprehensive documentation.
+
+### View Documentation
+
+```bash
+# Install documentation dependencies
+uv sync --extra docs
+
+# Serve documentation locally
+uv run mkdocs serve
+
+# Build static documentation
+uv run mkdocs build
+```
+
+Visit: [http://localhost:8000](http://localhost:8000) for local docs.
+
+### Documentation Structure
+
+- **Getting Started**: Installation, Quick Start
+- **User Guide**: Core Concepts, Document Processing, Retrieval Workflow, Evaluation
+- **API Reference**: Complete API documentation for all modules
+
+---
+
 ## Roadmap
 
-### v0.2 (Q1 2026)
-- [ ] **LLM Judge**: Automated retrieval quality evaluation
-- [ ] **Multi-Tenant**: Full tenant isolation with namespace support
-- [ ] **Observability**: OpenTelemetry tracing integration
-- [ ] **Docker**: Official Docker image and Compose file
+### ✅ v0.2 (Completed)
 
-### v0.3 (Q2 2026) todo......
+- [x] **DuckDB FTS**: Full-text search with BM25 and RRF hybrid fusion
+- [x] **Semantic Cache**: Similarity-based caching with TTL and LRU eviction
+- [x] **Batch Processing**: Large-scale document indexing with progress tracking
+- [x] **LLM Judge**: Evaluation framework (Faithfulness, Answer/Context Relevancy)
+- [x] **OpenTelemetry**: Distributed tracing integration
+- [x] **API Documentation**: MkDocs-based comprehensive documentation
+
+### 🚀 v0.3 (Planned)
 - [ ] **Graph RAG**: Knowledge graph integration
 - [ ] **Adaptive Retrieval**: Dynamic strategy selection based on query type
-- [ ] **Caching Layer**: Semantic caching for repeated queries
+- [ ] **Multi-Tenant**: Full tenant isolation with namespace support
 - [ ] **Evaluation Benchmark**: Built-in eval datasets (BEIR, MTEB)
 
 ### Future
+- [ ] **Docker**: Official Docker image and Compose file
 - [ ] **Multi-Modal**: Image and audio document support
 - [ ] **Agents**: Tool-use and multi-step reasoning
 - [ ] **Cloud Connectors**: S3, GCS, Azure Blob for document ingestion
@@ -174,10 +218,13 @@ results = vector_store.search("your query", query_vector=[...], top_k=5)
 | **Parent-Child Indexing** | ✅ Built-in | ❌ Manual | ✅ Supported | ❌ Manual |
 | **QA Indexing** | ✅ Built-in | ❌ N/A | ❌ N/A | ❌ N/A |
 | **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Pipelines |
-| **Hybrid Search** | ✅ SeekDB | ❌ External | ✅ External | ✅ External |
+| **Hybrid Search** | ✅ DuckDB, SeekDB | ❌ External | ✅ External | ✅ External |
+| **Semantic Cache** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
+| **LLM Judge Evaluation** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
+| **OpenTelemetry** | ✅ Native | ⚠️ Partial | ⚠️ Partial | ✅ Native |
 | **Streaming** | ✅ Native SSE | ✅ Callbacks | ✅ Streaming | ✅ Streaming |
 | **Web Search Integration** | ✅ Multi-provider | ✅ Tools | ✅ Tools | ✅ Nodes |
-| **Lightweight** | ✅ ~2k LOC core | ❌ Large | ❌ Large | ⚠️ Medium |
+| **Lightweight** | ✅ ~3k LOC core | ❌ Large | ❌ Large | ⚠️ Medium |
 | **Type Safety** | ✅ Pydantic | ⚠️ Partial | ✅ Pydantic | ✅ Pydantic |
 
 ### Why Choose LangRAG?
@@ -185,8 +232,10 @@ results = vector_store.search("your query", query_vector=[...], top_k=5)
 1. **Kernel, Not Framework**: LangRAG gives you RAG primitives without imposing an application structure.
 2. **Injection-First**: Your app owns the LLM, Embedder, and storage. LangRAG just orchestrates.
 3. **Advanced Indexing**: Built-in Parent-Child and QA indexing strategies out of the box.
-4. **Production-Tested**: Comprehensive test suite with edge case coverage.
-5. **Minimal Dependencies**: Core library has minimal external dependencies.
+4. **Built-in Evaluation**: LLM Judge framework for retrieval quality assessment.
+5. **Production-Ready**: Semantic caching, batch processing, and OpenTelemetry tracing.
+6. **Comprehensive Testing**: 357 tests with thorough edge case coverage.
+7. **Minimal Dependencies**: Core library has minimal external dependencies.
 
 ---
 
@@ -201,6 +250,29 @@ uv run pytest tests/smoke/
 
 # Run with coverage
 ./run_tests.sh
+
+# Lint and format
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+```
+
+### Optional Dependencies
+
+```bash
+# Document parsers (PDF, DOCX, etc.)
+pip install langrag[parsers]
+
+# Reranker support
+pip install langrag[reranker]
+
+# OpenTelemetry observability
+pip install langrag[observability]
+
+# Documentation generation
+pip install langrag[docs]
+
+# All features
+pip install langrag[all]
 ```
 
 ---
