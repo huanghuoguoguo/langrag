@@ -101,6 +101,10 @@ class WebSettings(BaseSettings):
         DUCKDB_DIR: Directory for DuckDB storage.
         SEEKDB_DIR: Directory for SeekDB vector storage.
         DATABASE_URL: SQLAlchemy-compatible database URL.
+        CACHE_ENABLED: Whether semantic caching is enabled.
+        CACHE_SIMILARITY_THRESHOLD: Minimum similarity for cache hit.
+        CACHE_TTL_SECONDS: Cache entry time-to-live in seconds.
+        CACHE_MAX_SIZE: Maximum number of cache entries.
     """
 
     model_config = SettingsConfigDict(
@@ -155,6 +159,40 @@ class WebSettings(BaseSettings):
         default=None,
         description="Directory for SeekDB vector storage. "
         "Defaults to DATA_DIR/seekdb if not specified."
+    )
+
+    # ==========================================================================
+    # Semantic Cache Configuration
+    # ==========================================================================
+
+    CACHE_ENABLED: bool = Field(
+        default=True,
+        description="Enable semantic caching to reduce redundant searches. "
+        "Set WEB_CACHE_ENABLED=false to disable."
+    )
+
+    CACHE_SIMILARITY_THRESHOLD: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity for cache hit. "
+        "Higher values (0.98) require near-exact matches. "
+        "Lower values (0.90) allow more semantic variation."
+    )
+
+    CACHE_TTL_SECONDS: int = Field(
+        default=3600,
+        ge=0,
+        description="Cache entry time-to-live in seconds. "
+        "0 means no expiration. Default: 3600 (1 hour)."
+    )
+
+    CACHE_MAX_SIZE: int = Field(
+        default=1000,
+        ge=0,
+        description="Maximum number of cached entries. "
+        "When exceeded, oldest entries are evicted (LRU). "
+        "0 means unlimited."
     )
 
     # ==========================================================================
