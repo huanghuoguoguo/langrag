@@ -1,6 +1,7 @@
 """Context compressor for RAG systems.
 
-上下文压缩模块，用于在检索和重排序后压缩上下文，减少传给 LLM 的 token 数量。
+Context compression module for compressing context after retrieval and reranking
+to reduce the number of tokens passed to the LLM.
 """
 
 from .base import BaseCompressor

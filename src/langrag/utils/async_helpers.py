@@ -1,13 +1,14 @@
-"""异步辅助工具 - 处理同步/异步上下文转换
+"""Async helper utilities - handling sync/async context conversion.
 
-本模块提供工具函数来处理在同步代码中调用异步函数的场景。
-主要用于向后兼容和在不支持异步的环境中运行异步代码。
+This module provides utility functions for calling async functions from sync code.
+Primarily used for backward compatibility and running async code in environments
+that don't support async.
 
 Examples:
     >>> async def fetch_data():
     ...     return "data"
     >>>
-    >>> # 在同步代码中调用
+    >>> # Call from sync code
     >>> result = run_async_in_sync_context(fetch_data())
     >>> print(result)
     data
@@ -24,46 +25,47 @@ T = TypeVar("T")
 
 
 def run_async_in_sync_context(coro: Coroutine[None, None, T]) -> T:
-    """在同步上下文中运行异步协程
+    """Run an async coroutine in a sync context.
 
-    自动处理：
-    1. 检测现有事件循环
-    2. 尝试使用 nest_asyncio（Jupyter 等环境）
-    3. 回退到线程池执行
-    4. 无循环时使用 asyncio.run()
+    Automatically handles:
+    1. Detecting existing event loops
+    2. Trying nest_asyncio (for Jupyter and similar environments)
+    3. Falling back to thread pool execution
+    4. Using asyncio.run() when no loop exists
 
     Warning:
-        在已有事件循环的环境中（Jupyter, FastAPI）可能导致性能下降。
-        建议直接使用异步版本的 API。
+        In environments with existing event loops (Jupyter, FastAPI),
+        this may cause performance degradation.
+        It's recommended to use async APIs directly.
 
     Args:
-        coro: 要执行的协程对象
+        coro: The coroutine object to execute
 
     Returns:
-        协程的返回值
+        The return value of the coroutine
 
     Examples:
         >>> async def get_user(user_id: int):
-        ...     # 模拟异步数据库查询
+        ...     # Simulate async database query
         ...     await asyncio.sleep(0.1)
         ...     return {"id": user_id, "name": "Alice"}
         >>>
-        >>> # 在同步代码中使用
+        >>> # Use in sync code
         >>> user = run_async_in_sync_context(get_user(1))
         >>> print(user["name"])
         Alice
     """
     try:
-        # 尝试获取当前运行的事件循环
+        # Try to get the currently running event loop
         loop = asyncio.get_running_loop()
 
-        # 在运行的事件循环中 - 需要特殊处理
+        # In a running event loop - needs special handling
         logger.debug(
             "Detected running event loop. Consider using async methods directly "
             "for better performance."
         )
 
-        # 尝试使用 nest_asyncio 处理嵌套循环
+        # Try using nest_asyncio to handle nested loops
         try:
             import nest_asyncio
 
@@ -71,7 +73,7 @@ def run_async_in_sync_context(coro: Coroutine[None, None, T]) -> T:
             return loop.run_until_complete(coro)
 
         except ImportError:
-            # nest_asyncio 未安装，使用线程池回退
+            # nest_asyncio not installed, fall back to thread pool
             logger.debug("nest_asyncio not available, using thread pool fallback")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -79,5 +81,5 @@ def run_async_in_sync_context(coro: Coroutine[None, None, T]) -> T:
                 return future.result()
 
     except RuntimeError:
-        # 没有运行的事件循环 - 直接使用 asyncio.run()
+        # No running event loop - use asyncio.run() directly
         return asyncio.run(coro)

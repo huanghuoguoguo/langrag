@@ -1,5 +1,5 @@
 """Database models for the web application."""
 
-from .database import KnowledgeBase, Document, EmbedderConfig
+from .database import Document, EmbedderConfig, KnowledgeBase
 
 __all__ = ["KnowledgeBase", "Document", "EmbedderConfig"]

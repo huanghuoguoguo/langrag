@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 
 from langrag.entities.search_result import SearchResult
+
 from ..base import BaseCompressor
 
 try:
@@ -18,17 +19,18 @@ except ImportError:
 
 
 class QwenCompressor(BaseCompressor):
-    """使用 Qwen API 进行上下文压缩
-    
-    通过调用 Qwen 的 Chat Completions API 来压缩每个检索结果的内容。
-    
-    参数：
+    """Context compressor using Qwen API.
+
+    Compresses the content of each retrieval result by calling Qwen's
+    Chat Completions API.
+
+    Args:
         api_key: DashScope API Key
-        model: 模型名称，默认 "qwen-plus"
-        api_url: API 端点，默认使用 DashScope 兼容模式端点
-        temperature: 生成温度，默认 0.3（更确定性的输出）
-        timeout: 请求超时时间（秒），默认 30
-        max_concurrent: 最大并发请求数，默认 5
+        model: Model name, default "qwen-plus"
+        api_url: API endpoint, defaults to DashScope compatible mode endpoint
+        temperature: Generation temperature, default 0.3 (more deterministic output)
+        timeout: Request timeout in seconds, default 30
+        max_concurrent: Maximum concurrent requests, default 5
     """
 
     def __init__(
@@ -40,88 +42,88 @@ class QwenCompressor(BaseCompressor):
         timeout: int = 30,
         max_concurrent: int = 5,
     ):
-        """初始化 Qwen 压缩器
-        
+        """Initialize Qwen compressor.
+
         Args:
             api_key: DashScope API Key
-            model: 模型名称
-            api_url: API 端点 URL
-            temperature: 生成温度
-            timeout: 请求超时时间
-            max_concurrent: 最大并发请求数
+            model: Model name
+            api_url: API endpoint URL
+            temperature: Generation temperature
+            timeout: Request timeout
+            max_concurrent: Maximum concurrent requests
         """
         if not HTTPX_AVAILABLE:
             raise ImportError(
                 "httpx is required for QwenCompressor. Install it with: pip install httpx"
             )
-        
+
         self.api_key = api_key
         self.model = model
         self.api_url = api_url
         self.temperature = temperature
         self.timeout = timeout
         self.max_concurrent = max_concurrent
-        
+
         logger.info(f"Initialized QwenCompressor with model: {model}")
 
     def compress(
         self, query: str, results: list[SearchResult], target_ratio: float = 0.5
     ) -> list[SearchResult]:
-        """压缩检索结果（同步接口）
-        
+        """Compress retrieval results (sync interface).
+
         Args:
-            query: 用户查询
-            results: 检索结果列表
-            target_ratio: 目标压缩比率（0-1）
-            
+            query: User query
+            results: List of retrieval results
+            target_ratio: Target compression ratio (0-1)
+
         Returns:
-            压缩后的检索结果列表
+            List of compressed retrieval results
         """
-        # 使用异步实现，然后在同步上下文中运行
+        # Use async implementation, then run in sync context
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # 没有运行中的事件循环，创建新的
+            # No running event loop, create a new one
             return asyncio.run(self.compress_async(query, results, target_ratio))
         else:
-            # 已有事件循环，创建 task
+            # Event loop already exists, create task
             import nest_asyncio
-            
+
             nest_asyncio.apply()
             return loop.run_until_complete(self.compress_async(query, results, target_ratio))
 
     async def compress_async(
         self, query: str, results: list[SearchResult], target_ratio: float = 0.5
     ) -> list[SearchResult]:
-        """压缩检索结果（异步接口）
-        
+        """Compress retrieval results (async interface).
+
         Args:
-            query: 用户查询
-            results: 检索结果列表
-            target_ratio: 目标压缩比率（0-1）
-            
+            query: User query
+            results: List of retrieval results
+            target_ratio: Target compression ratio (0-1)
+
         Returns:
-            压缩后的检索结果列表
+            List of compressed retrieval results
         """
         if not results:
             return results
-        
+
         logger.info(
             f"Compressing {len(results)} results with target ratio {target_ratio:.1%}"
         )
-        
-        # 创建信号量限制并发
+
+        # Create semaphore to limit concurrency
         semaphore = asyncio.Semaphore(self.max_concurrent)
-        
-        # 并发压缩所有结果
+
+        # Compress all results concurrently
         tasks = [
             self._compress_single_result(query, result, target_ratio, semaphore)
             for result in results
         ]
-        
+
         compressed_results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # 处理异常，保留原始结果
+
+        # Handle exceptions, keep original results
         final_results = []
         for i, result in enumerate(compressed_results):
             if isinstance(result, Exception):
@@ -129,17 +131,17 @@ class QwenCompressor(BaseCompressor):
                 final_results.append(results[i])
             else:
                 final_results.append(result)
-        
-        # 计算压缩统计
+
+        # Calculate compression statistics
         original_length = sum(len(r.chunk.page_content) for r in results)
         compressed_length = sum(len(r.chunk.page_content) for r in final_results)
         actual_ratio = compressed_length / original_length if original_length > 0 else 1.0
-        
+
         logger.info(
-            f"Compression complete: {original_length} → {compressed_length} chars "
+            f"Compression complete: {original_length} -> {compressed_length} chars "
             f"(actual ratio: {actual_ratio:.1%})"
         )
-        
+
         return final_results
 
     async def _compress_single_result(
@@ -149,26 +151,26 @@ class QwenCompressor(BaseCompressor):
         target_ratio: float,
         semaphore: asyncio.Semaphore,
     ) -> SearchResult:
-        """压缩单个检索结果
-        
+        """Compress a single retrieval result.
+
         Args:
-            query: 用户查询
-            result: 检索结果
-            target_ratio: 目标压缩比率
-            semaphore: 并发控制信号量
-            
+            query: User query
+            result: Retrieval result
+            target_ratio: Target compression ratio
+            semaphore: Concurrency control semaphore
+
         Returns:
-            压缩后的检索结果
+            Compressed retrieval result
         """
         async with semaphore:
             try:
                 compressed_content = await self._call_qwen_api(
                     query, result.chunk.page_content, target_ratio
                 )
-                
-                # 创建新的 Chunk 和 SearchResult（保持不可变性）
+
+                # Create new Chunk and SearchResult (maintain immutability)
                 from langrag.entities.document import Document
-                
+
                 compressed_chunk = Document(
                     id=result.chunk.id,
                     page_content=compressed_content,
@@ -182,9 +184,9 @@ class QwenCompressor(BaseCompressor):
                         "compressed_length": len(compressed_content),
                     },
                 )
-                
+
                 return SearchResult(chunk=compressed_chunk, score=result.score)
-            
+
             except Exception as e:
                 logger.error(f"Failed to compress chunk {result.chunk.id}: {e}")
                 raise
@@ -192,41 +194,43 @@ class QwenCompressor(BaseCompressor):
     async def _call_qwen_api(
         self, query: str, content: str, target_ratio: float
     ) -> str:
-        """调用 Qwen API 进行内容压缩
-        
-        Args:
-            query: 用户查询
-            content: 要压缩的内容
-            target_ratio: 目标压缩比率
-            
-        Returns:
-            压缩后的内容
-        """
-        # 构建压缩提示词
-        target_length_desc = f"{int(target_ratio * 100)}% 长度"
-        if target_ratio <= 0.3:
-            target_length_desc = "极简模式（保留核心要点）"
-        elif target_ratio <= 0.5:
-            target_length_desc = "精简模式（保留关键信息）"
-        elif target_ratio <= 0.7:
-            target_length_desc = "适度压缩（保留主要细节）"
-        
-        system_prompt = (
-            "你是一个专业的文本压缩助手。你的任务是将给定的文本压缩到指定长度，"
-            "同时保留与用户查询最相关的信息。"
-            "压缩原则：1) 优先保留与查询相关的内容；2) 去除冗余和不重要的细节；"
-            "3) 保持语义连贯性；4) 不添加原文没有的信息。"
-        )
-        
-        user_prompt = f"""用户查询：{query}
+        """Call Qwen API for content compression.
 
-原始文本：
+        Args:
+            query: User query
+            content: Content to compress
+            target_ratio: Target compression ratio
+
+        Returns:
+            Compressed content
+        """
+        # Build compression prompt
+        target_length_desc = f"{int(target_ratio * 100)}% length"
+        if target_ratio <= 0.3:
+            target_length_desc = "minimal mode (keep core points only)"
+        elif target_ratio <= 0.5:
+            target_length_desc = "concise mode (keep key information)"
+        elif target_ratio <= 0.7:
+            target_length_desc = "moderate compression (keep main details)"
+
+        system_prompt = (
+            "You are a professional text compression assistant. Your task is to compress "
+            "the given text to the specified length while preserving information most "
+            "relevant to the user's query. "
+            "Compression principles: 1) Prioritize content related to the query; "
+            "2) Remove redundant and unimportant details; "
+            "3) Maintain semantic coherence; 4) Do not add information not in the original."
+        )
+
+        user_prompt = f"""User query: {query}
+
+Original text:
 {content}
 
-请将上述文本压缩到 {target_length_desc}，重点保留与查询相关的内容。
-直接输出压缩后的文本，不要添加任何解释或前缀。"""
-        
-        # 构建请求
+Please compress the above text to {target_length_desc}, focusing on content related to the query.
+Output the compressed text directly without any explanation or prefix."""
+
+        # Build request
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -235,26 +239,26 @@ class QwenCompressor(BaseCompressor):
             ],
             "temperature": self.temperature,
         }
-        
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        
-        # 发送请求
+
+        # Send request
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 self.api_url, headers=headers, json=payload
             )
             response.raise_for_status()
-            
+
             result = response.json()
-            
-            # 解析响应
+
+            # Parse response
             if "choices" in result and len(result["choices"]) > 0:
                 compressed_text = result["choices"][0]["message"]["content"]
-                
-                # 记录 token 使用情况
+
+                # Log token usage
                 if "usage" in result:
                     usage = result["usage"]
                     logger.debug(
@@ -263,7 +267,7 @@ class QwenCompressor(BaseCompressor):
                         f"completion={usage.get('completion_tokens', 0)}, "
                         f"total={usage.get('total_tokens', 0)}"
                     )
-                
+
                 return compressed_text.strip()
             else:
                 raise ValueError(f"Unexpected API response format: {result}")

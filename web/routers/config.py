@@ -1,4 +1,4 @@
-"""模型配置 API"""
+"""Model Configuration API"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class EmbedderConfigRequest(BaseModel):
 
 
 def get_rag_kernel():
-    """依赖注入：获取 RAG Kernel 单例"""
+    """Dependency injection: Get RAG Kernel singleton"""
     from web.app import rag_kernel
     return rag_kernel
 
@@ -31,7 +31,7 @@ def save_embedder_config(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """保存并激活 Embedder 配置"""
+    """Save and activate Embedder configuration"""
     try:
         config = EmbedderService.save_config(
             session,
@@ -42,7 +42,7 @@ def save_embedder_config(
             base_url=req.base_url,
             api_key=req.api_key
         )
-        
+
         return {
             "status": "ok",
             "message": "Embedder configured successfully",
@@ -58,11 +58,11 @@ def save_embedder_config(
 
 @router.get("/embedder")
 def get_active_embedder(session: Session = Depends(get_session)):
-    """获取当前激活的 Embedder 配置"""
+    """Get currently active Embedder configuration"""
     config = EmbedderService.get_active_config(session)
     if not config:
         return {"status": "none", "message": "No active embedder configuration"}
-    
+
     return {
         "status": "ok",
         "config": {
@@ -75,7 +75,7 @@ def get_active_embedder(session: Session = Depends(get_session)):
 
 @router.get("/embedders")
 def list_embedders(session: Session = Depends(get_session)):
-    """列出所有 Embedder 配置"""
+    """List all Embedder configurations"""
     configs = EmbedderService.list_all(session)
     return {
         "embedders": [
@@ -107,7 +107,7 @@ def save_llm_config(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """保存并激活 LLM 配置"""
+    """Save and activate LLM configuration"""
     from web.services.llm_service import LLMService
     try:
         config = LLMService.save_config(
@@ -120,7 +120,7 @@ def save_llm_config(
             temperature=req.temperature,
             max_tokens=req.max_tokens
         )
-        
+
         return {
             "status": "ok",
             "message": "LLM configured successfully",
@@ -135,7 +135,7 @@ def save_llm_config(
 
 @router.get("/llms")
 def list_llms(session: Session = Depends(get_session)):
-    """列出所有 LLM 配置"""
+    """List all LLM configurations"""
     from web.services.llm_service import LLMService
     configs = LLMService.list_all(session)
     return {

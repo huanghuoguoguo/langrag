@@ -3,6 +3,7 @@
 from loguru import logger
 
 from langrag.entities.search_result import SearchResult
+
 from ..base import BaseReranker
 
 

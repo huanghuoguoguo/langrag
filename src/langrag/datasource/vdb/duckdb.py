@@ -1,13 +1,9 @@
-import contextlib
 import json
 import logging
-from pathlib import Path
-from typing import Any
 
+from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
-from langrag.datasource.vdb.base import BaseVector
-from langrag.utils.rrf import reciprocal_rank_fusion
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +40,13 @@ class DuckDBVector(BaseVector):
         self.database_path = database_path
         self.table_name = table_name or self.dataset.collection_name
         self._connection = duckdb.connect(self.database_path)
-        
+
         # Load extensions
         self._load_extensions()
-        
+
         # Initialize table schema
-        # We try to infer dimension later, or assume 768/1536 mostly. 
-        # DuckDB VSS requires fixed array size? 
+        # We try to infer dimension later, or assume 768/1536 mostly.
+        # DuckDB VSS requires fixed array size?
         # Yes, FLOAT[N]. We need to know N.
         # Strategy: Create table on first insertion if not exists, or check existing schema.
         self._check_and_init_table_if_possible()
@@ -72,11 +68,11 @@ class DuckDBVector(BaseVector):
         """Create or Replace collection."""
         if not texts:
             return
-            
+
         dim = 768
         if texts[0].vector:
             dim = len(texts[0].vector)
-            
+
         # Create table with precise dimension
         schema = f"""
         CREATE TABLE IF NOT EXISTS {self.table_name} (
@@ -88,7 +84,7 @@ class DuckDBVector(BaseVector):
         )
         """
         self._connection.execute(schema)
-        
+
         # Create Indexes (HNSW only for now)
         try:
              # VSS Index
@@ -102,7 +98,7 @@ class DuckDBVector(BaseVector):
 
     def add_texts(self, texts: list[Document], **kwargs) -> None:
         if not texts: return
-        
+
         # Ensure table exists (if create wasn't called specifically)
         # If table doesn't exist here, we try to create it inferred from first doc
         try:
@@ -111,7 +107,7 @@ class DuckDBVector(BaseVector):
              # Table missing, call create logic
              self.create(texts)
              # return because create calls add_texts
-             return 
+             return
 
         data = []
         for doc in texts:
@@ -122,15 +118,15 @@ class DuckDBVector(BaseVector):
         self._connection.executemany(sql, data)
 
     def search(
-        self, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
     ) -> list[Document]:
-        
+
         search_type = kwargs.get('search_type', 'similarity')
-        
+
         if search_type == 'hybrid' and query_vector:
             return self._search_hybrid(query, query_vector, top_k)
         elif search_type == 'keyword':
@@ -140,8 +136,8 @@ class DuckDBVector(BaseVector):
 
     def _search_vector(self, query_vector: list[float], top_k: int) -> list[Document]:
         if not query_vector: return []
-        
-        # list_cosine_distance returns distance (0..2 for cosine). 
+
+        # list_cosine_distance returns distance (0..2 for cosine).
         # Similarity = 1 - Distance (Approx for ranking)
         sql = f"""
         SELECT id, content, metadata, list_cosine_distance(embedding, ?::FLOAT[{len(query_vector)}]) as dist
@@ -168,7 +164,7 @@ class DuckDBVector(BaseVector):
             "a vector store that supports both vector and text search."
         )
 
-        # 使用 DuckDB FTS 的正确语法
+        # Use correct syntax for DuckDB FTS
         sql = f"""
         SELECT t.id, t.content, t.metadata, {fts_table}.match_bm25(t.id, ?) as score
         FROM {self.table_name} t
@@ -209,7 +205,7 @@ class DuckDBVector(BaseVector):
                 meta = json.loads(meta_json)
             except:
                 meta = {}
-            
+
             if score_strategy == 'distance':
                 # Convert distance to similarity
                 # HNSW Cosine Distance is 1 - CosSim ? Or 1 - (CosSim+1)/2?
@@ -217,9 +213,9 @@ class DuckDBVector(BaseVector):
                 score = 1.0 / (1.0 + val)
             else:
                 score = val # Raw BM25 score
-                
+
             meta['score'] = score
-            
+
             docs.append(Document(
                 id=doc_id,
                 page_content=content,

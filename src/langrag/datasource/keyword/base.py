@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
-from langrag.entities.document import Document
 from langrag.entities.dataset import Dataset
+from langrag.entities.document import Document
+
 
 class BaseKeyword(ABC):
     """Abstract base class for Keyword Search implementations."""

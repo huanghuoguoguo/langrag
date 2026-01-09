@@ -20,19 +20,19 @@ class Document(BaseModel):
     """
     # Content
     page_content: str = Field(..., min_length=1)
-    
+
     # Vector Representation (Optional, only present after embedding)
     vector: list[float] | None = Field(default=None)
-    
+
     # Metadata
     metadata: dict[str, Any] = Field(default_factory=dict)
-    
+
     # Core IDs (Extracted from metadata for easier access, but sync is manual)
     id: str = Field(default_factory=lambda: str(uuid4())) # The chunk ID (or doc ID)
-    
+
     # Type identifier
     type: DocumentType = Field(default=DocumentType.ORIGINAL)
-    
+
     # Dify Compatibility Fields (Often stored in metadata)
     # dataset_id: str
     # document_id: str (original file ID)
@@ -40,7 +40,7 @@ class Document(BaseModel):
 
     def get_meta(self, key: str, default: Any = None) -> Any:
         return self.metadata.get(key, default)
-        
+
     def set_meta(self, key: str, value: Any) -> None:
         self.metadata[key] = value
 

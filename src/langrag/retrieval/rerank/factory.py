@@ -5,9 +5,9 @@ from typing import Any
 from loguru import logger
 
 from .base import BaseReranker
+from .providers.cohere import CohereReranker
 from .providers.noop import NoOpReranker
 from .providers.qwen import QwenReranker
-from .providers.cohere import CohereReranker
 
 
 class RerankerFactory:

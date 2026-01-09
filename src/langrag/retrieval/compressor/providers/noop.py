@@ -3,13 +3,15 @@
 from loguru import logger
 
 from langrag.entities.search_result import SearchResult
+
 from ..base import BaseCompressor
 
 
 class NoOpCompressor(BaseCompressor):
     """Pass-through compressor that performs no compression.
-    
-    不进行压缩的占位符实现，直接返回原始结果。
+
+    A placeholder implementation that performs no compression and returns
+    the original results as-is.
     """
 
     def compress(
@@ -19,14 +21,14 @@ class NoOpCompressor(BaseCompressor):
         target_ratio: float = 0.5,  # noqa: ARG002
     ) -> list[SearchResult]:
         """Return results unchanged.
-        
+
         Args:
-            query: 用户查询（未使用）
-            results: 检索结果列表
-            target_ratio: 目标压缩比率（未使用）
-            
+            query: User query (unused)
+            results: List of retrieval results
+            target_ratio: Target compression ratio (unused)
+
         Returns:
-            原始结果，未经压缩
+            Original results, uncompressed
         """
         logger.debug("NoOpCompressor: returning original results without compression")
         return results

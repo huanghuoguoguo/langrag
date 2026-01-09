@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 
-
 from langrag.entities.document import Document
 
 

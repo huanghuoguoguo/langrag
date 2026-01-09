@@ -1,13 +1,12 @@
 import logging
 import os
-from typing import List, Optional
 
 from langrag.datasource.vdb.base import BaseVector
-from langrag.entities.document import Document
-from langrag.entities.dataset import Dataset
 from langrag.datasource.web.base import BaseWebSearchProvider
-from langrag.datasource.web.providers.google import GoogleSearchProvider
 from langrag.datasource.web.providers.ddg import DuckDuckGoSearchProvider
+from langrag.datasource.web.providers.google import GoogleSearchProvider
+from langrag.entities.dataset import Dataset
+from langrag.entities.document import Document
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +15,21 @@ class WebVector(BaseVector):
     Adapter that exposes Web Search as a Vector Store.
     This allows the RAG kernel to treat the internet as just another knowledge base.
     """
-    
+
     def __init__(self, dataset: Dataset, **kwargs):
         super().__init__(dataset)
         self.provider = self._init_provider()
-        
+
     def _init_provider(self) -> BaseWebSearchProvider:
         """Initialize the search provider based on environment variables."""
         # TODO: Move this configuration to Settings or pass via kwargs
         api_key = os.getenv("GOOGLE_API_KEY")
         cse_id = os.getenv("GOOGLE_CSE_ID")
-        
+
         if api_key and cse_id:
             logger.info("Initializing GoogleSearchProvider for WebVector")
             return GoogleSearchProvider(api_key=api_key, cse_id=cse_id)
-        
+
         # Fallback to Bing (China accessible)
         try:
             logger.info("Initializing BingSearchProvider for WebVector")
@@ -56,10 +55,10 @@ class WebVector(BaseVector):
         pass
 
     def search(
-        self, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
     ) -> list[Document]:
         """
@@ -71,13 +70,13 @@ class WebVector(BaseVector):
             top_k: Number of results
         """
         logger.info(f"WebVector searching for: '{query}' (top_k={top_k})")
-        
+
         # Determine actual query to use (keyword vs semantic intent)
-        # For now, just use the raw query string. 
+        # For now, just use the raw query string.
         # Ideally, we might want to extract keywords if the query is very long.
-        
+
         results = self.provider.search(query, top_k=top_k)
-        
+
         documents = []
         for res in results:
             # Convert WebSearchResult to Document
@@ -93,11 +92,11 @@ class WebVector(BaseVector):
                 }
             )
             documents.append(doc)
-            
+
         return documents
 
     def delete_by_ids(self, ids: list[str]) -> None:
         pass
-    
+
     def delete(self) -> None:
         pass

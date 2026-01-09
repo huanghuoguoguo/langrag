@@ -1,4 +1,4 @@
-"""Qwen Reranker - 使用 DashScope API 进行重排序"""
+"""Qwen Reranker - Reranking using DashScope API"""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ if TYPE_CHECKING:
 
 
 class QwenReranker(BaseReranker):
-    """Qwen 重排序器
+    """Qwen Reranker.
 
-    使用阿里云 DashScope API 的 Qwen 模型对检索结果进行重排序。
+    Reranks retrieval results using Alibaba Cloud DashScope API's Qwen model.
 
-    参数:
-        api_key: DashScope API 密钥
-        model: 模型名称，默认 'qwen3-rerank'
-        instruct: 重排序指令，可自定义
-        timeout: API 超时时间（秒），默认 30.0
+    Args:
+        api_key: DashScope API key
+        model: Model name, default 'qwen3-rerank'
+        instruct: Reranking instruction, can be customized
+        timeout: API timeout in seconds, default 30.0
 
-    使用示例:
+    Usage example:
         >>> reranker = QwenReranker(
         ...     api_key="your-api-key",
         ...     model="qwen3-rerank"
@@ -40,16 +40,16 @@ class QwenReranker(BaseReranker):
         instruct: str = "Given a web search query, retrieve relevant passages that answer the query.",
         timeout: float = 30.0,
     ):
-        """初始化 Qwen Reranker
+        """Initialize Qwen Reranker.
 
         Args:
-            api_key: DashScope API 密钥
-            model: 模型名称
-            instruct: 重排序指令
-            timeout: API 超时时间
+            api_key: DashScope API key
+            model: Model name
+            instruct: Reranking instruction
+            timeout: API timeout
 
         Raises:
-            ValueError: 如果 api_key 为空
+            ValueError: If api_key is empty
         """
         if not api_key:
             raise ValueError("QwenReranker requires 'api_key' parameter")
@@ -65,25 +65,25 @@ class QwenReranker(BaseReranker):
     def rerank(
         self, query: Query, results: list[SearchResult], top_k: int | None = None
     ) -> list[SearchResult]:
-        """重排序检索结果（同步方法）
+        """Rerank retrieval results (sync method).
 
         Args:
-            query: 查询对象
-            results: 待重排序的结果列表
-            top_k: 返回的结果数量，None 表示全部
+            query: Query object
+            results: List of results to rerank
+            top_k: Number of results to return, None means all
 
         Returns:
-            重排序后的结果列表
+            Reranked list of results
         """
-        # 使用同步方式调用
+        # Use sync call
         import asyncio
 
         try:
-            # 在同步上下文中运行异步代码
+            # Run async code in sync context
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # 如果已经在事件循环中，使用 run_until_complete
-                # 这可能会导致问题，但作为回退方案
+                # If already in event loop, use run_until_complete
+                # This may cause issues, but serves as a fallback
                 logger.warning("Cannot run async rerank in running event loop, using fallback")
                 return results[:top_k] if top_k else results
             else:
@@ -95,21 +95,21 @@ class QwenReranker(BaseReranker):
     async def rerank_async(
         self, query: Query, results: list[SearchResult], top_k: int | None = None
     ) -> list[SearchResult]:
-        """重排序检索结果（异步方法）
+        """Rerank retrieval results (async method).
 
         Args:
-            query: 查询对象
-            results: 待重排序的结果列表
-            top_k: 返回的结果数量，None 表示全部
+            query: Query object
+            results: List of results to rerank
+            top_k: Number of results to return, None means all
 
         Returns:
-            重排序后的结果列表
+            Reranked list of results
         """
         if not results:
             logger.debug("Empty results, nothing to rerank")
             return []
 
-        # 确定返回的结果数量
+        # Determine number of results to return
         k = min(top_k, len(results)) if top_k else len(results)
 
         logger.info(
@@ -117,10 +117,10 @@ class QwenReranker(BaseReranker):
         )
 
         try:
-            # 提取文档内容
+            # Extract document content
             documents = [result.chunk.content for result in results]
 
-            # 准备 API 请求
+            # Prepare API request
             request_data = {
                 "model": self.model,
                 "query": query.text,
@@ -134,21 +134,21 @@ class QwenReranker(BaseReranker):
                 "Content-Type": "application/json",
             }
 
-            # 发送 API 请求
+            # Send API request
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(self.api_url, json=request_data, headers=headers)
                 response.raise_for_status()
                 api_response = response.json()
 
-            # 解析响应并重排序
+            # Parse response and rerank
             reranked_results = self._parse_and_rerank(api_response, results, k)
 
-            logger.info(f"Qwen reranker: {len(results)} → {len(reranked_results)} results")
+            logger.info(f"Qwen reranker: {len(results)} -> {len(reranked_results)} results")
             return reranked_results
 
         except httpx.HTTPStatusError as e:
             logger.error(f"Qwen API error (status {e.response.status_code}): {e.response.text}")
-            # 降级：返回原始结果
+            # Fallback: return original results
             return results[:k]
 
         except httpx.TimeoutException:
@@ -162,9 +162,9 @@ class QwenReranker(BaseReranker):
     def _parse_and_rerank(
         self, api_response: dict, original_results: list[SearchResult], top_k: int
     ) -> list[SearchResult]:
-        """解析 DashScope API 响应并重排序结果
+        """Parse DashScope API response and rerank results.
 
-        API 响应格式:
+        API response format:
         {
             "object": "list",
             "results": [
@@ -177,12 +177,12 @@ class QwenReranker(BaseReranker):
         }
 
         Args:
-            api_response: API 响应
-            original_results: 原始结果列表
-            top_k: 返回的结果数量
+            api_response: API response
+            original_results: Original results list
+            top_k: Number of results to return
 
         Returns:
-            重排序后的结果列表
+            Reranked list of results
         """
         from langrag.entities.search_result import SearchResult
 
@@ -195,7 +195,7 @@ class QwenReranker(BaseReranker):
         reranked_results = []
         used_indices = set()
 
-        # 按 API 返回的顺序创建重排序结果
+        # Create reranked results in API-returned order
         for result_item in results_data:
             index = result_item.get("index")
             relevance_score = result_item.get("relevance_score", 0.0)
@@ -207,11 +207,11 @@ class QwenReranker(BaseReranker):
             used_indices.add(index)
             original_result = original_results[index]
 
-            # relevance_score: 0-1，越高越相关
-            # 直接作为 score（SearchResult 的 score 也是越高越好）
+            # relevance_score: 0-1, higher is more relevant
+            # Use directly as score (SearchResult's score is also higher-is-better)
             score = max(0.0, min(1.0, relevance_score))
 
-            # 创建新的 SearchResult（保持原 chunk，更新 score）
+            # Create new SearchResult (keep original chunk, update score)
             new_result = SearchResult(chunk=original_result.chunk, score=score)
 
             reranked_results.append(new_result)
@@ -219,7 +219,7 @@ class QwenReranker(BaseReranker):
             if len(reranked_results) >= top_k:
                 break
 
-        # 如果 API 返回的结果不足 top_k，用原始结果填充
+        # If API returned fewer than top_k results, fill with original results
         if len(reranked_results) < top_k:
             logger.debug(
                 f"API returned {len(reranked_results)} results, "

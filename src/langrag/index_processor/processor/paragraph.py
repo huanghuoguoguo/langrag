@@ -1,12 +1,12 @@
 from typing import Any
 
-from langrag.entities.dataset import Dataset
-from langrag.entities.document import Document
-from langrag.index_processor.processor.base import BaseIndexProcessor
-from langrag.index_processor.cleaner.cleaner import Cleaner
 # from langrag.index_processor.splitter.factory import SplitterFactory # Assuming existence
 # from langrag.llm.embedder.base import BaseEmbedder # Assuming existence
-from langrag.datasource.vdb.base import BaseVector
+from langrag.entities.dataset import Dataset
+from langrag.entities.document import Document
+from langrag.index_processor.cleaner.cleaner import Cleaner
+from langrag.index_processor.processor.base import BaseIndexProcessor
+
 
 class ParagraphIndexProcessor(BaseIndexProcessor):
     """
@@ -15,9 +15,9 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
     """
 
     def __init__(
-        self, 
-        embedder: Any, 
-        vector_manager: Any = None, 
+        self,
+        embedder: Any,
+        vector_manager: Any = None,
         splitter: Any = None,
         cleaner: Cleaner = None
     ):
@@ -31,23 +31,23 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         Process the documents pipeline.
         """
         all_chunks = []
-        
+
         for doc in documents:
             # 1. Clean
             cleaned_content = self.cleaner.clean(doc.page_content)
             doc.page_content = cleaned_content
-            
+
             # 2. Split
             # Assuming splitter.split_documents takes [Document] and returns [Document] (Chunks)
             # If splitter is None, we treat the whole doc as one chunk (not recommended usually)
             if self.splitter:
-                # We need to adapt our Document entity to what the splitter expects 
-                # or ensure splitter uses our entity. 
+                # We need to adapt our Document entity to what the splitter expects
+                # or ensure splitter uses our entity.
                 # For now assuming compatible interface or list of texts.
                 chunks = self.splitter.split_documents([doc])
             else:
                 chunks = [doc]
-            
+
             # 3. Add Metadata
             for chunk in chunks:
                 chunk.metadata['dataset_id'] = dataset.id
@@ -64,7 +64,7 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         # 4. Embed (Batch embedding)
         texts_to_embed = [c.page_content for c in all_chunks]
         embeddings = self.embedder.embed_documents(texts_to_embed)
-        
+
         for i, chunk in enumerate(all_chunks):
             chunk.vector = embeddings[i]
 
@@ -73,8 +73,8 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         if manager is None:
              from langrag.datasource.vdb.global_manager import get_vector_manager
              manager = get_vector_manager()
-             
+
         manager.add_texts(dataset, all_chunks)
-        
+
         # 6. Save to Keyword Store (Optional / Economy Mode)
         # if dataset.indexing_technique == 'economy': ...

@@ -1,4 +1,4 @@
-"""PDF 文件解析器"""
+"""PDF file parser"""
 
 from __future__ import annotations
 
@@ -15,29 +15,30 @@ except ImportError:
     logger.warning("pypdf not installed. PDF parsing will not be available.")
 
 from langrag.entities.document import Document
+
 from ..base import BaseParser
 
 
 class PdfParser(BaseParser):
-    """PDF 文件解析器
+    """PDF file parser
 
-    使用 pypdf 提取 PDF 文件的文本内容。
+    Uses pypdf to extract text content from PDF files.
 
-    参数:
-        extract_images: 是否提取图片（暂不支持）
-        pages: 解析的页码范围，None 表示全部
+    Args:
+        extract_images: Whether to extract images (not yet supported)
+        pages: Page range to parse, None means all pages
 
-    使用示例:
+    Usage example:
         >>> parser = PdfParser()
         >>> docs = parser.parse("document.pdf")
     """
 
     def __init__(self, extract_images: bool = False, pages: tuple[int, int] | None = None):
-        """初始化 PDF 解析器
+        """Initialize PDF parser
 
         Args:
-            extract_images: 是否提取图片（未实现）
-            pages: (start, end) 页码范围，None 表示全部
+            extract_images: Whether to extract images (not implemented)
+            pages: (start, end) page range, None means all pages
         """
         if not PDF_AVAILABLE:
             raise ImportError(
@@ -51,18 +52,18 @@ class PdfParser(BaseParser):
             logger.warning("Image extraction from PDF is not yet implemented")
 
     def parse(self, file_path: str | Path, **_kwargs) -> list[Document]:
-        """解析 PDF 文件
+        """Parse PDF file
 
         Args:
-            file_path: PDF 文件路径
-            **kwargs: 额外参数
+            file_path: PDF file path
+            **kwargs: Additional parameters
 
         Returns:
-            包含单个 Document 的列表（所有页面合并）
+            A list containing a single Document (all pages merged)
 
         Raises:
-            FileNotFoundError: 文件不存在
-            ValueError: 不是有效的 PDF 文件
+            FileNotFoundError: File does not exist
+            ValueError: Not a valid PDF file
         """
         path = Path(file_path)
 
@@ -79,7 +80,7 @@ class PdfParser(BaseParser):
                 pdf_reader = PdfReader(file)
                 total_pages = len(pdf_reader.pages)
 
-                # 确定要解析的页面范围
+                # Determine the page range to parse
                 if self.pages:
                     start, end = self.pages
                     start = max(0, start)
@@ -89,7 +90,7 @@ class PdfParser(BaseParser):
 
                 logger.debug(f"Extracting pages {start} to {end} of {total_pages}")
 
-                # 提取文本
+                # Extract text
                 text_content = []
                 for page_num in range(start, end):
                     try:
@@ -106,7 +107,7 @@ class PdfParser(BaseParser):
                     logger.warning(f"No text content extracted from {path}")
                     logger.warning("This may be a scanned PDF or image-based PDF. OCR is required.")
                     # Provide placeholder to avoid validation error
-                    content = f"[PDF文件：{path.name}]\n[无法提取文本内容，可能是扫描版PDF，需要OCR支持]"
+                    content = f"[PDF file: {path.name}]\n[Unable to extract text content, may be a scanned PDF, OCR support required]"
 
                 doc = Document(
                     page_content=content,

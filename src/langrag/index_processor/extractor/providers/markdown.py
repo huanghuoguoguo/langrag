@@ -1,4 +1,4 @@
-"""Markdown 文件解析器"""
+"""Markdown file parser"""
 
 from __future__ import annotations
 
@@ -17,47 +17,48 @@ except ImportError:
     logger.warning("markdown/beautifulsoup4 not installed. Markdown parsing will be limited.")
 
 from langrag.entities.document import Document
+
 from ..base import BaseParser
 
 
 class MarkdownParser(BaseParser):
-    """Markdown 文件解析器
+    """Markdown file parser
 
-    将 Markdown 转换为结构化的纯文本。
-    支持标题、列表、代码块、表格等。
+    Converts Markdown to structured plain text.
+    Supports headings, lists, code blocks, tables, etc.
 
-    参数:
-        preserve_structure: 是否保留 Markdown 结构（标题标记等）
-        extract_code: 是否包含代码块
+    Args:
+        preserve_structure: Whether to preserve Markdown structure (heading markers, etc.)
+        extract_code: Whether to include code blocks
 
-    使用示例:
+    Usage example:
         >>> parser = MarkdownParser()
         >>> docs = parser.parse("README.md")
     """
 
     def __init__(self, preserve_structure: bool = True, extract_code: bool = True):
-        """初始化 Markdown 解析器
+        """Initialize Markdown parser
 
         Args:
-            preserve_structure: 是否保留 Markdown 结构
-            extract_code: 是否包含代码块
+            preserve_structure: Whether to preserve Markdown structure
+            extract_code: Whether to include code blocks
         """
         self.preserve_structure = preserve_structure
         self.extract_code = extract_code
         self.has_advanced_parser = MARKDOWN_AVAILABLE
 
     def parse(self, file_path: str | Path, **_kwargs) -> list[Document]:
-        """解析 Markdown 文件
+        """Parse Markdown file
 
         Args:
-            file_path: Markdown 文件路径
-            **kwargs: 额外参数
+            file_path: Markdown file path
+            **kwargs: Additional parameters
 
         Returns:
-            包含单个 Document 的列表
+            A list containing a single Document
 
         Raises:
-            FileNotFoundError: 文件不存在
+            FileNotFoundError: File does not exist
         """
         path = Path(file_path)
 
@@ -71,11 +72,11 @@ class MarkdownParser(BaseParser):
 
         content = path.read_text(encoding="utf-8")
 
-        # 如果有高级解析器，使用结构化解析
+        # If advanced parser is available, use structured parsing
         if self.has_advanced_parser and self.preserve_structure:
             parsed_content = self._parse_structured(content)
         else:
-            # 简单解析：只做基本清理
+            # Simple parsing: only basic cleanup
             parsed_content = self._parse_simple(content)
 
         doc = Document(
@@ -93,11 +94,11 @@ class MarkdownParser(BaseParser):
         return [doc]
 
     def _parse_structured(self, content: str) -> str:
-        """结构化解析 Markdown
+        """Structured parsing of Markdown
 
-        使用 markdown + BeautifulSoup 转换为结构化文本
+        Uses markdown + BeautifulSoup to convert to structured text
         """
-        # 转换 Markdown 为 HTML
+        # Convert Markdown to HTML
         html_content = markdown.markdown(
             content, extensions=["extra", "codehilite", "tables", "toc", "fenced_code"]
         )
@@ -109,55 +110,55 @@ class MarkdownParser(BaseParser):
             if not element.name:
                 continue
 
-            # 标题
+            # Headings
             if element.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
                 level = int(element.name[1])
                 text_parts.append("#" * level + " " + element.get_text().strip())
 
-            # 段落
+            # Paragraphs
             elif element.name == "p":
                 text = element.get_text().strip()
                 if text:
                     text_parts.append(text)
 
-            # 列表
+            # Lists
             elif element.name in ["ul", "ol"]:
                 for li in element.find_all("li"):
                     text_parts.append(f"* {li.get_text().strip()}")
 
-            # 代码块
+            # Code blocks
             elif element.name == "pre" and self.extract_code:
                 code_block = element.get_text().strip()
                 if code_block:
                     text_parts.append(f"```\n{code_block}\n```")
 
-            # 表格
+            # Tables
             elif element.name == "table":
                 table_str = self._extract_table(element)
                 if table_str:
                     text_parts.append(table_str)
 
-            # 其他元素
+            # Other elements
             elif element.name:
                 text = element.get_text(separator=" ", strip=True)
                 if text:
                     text_parts.append(text)
 
-        # 清理多余的空行
+        # Clean up extra empty lines
         cleaned_text = re.sub(r"\n\s*\n", "\n\n", "\n".join(text_parts))
         return cleaned_text.strip()
 
     def _parse_simple(self, content: str) -> str:
-        """简单解析 Markdown
+        """Simple parsing of Markdown
 
-        只做基本的清理，保留 Markdown 语法
+        Only basic cleanup, preserves Markdown syntax
         """
         lines = []
 
         for line in content.split("\n"):
             line = line.rstrip()
 
-            # 跳过代码块（如果不提取代码）
+            # Skip code blocks (if not extracting code)
             if not self.extract_code and line.strip().startswith("```"):
                 continue
 
@@ -166,7 +167,7 @@ class MarkdownParser(BaseParser):
         return "\n".join(lines)
 
     def _extract_table(self, table_element) -> str:
-        """提取表格为 Markdown 格式"""
+        """Extract table to Markdown format"""
         headers = [th.get_text().strip() for th in table_element.find_all("th")]
         rows = []
 
