@@ -1,7 +1,7 @@
 """Business logic services."""
 
-from .kb_service import KBService
-from .embedder_service import EmbedderService
 from .document_service import DocumentService
+from .embedder_service import EmbedderService
+from .kb_service import KBService
 
 __all__ = ["KBService", "EmbedderService", "DocumentService"]

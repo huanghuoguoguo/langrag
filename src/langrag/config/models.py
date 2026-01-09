@@ -11,13 +11,13 @@ from pydantic import BaseModel, Field
 
 
 class StorageRole(str, Enum):
-    """存储角色定义，用于多数据源场景
+    """Storage role definition for multi-datasource scenarios.
 
     Attributes:
-        PRIMARY: 主存储，存储完整数据（chunks + embeddings + metadata）
-        VECTOR_ONLY: 仅向量存储，只存储 embeddings 和基本元数据
-        FULLTEXT_ONLY: 仅全文存储，只存储文本内容用于关键词检索
-        BACKUP: 备份存储，完整冗余备份
+        PRIMARY: Primary storage, stores complete data (chunks + embeddings + metadata)
+        VECTOR_ONLY: Vector-only storage, stores only embeddings and basic metadata
+        FULLTEXT_ONLY: Fulltext-only storage, stores only text content for keyword retrieval
+        BACKUP: Backup storage, complete redundant backup
     """
 
     PRIMARY = "primary"
@@ -39,13 +39,13 @@ class ComponentConfig(BaseModel):
 
 
 class VectorStoreConfig(ComponentConfig):
-    """扩展的向量存储配置，支持存储角色定义
+    """Extended vector store configuration with storage role support.
 
     Attributes:
-        type: 存储类型（如 "seekdb", "chroma", "duckdb"）
-        params: 存储参数
-        role: 存储角色（用于多数据源场景）
-        enabled: 是否启用该存储（用于动态切换）
+        type: Storage type (e.g., "seekdb", "chroma", "duckdb")
+        params: Storage parameters
+        role: Storage role (for multi-datasource scenarios)
+        enabled: Whether this storage is enabled (for dynamic switching)
     """
 
     role: StorageRole = StorageRole.PRIMARY
@@ -53,14 +53,14 @@ class VectorStoreConfig(ComponentConfig):
 
 
 class RetrievalConfig(BaseModel):
-    """检索配置
+    """Retrieval configuration.
 
     Attributes:
-        mode: 检索模式 ("single" | "multi_store" | "auto")
-        fusion_strategy: 多源融合策略 ("rrf" | "weighted_rrf" | "linear")
-        fusion_weights: 融合权重（用于 weighted_rrf）
-        top_k_per_store: 每个存储检索的结果数
-        final_top_k: 最终返回的结果数
+        mode: Retrieval mode ("single" | "multi_store" | "auto")
+        fusion_strategy: Multi-source fusion strategy ("rrf" | "weighted_rrf" | "linear")
+        fusion_weights: Fusion weights (for weighted_rrf)
+        top_k_per_store: Number of results to retrieve per store
+        final_top_k: Final number of results to return
     """
 
     mode: str = "auto"  # "single" | "multi_store" | "auto"
@@ -77,11 +77,11 @@ class RAGConfig(BaseModel):
         parser: Parser component configuration
         chunker: Chunker component configuration
         embedder: Embedder component configuration
-        vector_store: 单一向量存储配置（向后兼容）
-        vector_stores: 多向量存储配置（新增）
+        vector_store: Single vector store configuration (backward compatible)
+        vector_stores: Multiple vector store configurations (new)
         reranker: Optional reranker component configuration
         llm: Optional LLM component configuration
-        retrieval: 检索配置
+        retrieval: Retrieval configuration
         retrieval_top_k: Number of results to retrieve from vector search (deprecated)
         rerank_top_k: Number of results to return after reranking (deprecated)
     """
@@ -90,17 +90,17 @@ class RAGConfig(BaseModel):
     chunker: ComponentConfig
     embedder: ComponentConfig
 
-    # 向量存储配置：支持单一或多个
-    vector_store: VectorStoreConfig | None = None  # 单一存储（向后兼容）
-    vector_stores: list[VectorStoreConfig] | None = None  # 多存储（新增）
+    # Vector store configuration: supports single or multiple
+    vector_store: VectorStoreConfig | None = None  # Single store (backward compatible)
+    vector_stores: list[VectorStoreConfig] | None = None  # Multiple stores (new)
 
     reranker: ComponentConfig | None = None
-    compressor: ComponentConfig | None = None  # 上下文压缩器配置
+    compressor: ComponentConfig | None = None  # Context compressor configuration
     llm: ComponentConfig | None = None
 
-    # 检索配置
+    # Retrieval configuration
     retrieval: RetrievalConfig | None = None
-    compression_ratio: float = Field(default=0.5, ge=0.1, le=1.0)  # 压缩比率（0.1-1.0）
+    compression_ratio: float = Field(default=0.5, ge=0.1, le=1.0)  # Compression ratio (0.1-1.0)
 
     # Pipeline settings (deprecated, use retrieval config instead)
     retrieval_top_k: int = Field(default=5, ge=1)
@@ -111,10 +111,10 @@ class RAGConfig(BaseModel):
     }
 
     def get_vector_stores(self) -> list[VectorStoreConfig]:
-        """获取所有向量存储配置（统一处理单一和多个的情况）
+        """Get all vector store configurations (handles both single and multiple cases).
 
         Returns:
-            向量存储配置列表
+            List of vector store configurations
         """
         if self.vector_stores:
             return [vs for vs in self.vector_stores if vs.enabled]
@@ -123,15 +123,15 @@ class RAGConfig(BaseModel):
         return []
 
     def get_retrieval_config(self) -> RetrievalConfig:
-        """获取检索配置（兼容旧配置）
+        """Get retrieval configuration (backward compatible with old config).
 
         Returns:
-            检索配置对象
+            Retrieval configuration object
         """
         if self.retrieval:
             return self.retrieval
 
-        # 向后兼容：从旧配置构建
+        # Backward compatible: build from old config
         return RetrievalConfig(
             mode="auto",
             final_top_k=self.rerank_top_k or self.retrieval_top_k,

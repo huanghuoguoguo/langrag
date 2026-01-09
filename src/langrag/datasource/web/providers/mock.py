@@ -1,16 +1,17 @@
-from typing import List
+
 from langrag.datasource.web.base import BaseWebSearchProvider, WebSearchResult
+
 
 class MockSearchProvider(BaseWebSearchProvider):
     """
     Mock Search Provider for testing/demo purposes.
     Returns static results based on query.
     """
-    
-    def search(self, query: str, top_k: int = 5, **kwargs) -> List[WebSearchResult]:
+
+    def search(self, query: str, top_k: int = 5, **kwargs) -> list[WebSearchResult]:
         # Simple keywords detection to return semi-relevant mock data
         base_results = []
-        
+
         if "iphone" in query.lower():
             base_results.append(WebSearchResult(
                 title="iPhone 16 - Apple",
@@ -38,6 +39,6 @@ class MockSearchProvider(BaseWebSearchProvider):
                 snippet=f"This is a mock search result for the query '{query}'. Real web search requires API keys.",
                 source="mock"
             ))
-            
+
         # Pad with generic results if needed to reach top_k? No, just return what we have.
         return base_results[:top_k]

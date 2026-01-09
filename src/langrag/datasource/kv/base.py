@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any
+
 
 class BaseKVStore(ABC):
     """
@@ -8,7 +9,7 @@ class BaseKVStore(ABC):
     """
 
     @abstractmethod
-    def mget(self, keys: List[str]) -> List[Optional[Any]]:
+    def mget(self, keys: list[str]) -> list[Any | None]:
         """Get multiple values."""
         pass
 
@@ -18,15 +19,15 @@ class BaseKVStore(ABC):
         pass
 
     @abstractmethod
-    def delete(self, keys: List[str]) -> None:
+    def delete(self, keys: list[str]) -> None:
         """Delete multiple keys."""
         pass
-        
-    def get(self, key: str) -> Optional[Any]:
+
+    def get(self, key: str) -> Any | None:
         """Get single value."""
         results = self.mget([key])
         return results[0] if results else None
-        
+
     def set(self, key: str, value: Any) -> None:
         """Set single value."""
         self.mset({key: value})

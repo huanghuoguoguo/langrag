@@ -1,8 +1,8 @@
-"""对话 API"""
+"""Chat API"""
+
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 from sqlmodel import Session
 
 from web.core.database import get_session
@@ -18,9 +18,9 @@ class Message(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    kb_ids: List[str] = []
+    kb_ids: list[str] = []
     query: str
-    history: List[Message] = []
+    history: list[Message] = []
     stream: bool = False
 
 
@@ -28,20 +28,20 @@ class SourceItem(BaseModel):
     content: str
     score: float
     source: str
-    kb_id: Optional[str] = None
-    kb_name: Optional[str] = None
-    title: Optional[str] = None
-    link: Optional[str] = None
-    type: Optional[str] = None
+    kb_id: str | None = None
+    kb_name: str | None = None
+    title: str | None = None
+    link: str | None = None
+    type: str | None = None
 
 
 class ChatResponse(BaseModel):
     answer: str
-    sources: List[SourceItem]
+    sources: list[SourceItem]
 
 
 def get_rag_kernel():
-    """依赖注入：获取 RAG Kernel 单例"""
+    """Dependency injection: Get RAG Kernel singleton"""
     from web.app import rag_kernel
     return rag_kernel
 
@@ -52,17 +52,17 @@ async def chat(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """执行 RAG 对话 (Support Streaming)"""
+    """Execute RAG conversation (Support Streaming)"""
     try:
         # Convert Pydantic models to dicts for internal use
         history_dicts = [{"role": m.role, "content": m.content} for m in req.history]
-        
+
         target_kb_ids = req.kb_ids
         # Auto-select all KBs if none provided
         if not target_kb_ids:
             all_kbs = KBService.list_kbs(session)
             target_kb_ids = [kb.kb_id for kb in all_kbs]
-            
+
         result = await rag_kernel.chat(
             kb_ids=target_kb_ids,
             query=req.query,
@@ -73,14 +73,14 @@ async def chat(
         if req.stream:
             from fastapi.responses import StreamingResponse
             return StreamingResponse(result, media_type="text/event-stream")
-        
+
         return ChatResponse(
             answer=result["answer"],
             sources=[
                 SourceItem(**item) for item in result["sources"]
             ]
         )
-        
+
     except ValueError as e:
         # Typically "LLM not configured"
         raise HTTPException(status_code=400, detail=str(e))

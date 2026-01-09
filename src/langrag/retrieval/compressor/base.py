@@ -8,26 +8,27 @@ from langrag.entities.search_result import SearchResult
 class BaseCompressor(ABC):
     """Abstract base class for context compressors.
 
-    上下文压缩器的基类，用于在传给 LLM 之前压缩检索结果，减少 token 数量。
+    Base class for context compressors, used to compress retrieval results
+    before passing to LLM to reduce token count.
 
-    典型用途：
-    - 提取关键句子
-    - 过滤冗余内容
-    - 总结长文本
+    Typical use cases:
+    - Extract key sentences
+    - Filter redundant content
+    - Summarize long text
     """
 
     @abstractmethod
     def compress(
         self, query: str, results: list[SearchResult], target_ratio: float = 0.5
     ) -> list[SearchResult]:
-        """压缩检索结果的上下文内容
+        """Compress the context content of retrieval results.
 
         Args:
-            query: 用户查询
-            results: 检索结果列表
-            target_ratio: 目标压缩比率（0-1），例如 0.5 表示压缩到 50% 长度
+            query: User query
+            results: List of retrieval results
+            target_ratio: Target compression ratio (0-1), e.g., 0.5 means compress to 50% length
 
         Returns:
-            压缩后的检索结果列表，每个结果的 content 可能被压缩
+            List of compressed retrieval results, each result's content may be compressed
         """
         pass

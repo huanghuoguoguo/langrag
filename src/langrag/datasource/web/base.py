@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+
 from pydantic import BaseModel
+
 
 class WebSearchResult(BaseModel):
     """Result from a web search."""
@@ -12,9 +13,9 @@ class WebSearchResult(BaseModel):
 
 class BaseWebSearchProvider(ABC):
     """Abstract base class for web search providers."""
-    
+
     @abstractmethod
-    def search(self, query: str, top_k: int = 5, **kwargs) -> List[WebSearchResult]:
+    def search(self, query: str, top_k: int = 5, **kwargs) -> list[WebSearchResult]:
         """
         Perform a web search.
         

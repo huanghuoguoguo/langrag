@@ -1,8 +1,8 @@
-"""知识库相关 API"""
+"""Knowledge Base API"""
+
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
 from sqlmodel import Session
 
 from web.core.database import get_session
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/kb", tags=["knowledge_base"])
 
 class KBCreateRequest(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     vdb_type: str = "chroma"  # chroma, duckdb, seekdb
     embedder_name: str  # Required - must configure embedder first
     chunk_size: int = 1000
@@ -24,16 +24,16 @@ class KBCreateRequest(BaseModel):
 class KBResponse(BaseModel):
     id: str
     name: str
-    description: Optional[str]
+    description: str | None
     vdb_type: str
-    embedder_name: Optional[str]
+    embedder_name: str | None
     collection_name: str
     chunk_size: int
     chunk_overlap: int
 
 
 def get_rag_kernel():
-    """依赖注入：获取 RAG Kernel 单例"""
+    """Dependency injection: Get RAG Kernel singleton"""
     from web.app import rag_kernel
     return rag_kernel
 
@@ -44,14 +44,14 @@ def create_kb(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """创建知识库"""
+    """Create knowledge base"""
     # Validate embedder_name is required
     if not req.embedder_name:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Embedder is required. Please configure an embedder in 'Model Configuration' page first."
         )
-    
+
     kb = KBService.create_kb(
         session,
         rag_kernel,
@@ -62,7 +62,7 @@ def create_kb(
         chunk_size=req.chunk_size,
         chunk_overlap=req.chunk_overlap
     )
-    
+
     return KBResponse(
         id=kb.kb_id,
         name=kb.name,
@@ -80,11 +80,11 @@ def get_kb(
     kb_id: str,
     session: Session = Depends(get_session)
 ):
-    """获取知识库详情"""
+    """Get knowledge base details"""
     kb = KBService.get_kb(session, kb_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
-    
+
     return KBResponse(
         id=kb.kb_id,
         name=kb.name,
@@ -97,9 +97,9 @@ def get_kb(
     )
 
 
-@router.get("", response_model=List[KBResponse])
+@router.get("", response_model=list[KBResponse])
 def list_kbs(session: Session = Depends(get_session)):
-    """列出所有知识库"""
+    """List all knowledge bases"""
     kbs = KBService.list_kbs(session)
     return [
         KBResponse(
@@ -122,9 +122,9 @@ def delete_kb(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """删除知识库"""
+    """Delete knowledge base"""
     success = KBService.delete_kb(session, rag_kernel, kb_id)
     if not success:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
-    
+
     return {"message": "Knowledge base deleted successfully"}

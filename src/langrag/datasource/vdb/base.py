@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
-from langrag.entities.document import Document
 from langrag.entities.dataset import Dataset
+from langrag.entities.document import Document
+
 
 class BaseVector(ABC):
     """Abstract base class for Vector Database implementations."""
@@ -23,10 +23,10 @@ class BaseVector(ABC):
 
     @abstractmethod
     def search(
-        self, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
     ) -> list[Document]:
         """
@@ -46,7 +46,7 @@ class BaseVector(ABC):
     def delete_by_ids(self, ids: list[str]) -> None:
         """Delete documents by their IDs."""
         pass
-    
+
     @abstractmethod
     def delete(self) -> None:
         """Delete the entire collection."""

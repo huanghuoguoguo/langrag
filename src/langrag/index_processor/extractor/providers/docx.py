@@ -1,4 +1,4 @@
-"""DOCX 文件解析器"""
+"""DOCX file parser"""
 
 from __future__ import annotations
 
@@ -15,20 +15,21 @@ except ImportError:
     logger.warning("python-docx not installed. DOCX parsing will not be available.")
 
 from langrag.entities.document import Document
+
 from ..base import BaseParser
 
 
 class DocxParser(BaseParser):
-    """DOCX 文件解析器
+    """DOCX file parser
 
-    使用 python-docx 提取 Word 文档的文本内容。
+    Uses python-docx to extract text content from Word documents.
 
-    参数:
-        include_tables: 是否包含表格内容
-        include_headers: 是否包含页眉内容
-        include_footers: 是否包含页脚内容
+    Args:
+        include_tables: Whether to include table content
+        include_headers: Whether to include header content
+        include_footers: Whether to include footer content
 
-    使用示例:
+    Usage example:
         >>> parser = DocxParser()
         >>> docs = parser.parse("document.docx")
     """
@@ -39,12 +40,12 @@ class DocxParser(BaseParser):
         include_headers: bool = False,
         include_footers: bool = False,
     ):
-        """初始化 DOCX 解析器
+        """Initialize DOCX parser
 
         Args:
-            include_tables: 是否包含表格
-            include_headers: 是否包含页眉
-            include_footers: 是否包含页脚
+            include_tables: Whether to include tables
+            include_headers: Whether to include headers
+            include_footers: Whether to include footers
         """
         if not DOCX_AVAILABLE:
             raise ImportError(
@@ -56,18 +57,18 @@ class DocxParser(BaseParser):
         self.include_footers = include_footers
 
     def parse(self, file_path: str | Path, **_kwargs) -> list[Document]:
-        """解析 DOCX 文件
+        """Parse DOCX file
 
         Args:
-            file_path: DOCX 文件路径
-            **kwargs: 额外参数
+            file_path: DOCX file path
+            **kwargs: Additional parameters
 
         Returns:
-            包含单个 Document 的列表
+            A list containing a single Document
 
         Raises:
-            FileNotFoundError: 文件不存在
-            ValueError: 不是有效的 DOCX 文件
+            FileNotFoundError: File does not exist
+            ValueError: Not a valid DOCX file
         """
         path = Path(file_path)
 
@@ -83,7 +84,7 @@ class DocxParser(BaseParser):
             doc = DocxDocument(str(path))
             text_content = []
 
-            # 提取页眉
+            # Extract headers
             if self.include_headers:
                 for section in doc.sections:
                     header = section.header
@@ -91,14 +92,14 @@ class DocxParser(BaseParser):
                         if paragraph.text.strip():
                             text_content.append(f"[Header] {paragraph.text}")
 
-            # 提取段落
+            # Extract paragraphs
             paragraph_count = 0
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
                     paragraph_count += 1
 
-            # 提取表格
+            # Extract tables
             table_count = 0
             if self.include_tables:
                 for table in doc.tables:
@@ -107,7 +108,7 @@ class DocxParser(BaseParser):
                         text_content.append(table_text)
                         table_count += 1
 
-            # 提取页脚
+            # Extract footers
             if self.include_footers:
                 for section in doc.sections:
                     footer = section.footer
@@ -144,13 +145,13 @@ class DocxParser(BaseParser):
             raise ValueError(f"Invalid DOCX file: {e}") from e
 
     def _extract_table(self, table) -> str:
-        """提取表格内容为 Markdown 格式
+        """Extract table content to Markdown format
 
         Args:
-            table: python-docx Table 对象
+            table: python-docx Table object
 
         Returns:
-            Markdown 格式的表格字符串
+            Table string in Markdown format
         """
         lines = []
 
@@ -158,7 +159,7 @@ class DocxParser(BaseParser):
             cells = [cell.text.strip() for cell in row.cells]
             lines.append(" | ".join(cells))
 
-            # 在第一行后添加分隔符
+            # Add separator after the first row
             if i == 0:
                 lines.append(" | ".join(["---"] * len(cells)))
 

@@ -1,4 +1,3 @@
-from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
@@ -15,16 +14,16 @@ class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str | None = None
-    
+
     # Configuration
     indexing_technique: str = Field(default="high_quality")  # "high_quality" | "economy"
     collection_name: str  # The physical table/index name in the vector store
-    
+
     # Metadata
     tenant_id: str | None = None
     created_at: int | None = None
     vdb_type: str | None = None # e.g. "chroma", "duckdb"
-    
+
     model_config = {
         "frozen": False
     }

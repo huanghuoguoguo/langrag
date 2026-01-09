@@ -1,18 +1,17 @@
 """
 LangRAG Web Application
-业务层应用，使用 langrag 作为核心 RAG 引擎
+Business layer application using langrag as the core RAG engine
 """
 
 import logging
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from web.core.database import init_db, engine, get_session
-from web.models.database import KnowledgeBase, LLMConfig
-from web.core.rag_kernel import RAGKernel
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
 from web.core.context import rag_kernel
-from web.routers import kb_router, document_router, search_router, config_router
+from web.core.database import get_session, init_db
+from web.routers import config_router, document_router, kb_router, search_router
 
 # Setup logging
 logging.basicConfig(
@@ -24,7 +23,7 @@ logger = logging.getLogger("web-app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
+    """Application lifecycle management"""
     # Startup
     logger.info("Initializing database...")
     init_db()
@@ -34,12 +33,11 @@ async def lifespan(app: FastAPI):
     from langrag.datasource.vdb.global_manager import set_vector_manager
     # rag_kernel is globally imported from web.core.context
     set_vector_manager(rag_kernel.vdb_manager)
-    
+
     # Restore vector stores for existing knowledge bases
     logger.info("Restoring vector stores for existing knowledge bases...")
-    from web.core.database import get_session
     from web.services.kb_service import KBService
-    
+
     session_gen = get_session()
     session = next(session_gen)
     try:
@@ -47,7 +45,7 @@ async def lifespan(app: FastAPI):
         for kb in kbs:
             rag_kernel.create_vector_store(kb.kb_id, kb.collection_name, kb.vdb_type, name=kb.name)
             logger.info(f"Restored vector store for KB: {kb.kb_id} (type: {kb.vdb_type})")
-            
+
         # Restore active Embedder
         from web.services.embedder_service import EmbedderService
         active_emb = EmbedderService.get_active_config(session)
@@ -67,14 +65,14 @@ async def lifespan(app: FastAPI):
                 max_tokens=active_llm.max_tokens
             )
             logger.info(f"Restored active LLM: {active_llm.name}")
-            
+
     finally:
         session.close()
-    
+
     logger.info("Application started successfully")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Application shutting down...")
 
@@ -94,6 +92,7 @@ app.include_router(document_router)
 app.include_router(search_router)
 app.include_router(config_router)
 from web.routers.chat import router as chat_router
+
 app.include_router(chat_router)
 
 # Mount static files

@@ -6,32 +6,32 @@ from .base import BaseCompressor
 
 
 class CompressorFactory:
-    """工厂类，用于创建上下文压缩器实例
+    """Factory class for creating context compressor instances.
 
-    支持的压缩器类型：
-    - noop: 不压缩，直接返回原始结果
-    - qwen: 使用 Qwen API 进行智能压缩
+    Supported compressor types:
+    - noop: No compression, returns original results as-is
+    - qwen: Uses Qwen API for intelligent compression
     """
 
     @staticmethod
     def create(compressor_type: str, **kwargs) -> BaseCompressor:
-        """创建压缩器实例
+        """Create a compressor instance.
 
         Args:
-            compressor_type: 压缩器类型 ("noop", "qwen")
-            **kwargs: 压缩器特定的参数
+            compressor_type: Compressor type ("noop", "qwen")
+            **kwargs: Compressor-specific parameters
 
         Returns:
-            BaseCompressor 实例
+            BaseCompressor instance
 
         Raises:
-            ValueError: 如果压缩器类型不支持
+            ValueError: If compressor type is not supported
 
         Examples:
-            >>> # 创建 NoOp 压缩器
+            >>> # Create NoOp compressor
             >>> compressor = CompressorFactory.create("noop")
             >>>
-            >>> # 创建 Qwen 压缩器
+            >>> # Create Qwen compressor
             >>> compressor = CompressorFactory.create(
             ...     "qwen",
             ...     api_key="your-api-key",
@@ -49,7 +49,7 @@ class CompressorFactory:
         elif compressor_type == "qwen":
             from .providers.qwen import QwenCompressor
 
-            # 检查必需参数
+            # Check required parameters
             if "api_key" not in kwargs:
                 raise ValueError("api_key is required for Qwen compressor")
 

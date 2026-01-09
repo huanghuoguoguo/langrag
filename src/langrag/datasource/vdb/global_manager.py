@@ -1,4 +1,4 @@
-from langrag.datasource.vdb.vector_manager import VectorManager, DefaultVectorManager
+from langrag.datasource.vdb.vector_manager import DefaultVectorManager, VectorManager
 
 _GLOBAL_MANAGER: VectorManager = DefaultVectorManager()
 

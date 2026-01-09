@@ -1,11 +1,10 @@
-from typing import Any
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from chromadb.api import ClientAPI
 
+from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
-from langrag.datasource.vdb.base import BaseVector
+
 
 class ChromaVector(BaseVector):
     """
@@ -13,21 +12,21 @@ class ChromaVector(BaseVector):
     """
 
     def __init__(
-        self, 
-        dataset: Dataset, 
-        persist_directory: str | None = None, 
-        host: str | None = None, 
+        self,
+        dataset: Dataset,
+        persist_directory: str | None = None,
+        host: str | None = None,
         port: int | None = None,
         ssl: bool = False,
         headers: dict[str, str] | None = None,
         **kwargs
     ):
         super().__init__(dataset)
-        
+
         if host and port:
             # Remote connection
             self._client = chromadb.HttpClient(
-                host=host, 
+                host=host,
                 port=port,
                 ssl=ssl,
                 headers=headers,
@@ -40,11 +39,11 @@ class ChromaVector(BaseVector):
                 path=path,
                 settings=ChromaSettings(anonymized_telemetry=False)
             )
-        
+
         # Get or create collection
         # We enforce cosine distance for consistency
         self._collection = self._client.get_or_create_collection(
-            name=self.collection_name, 
+            name=self.collection_name,
             metadata={"hnsw:space": "cosine"}
         )
 
@@ -61,19 +60,19 @@ class ChromaVector(BaseVector):
 
         ids = [doc.id for doc in texts]
         documents = [doc.page_content for doc in texts]
-        
+
         # Chroma requires embeddings. If not present, it will try to use its default EF.
         # But our architecture assumes embeddings are generated before calling this.
         # We should check if vectors are present.
         embeddings = [doc.vector for doc in texts]
         if any(e is None for e in embeddings):
-             # Fallback or Error? 
+             # Fallback or Error?
              # In our architecture, embedding happens in IndexProcessor.
              # So we expect vectors here.
-             # However, Chroma CAN generate embeddings if we don't provide them 
+             # However, Chroma CAN generate embeddings if we don't provide them
              # (using its default lightweight embedder).
              # Let's strictly require them or handle None based on config.
-             # For now, let's assume if vector is None, we pass None to Chroma 
+             # For now, let's assume if vector is None, we pass None to Chroma
              # (Chroma will calculate it if it has an embedding function set, otherwise error)
              pass
 
@@ -97,20 +96,20 @@ class ChromaVector(BaseVector):
         )
 
     def search(
-        self, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
     ) -> list[Document]:
         """
         Search for documents.
         """
-        
+
         # Hybrid support: Chroma is vector only (mostly).
         # So we ignore search_type="hybrid" request unless we implement client-side RRF (which we explicitly avoid in VDB layer now).
         # We behave as semantic search.
-        
+
         if query_vector is None:
             # If no vector provided, Chroma can't search unless it has internal embedding function.
             # Our service layer should ensure query_vector is present if using semantic search.
@@ -141,19 +140,19 @@ class ChromaVector(BaseVector):
             # Calculate score from distance (Cosine distance 0..2)
             # score = 1 - distance (approx)
             distance = dists[i]
-            score = 1 - distance 
-            
+            score = 1 - distance
+
             meta = metas[i] if metas[i] else {}
             # Inject score into metadata so Service can read it
             meta['score'] = score
-            
+
             doc = Document(
                 page_content=docs[i],
                 metadata=meta,
                 id=doc_id
             )
             out_docs.append(doc)
-            
+
         return out_docs
 
     def delete_by_ids(self, ids: list[str]) -> None:

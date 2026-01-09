@@ -1,12 +1,13 @@
-from typing import Any, Type
+from typing import Any
+
 from loguru import logger
 
-from langrag.entities.dataset import Dataset
+from langrag.config.settings import settings
 from langrag.datasource.vdb.base import BaseVector
 from langrag.datasource.vdb.chroma import ChromaVector
 from langrag.datasource.vdb.duckdb import DuckDBVector
 from langrag.datasource.vdb.seekdb import SeekDBVector
-from langrag.config.settings import settings
+from langrag.entities.dataset import Dataset
 
 
 class VectorStoreFactory:
@@ -15,7 +16,7 @@ class VectorStoreFactory:
     Now used primarily by the DefaultVectorManager.
     """
 
-    _registry: dict[str, Type[BaseVector]] = {
+    _registry: dict[str, type[BaseVector]] = {
         "chroma": ChromaVector,
         "duckdb": DuckDBVector,
         "seekdb": SeekDBVector,
@@ -33,7 +34,7 @@ class VectorStoreFactory:
         """
         if not type_name:
             type_name = "seekdb" # Default fallback
-            
+
         if type_name not in cls._registry:
              available = ", ".join(cls._registry.keys())
              raise ValueError(f"Unknown Vector Store Type: '{type_name}'. Available types: {available}")
@@ -44,7 +45,7 @@ class VectorStoreFactory:
         # Inject default paths if not provided and using local defaults
         if type_name == "chroma" and "persist_directory" not in params and "host" not in params:
             params["persist_directory"] = settings.CHROMA_DB_PATH
-        
+
         if type_name == "duckdb" and "database_path" not in params:
             params["database_path"] = settings.DUCKDB_PATH
 
@@ -57,7 +58,7 @@ class VectorStoreFactory:
         """
         if not type_name:
              type_name = dataset.vdb_type
-        
+
         if not type_name:
             type_name = "seekdb"
 
@@ -65,6 +66,6 @@ class VectorStoreFactory:
         if type_name == "web_search":
             from langrag.datasource.vdb.web import WebVector
             return WebVector(dataset)
-        
+
         # Separate specific kwargs if needed, but for now passing all
         return cls.create(type_name, dataset, **kwargs)
