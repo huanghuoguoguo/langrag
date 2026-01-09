@@ -1,0 +1,1 @@
+"""Web core module tests."""
