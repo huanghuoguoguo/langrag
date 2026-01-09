@@ -1,10 +1,9 @@
 import logging
-from typing import Any, Dict, Optional, List
 
-from langrag.entities.dataset import Dataset
-from langrag.entities.document import Document
 from langrag.datasource.vdb.base import BaseVector
 from langrag.datasource.vdb.vector_manager import VectorManager
+from langrag.entities.dataset import Dataset
+from langrag.entities.document import Document
 from web.config import CHROMA_DIR, DUCKDB_DIR, SEEKDB_DIR
 
 logger = logging.getLogger(__name__)
@@ -17,7 +16,7 @@ class WebVectorStoreManager(VectorManager):
     """
 
     def __init__(self):
-        self._stores: Dict[str, BaseVector] = {}
+        self._stores: dict[str, BaseVector] = {}
 
     def get_vector_store(self, dataset: Dataset, **kwargs) -> BaseVector:
         """
@@ -32,25 +31,25 @@ class WebVectorStoreManager(VectorManager):
 
     def create_store(self, dataset: Dataset) -> BaseVector:
         """根据数据集配置创建 VDB 实例"""
-        
+
         # Local Mode Only
         vdb_type = dataset.vdb_type or "seekdb" # 默认 SeekDB
-        
+
         logger.info(f"[WebManager] Creating/Loading Local store for KB: {dataset.id}, type: {vdb_type}")
 
         store = None
         if vdb_type == "chroma":
             from langrag.datasource.vdb.chroma import ChromaVector
             store = ChromaVector(dataset, persist_directory=str(CHROMA_DIR))
-            
+
         elif vdb_type == "duckdb":
             from langrag.datasource.vdb.duckdb import DuckDBVector
             store = DuckDBVector(dataset, database_path=str(DUCKDB_DIR))
-            
+
         elif vdb_type == "seekdb":
             from langrag.datasource.vdb.seekdb import SeekDBVector
             store = SeekDBVector(dataset, mode="embedded", db_path=str(SEEKDB_DIR))
-            
+
         else:
             raise ValueError(f"Unsupported vector database type: {vdb_type}")
 
@@ -58,25 +57,25 @@ class WebVectorStoreManager(VectorManager):
         return store
 
     def search(
-        self, 
-        dataset: Dataset, 
-        query: str, 
-        query_vector: list[float] | None, 
-        top_k: int = 4, 
+        self,
+        dataset: Dataset,
+        query: str,
+        query_vector: list[float] | None,
+        top_k: int = 4,
         **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         store = self.get_vector_store(dataset)
         return store.search(query, query_vector, top_k=top_k, **kwargs)
 
     def add_texts(
-        self, 
-        dataset: Dataset, 
-        documents: List[Document], 
+        self,
+        dataset: Dataset,
+        documents: list[Document],
         **kwargs
     ) -> None:
         store = self.get_vector_store(dataset)
         store.add_texts(documents, **kwargs)
-        
+
     def delete(self, dataset: Dataset) -> None:
         store = self.get_vector_store(dataset)
         store.delete()
