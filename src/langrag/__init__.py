@@ -13,6 +13,19 @@ from .batch import BatchConfig, BatchProcessor, BatchProgress, ProgressCallback
 # Cache
 from .cache import BaseCache, CacheEntry, SemanticCache
 
+# Evaluation
+from .evaluation import (
+    BaseEvaluator,
+    EvaluationRunner,
+    EvaluationSample,
+    EvaluationResult,
+    EvaluationReport,
+    FaithfulnessEvaluator,
+    AnswerRelevancyEvaluator,
+    ContextRelevancyEvaluator,
+    evaluate_rag,
+)
+
 # Data Source
 from .datasource.vdb.base import BaseVector
 from .entities.dataset import Dataset, RetrievalContext
@@ -54,6 +67,17 @@ __all__ = [
     "BaseCache",
     "CacheEntry",
     "SemanticCache",
+
+    # Evaluation
+    "BaseEvaluator",
+    "EvaluationRunner",
+    "EvaluationSample",
+    "EvaluationResult",
+    "EvaluationReport",
+    "FaithfulnessEvaluator",
+    "AnswerRelevancyEvaluator",
+    "ContextRelevancyEvaluator",
+    "evaluate_rag",
 
     # Indexing
     "BaseParser",
