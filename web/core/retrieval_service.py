@@ -6,6 +6,7 @@ This module handles document retrieval including:
 - Query rewriting (Agentic RAG)
 - Hybrid search (vector + keyword)
 - Result reranking
+- Semantic caching for repeated queries
 - Post-processing for special indexing techniques (QA, Parent-Child)
 
 Design Decisions:
@@ -20,20 +21,28 @@ Design Decisions:
 3. **Reranking Integration**: When a reranker is configured, retrieval expands
    the initial result set (5x top_k) then reranks to get the final results.
 
-4. **Post-Processing Pipeline**: Handles special cases like QA indexing
+4. **Semantic Caching**: When a cache is configured, the service checks for
+   semantically similar previous queries before executing a new search,
+   reducing redundant embedding and search operations.
+
+5. **Post-Processing Pipeline**: Handles special cases like QA indexing
    (swapping questions with answers) and Parent-Child indexing (fetching
    parent chunks from KV store).
 
 Example Usage:
 --------------
+    from langrag.cache import SemanticCache
+
+    cache = SemanticCache(similarity_threshold=0.95)
     service = RetrievalService(
         embedder=embedder,
         reranker=reranker,
         rewriter=rewriter,
-        kv_store=kv_store
+        kv_store=kv_store,
+        cache=cache
     )
 
-    # Single KB search
+    # Single KB search (with caching)
     results, search_type = service.search(
         store=vector_store,
         query="What is machine learning?",
@@ -52,6 +61,7 @@ import logging
 
 from langrag import BaseEmbedder, BaseVector
 from langrag import Document as LangRAGDocument
+from langrag.cache import SemanticCache
 from langrag.datasource.kv.base import BaseKVStore
 from langrag.entities.search_result import SearchResult
 from langrag.retrieval.rerank.base import BaseReranker
@@ -69,17 +79,20 @@ class RetrievalService:
 
     The retrieval flow:
     1. Rewrite query (if rewriter is configured)
-    2. Generate query embedding (if embedder is configured)
-    3. Execute search on vector store(s)
-    4. Post-process results (QA swap, parent fetch)
-    5. Rerank results (if reranker is configured)
-    6. Return final results with search type metadata
+    2. Check semantic cache for similar queries
+    3. Generate query embedding (if embedder is configured)
+    4. Execute search on vector store(s)
+    5. Post-process results (QA swap, parent fetch)
+    6. Rerank results (if reranker is configured)
+    7. Cache results for future queries
+    8. Return final results with search type metadata
 
     Attributes:
         embedder: Embedding model for query vectorization
         reranker: Model for reranking initial results
         rewriter: LLM-based query rewriter for Agentic RAG
         kv_store: KV store for parent-child retrieval
+        cache: Semantic cache for query deduplication
     """
 
     def __init__(
@@ -87,7 +100,8 @@ class RetrievalService:
         embedder: BaseEmbedder | None = None,
         reranker: BaseReranker | None = None,
         rewriter: BaseRewriter | None = None,
-        kv_store: BaseKVStore | None = None
+        kv_store: BaseKVStore | None = None,
+        cache: SemanticCache | None = None
     ):
         """
         Initialize the retrieval service.
@@ -101,11 +115,14 @@ class RetrievalService:
                      Rewrites user queries for better retrieval.
             kv_store: Key-value store for parent-child indexing.
                      Required to fetch parent chunks.
+            cache: Semantic cache for query deduplication.
+                     When configured, similar queries return cached results.
         """
         self.embedder = embedder
         self.reranker = reranker
         self.rewriter = rewriter
         self.kv_store = kv_store
+        self.cache = cache
 
     def _embed_query(self, query: str) -> list[float] | None:
         """
@@ -273,23 +290,27 @@ class RetrievalService:
         store: BaseVector,
         query: str,
         top_k: int = 5,
-        rewrite: bool = True
+        rewrite: bool = True,
+        use_cache: bool = True
     ) -> tuple[list[LangRAGDocument], str]:
         """
         Search a single vector store for relevant documents.
 
         This method implements the complete retrieval pipeline:
         1. Optionally rewrite the query using LLM
-        2. Embed the query for vector search
-        3. Execute search with appropriate strategy
-        4. Post-process for special indexing techniques
-        5. Rerank for improved relevance
+        2. Check semantic cache for similar queries
+        3. Embed the query for vector search
+        4. Execute search with appropriate strategy
+        5. Post-process for special indexing techniques
+        6. Rerank for improved relevance
+        7. Cache results for future queries
 
         Args:
             store: The vector store to search
             query: The user's search query
             top_k: Number of results to return
             rewrite: Whether to apply query rewriting (default: True)
+            use_cache: Whether to use semantic caching (default: True)
 
         Returns:
             Tuple of (results list, search type string)
@@ -312,13 +333,21 @@ class RetrievalService:
         # Step 2: Embed query
         query_vector = self._embed_query(final_query)
 
-        # Step 3: Determine search parameters
+        # Step 3: Check semantic cache
+        if use_cache and self.cache and query_vector:
+            cache_hit = self.cache.get_by_similarity(query_vector)
+            if cache_hit:
+                search_type = cache_hit.metadata.get("search_type", "cached")
+                logger.info(f"Semantic cache hit for query: '{final_query[:50]}...'")
+                return cache_hit.results, f"{search_type}+cached"
+
+        # Step 4: Determine search parameters
         search_type = self._determine_search_type(store, query_vector)
 
         # Expand retrieval if reranker is configured
         k = top_k * 5 if self.reranker else top_k
 
-        # Step 4: Execute search
+        # Step 5: Execute search
         if search_type == "hybrid":
             results = store.search(
                 final_query,
@@ -335,16 +364,25 @@ class RetrievalService:
         else:
             results = store.search(final_query, top_k=k)
 
-        # Step 5: Post-process results
+        # Step 6: Post-process results
         self._process_qa_results(results)
         self._process_parent_child_results(results)
 
-        # Step 6: Rerank
+        # Step 7: Rerank
         if self.reranker and results:
             results = self._rerank_results(final_query, results, top_k)
             search_type += "+rerank"
         else:
             results = results[:top_k]
+
+        # Step 8: Cache results
+        if use_cache and self.cache and query_vector and results:
+            self.cache.set_with_embedding(
+                query=final_query,
+                embedding=query_vector,
+                results=results,
+                metadata={"search_type": search_type, "top_k": top_k}
+            )
 
         return results, search_type
 
@@ -353,7 +391,8 @@ class RetrievalService:
         stores: dict[str, BaseVector],
         query: str,
         top_k: int = 5,
-        rewrite: bool = True
+        rewrite: bool = True,
+        use_cache: bool = True
     ) -> tuple[list[LangRAGDocument], str]:
         """
         Search across multiple vector stores and merge results.
@@ -362,11 +401,13 @@ class RetrievalService:
         and returns the top-scoring documents across all sources.
 
         The merging strategy:
-        1. Search each store with the same query
-        2. Tag results with their source KB ID
-        3. Sort combined results by score (descending)
-        4. Apply reranking if configured
-        5. Return top_k results
+        1. Check semantic cache for similar queries
+        2. Search each store with the same query
+        3. Tag results with their source KB ID
+        4. Sort combined results by score (descending)
+        5. Apply reranking if configured
+        6. Cache results for future queries
+        7. Return top_k results
 
         Note: Scores may not be directly comparable across different
         vector store types. Reranking is recommended for multi-KB search.
@@ -376,6 +417,7 @@ class RetrievalService:
             query: The user's search query
             top_k: Number of results to return
             rewrite: Whether to apply query rewriting (default: True)
+            use_cache: Whether to use semantic caching (default: True)
 
         Returns:
             Tuple of (results list, search type string)
@@ -401,10 +443,20 @@ class RetrievalService:
         if query_vector:
             primary_search_type = "vector"
 
+        # Step 3: Check semantic cache
+        if use_cache and self.cache and query_vector:
+            # Create context key from KB IDs for cache scoping
+            context_key = ",".join(sorted(stores.keys()))
+            cache_hit = self.cache.get_by_similarity(query_vector, context_key=context_key)
+            if cache_hit:
+                search_type = cache_hit.metadata.get("search_type", "cached")
+                logger.info(f"Semantic cache hit for multi-search query: '{final_query[:50]}...'")
+                return cache_hit.results, f"{search_type}+cached"
+
         # Expand retrieval if reranker is configured
         k = top_k * 5 if self.reranker else top_k
 
-        # Step 3: Search each store
+        # Step 4: Search each store
         for kb_id, store in stores.items():
             search_type = self._determine_search_type(store, query_vector)
 
@@ -435,21 +487,35 @@ class RetrievalService:
             except Exception as e:
                 logger.error(f"Search failed for KB {kb_id}: {e}")
 
-        # Step 4: Sort by score
+        # Step 5: Sort by score
         all_results.sort(
             key=lambda x: x.metadata.get('score', 0),
             reverse=True
         )
 
-        # Step 5: Post-process
+        # Step 6: Post-process
         self._process_qa_results(all_results)
         self._process_parent_child_results(all_results)
 
-        # Step 6: Rerank
+        # Step 7: Rerank
         if self.reranker and all_results:
             all_results = self._rerank_results(final_query, all_results, top_k)
             primary_search_type += "+rerank"
         else:
             all_results = all_results[:top_k]
+
+        # Step 8: Cache results
+        if use_cache and self.cache and query_vector and all_results:
+            context_key = ",".join(sorted(stores.keys()))
+            self.cache.set_with_embedding(
+                query=final_query,
+                embedding=query_vector,
+                results=all_results,
+                metadata={
+                    "search_type": primary_search_type,
+                    "top_k": top_k,
+                    "context_key": context_key
+                }
+            )
 
         return all_results, primary_search_type

@@ -77,10 +77,11 @@ sys.path.append(str(Path(__file__).parents[2] / "src"))
 
 from langrag import BaseEmbedder, BaseVector, Dataset, EmbedderFactory
 from langrag import Document as LangRAGDocument
+from langrag.cache import SemanticCache
 from langrag.datasource.kv.sqlite import SQLiteKV
 from langrag.retrieval.rerank.base import BaseReranker
 from langrag.retrieval.rerank.factory import RerankerFactory
-from web.config import DATA_DIR
+from web.config import DATA_DIR, settings
 from web.core.chat_service import ChatService
 from web.core.document_processor import DocumentProcessor
 from web.core.embedders import SeekDBEmbedder, WebOpenAIEmbedder
@@ -121,6 +122,7 @@ class RAGKernel:
         Sets up:
         - Vector store manager for VDB lifecycle management
         - SQLite KV store for parent-child indexing
+        - Semantic cache for query deduplication (if enabled)
         - Empty service references (configured lazily)
         - Custom embedder registration
         """
@@ -146,6 +148,21 @@ class RAGKernel:
         kv_path = DATA_DIR / "kv_store.sqlite"
         self.kv_store = SQLiteKV(db_path=str(kv_path))
         logger.info(f"[RAGKernel] KV Store initialized at {kv_path}")
+
+        # Semantic cache (configuration-driven)
+        self.cache: SemanticCache | None = None
+        if settings.CACHE_ENABLED:
+            self.cache = SemanticCache(
+                similarity_threshold=settings.CACHE_SIMILARITY_THRESHOLD,
+                ttl_seconds=settings.CACHE_TTL_SECONDS,
+                max_size=settings.CACHE_MAX_SIZE
+            )
+            logger.info(
+                f"[RAGKernel] Semantic cache enabled: "
+                f"threshold={settings.CACHE_SIMILARITY_THRESHOLD}, "
+                f"ttl={settings.CACHE_TTL_SECONDS}s, "
+                f"max_size={settings.CACHE_MAX_SIZE}"
+            )
 
         # Services (initialized lazily when dependencies are ready)
         self._document_processor: DocumentProcessor | None = None
@@ -285,6 +302,69 @@ class RAGKernel:
             logger.error(f"Failed to set reranker: {e}")
             raise
 
+    def set_cache(
+        self,
+        enabled: bool = True,
+        similarity_threshold: float = 0.95,
+        ttl_seconds: int = 3600,
+        max_size: int = 1000
+    ) -> None:
+        """
+        Configure the semantic cache programmatically.
+
+        This method allows overriding the configuration-driven cache settings
+        at runtime. Useful for testing or dynamic cache configuration.
+
+        Args:
+            enabled: Whether to enable caching (True) or disable it (False)
+            similarity_threshold: Minimum cosine similarity for cache hit (0.0-1.0)
+            ttl_seconds: Cache entry lifetime in seconds (0 = no expiration)
+            max_size: Maximum cached entries (0 = unlimited)
+
+        Example:
+            >>> kernel.set_cache(enabled=True, similarity_threshold=0.98)
+            >>> kernel.set_cache(enabled=False)  # Disable caching
+        """
+        if enabled:
+            self.cache = SemanticCache(
+                similarity_threshold=similarity_threshold,
+                ttl_seconds=ttl_seconds,
+                max_size=max_size
+            )
+            logger.info(
+                f"[RAGKernel] Semantic cache configured: "
+                f"threshold={similarity_threshold}, ttl={ttl_seconds}s, max_size={max_size}"
+            )
+        else:
+            self.cache = None
+            logger.info("[RAGKernel] Semantic cache disabled")
+
+        self._rebuild_services()
+
+    @property
+    def cache_stats(self) -> dict | None:
+        """
+        Get cache statistics.
+
+        Returns:
+            Dictionary with hits, misses, hit_rate, size, etc.
+            None if cache is disabled.
+
+        Example:
+            >>> stats = kernel.cache_stats
+            >>> if stats:
+            ...     print(f"Hit rate: {stats['hit_rate']:.2%}")
+        """
+        if self.cache:
+            return self.cache.stats
+        return None
+
+    def clear_cache(self) -> None:
+        """Clear all cached query results."""
+        if self.cache:
+            self.cache.clear()
+            logger.info("[RAGKernel] Cache cleared")
+
     def _rebuild_services(self) -> None:
         """
         Rebuild services when dependencies change.
@@ -299,12 +379,13 @@ class RAGKernel:
             kv_store=self.kv_store
         )
 
-        # Rebuild retrieval service
+        # Rebuild retrieval service (with semantic cache)
         self._retrieval_service = RetrievalService(
             embedder=self.embedder,
             reranker=self.reranker,
             rewriter=self.rewriter,
-            kv_store=self.kv_store
+            kv_store=self.kv_store,
+            cache=self.cache
         )
 
         # Rebuild chat service (only if LLM is configured)
@@ -482,7 +563,8 @@ class RAGKernel:
                 embedder=self.embedder,
                 reranker=self.reranker,
                 rewriter=self.rewriter,
-                kv_store=self.kv_store
+                kv_store=self.kv_store,
+                cache=self.cache
             )
 
         return self._retrieval_service.search(
@@ -527,7 +609,8 @@ class RAGKernel:
                 embedder=self.embedder,
                 reranker=self.reranker,
                 rewriter=self.rewriter,
-                kv_store=self.kv_store
+                kv_store=self.kv_store,
+                cache=self.cache
             )
 
         return self._retrieval_service.multi_search(
@@ -581,7 +664,8 @@ class RAGKernel:
                     embedder=self.embedder,
                     reranker=self.reranker,
                     rewriter=self.rewriter,
-                    kv_store=self.kv_store
+                    kv_store=self.kv_store,
+                    cache=self.cache
                 )
 
             self._chat_service = ChatService(
