@@ -1,9 +1,38 @@
+"""
+DuckDB Vector Store with Full-Text Search and Vector Search Support.
+
+This module provides a DuckDB-based vector store implementation that supports:
+- Vector similarity search using HNSW indexing
+- Full-Text Search (FTS) using BM25 ranking
+- Hybrid search combining both modalities with RRF fusion
+
+Architecture:
+------------
+DuckDB extensions used:
+- VSS (Vector Similarity Search): For HNSW-based vector search
+- FTS (Full-Text Search): For BM25-based keyword search
+- JSON: For metadata storage
+
+FTS Index Naming Convention:
+----------------------------
+DuckDB FTS creates an index with a specific naming pattern:
+- Index name: fts_main_{table_name}
+- BM25 function: fts_main_{table_name}.match_bm25(id_column, query)
+
+Example:
+    For table 'documents', the BM25 function is:
+    fts_main_documents.match_bm25(id, 'search query')
+"""
+
+import contextlib
 import json
 import logging
 
 from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
+from langrag.entities.search_result import SearchResult
+from langrag.utils.rrf import reciprocal_rank_fusion
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +45,21 @@ except ImportError:
 
 class DuckDBVector(BaseVector):
     """
-    DuckDB Vector Store with Vector Search Support.
+    DuckDB Vector Store with Vector and Full-Text Search Support.
 
     Features:
-    - ✅ Vector similarity search with HNSW indexing
-    - ✅ Hybrid search (when keyword search is available)
-    - ❌ Full-Text Search (FTS): NOT IMPLEMENTED in current DuckDB version
+    - Vector similarity search with HNSW indexing (cosine distance)
+    - Full-Text Search (FTS) with BM25 ranking
+    - Hybrid search combining vector + FTS with Reciprocal Rank Fusion
 
-    Note: Full-Text Search functionality is not available in the current DuckDB version.
-    Hybrid search falls back to vector search only when FTS is unavailable.
+    Note:
+        FTS index is created automatically after first data insertion.
+        The index uses Porter stemmer, English stopwords, and lowercase normalization.
+
+    Example:
+        >>> store = DuckDBVector(dataset, database_path="./vectors.db")
+        >>> store.add_texts(documents)
+        >>> results = store.search("query", query_vector, search_type="hybrid")
     """
 
     def __init__(
@@ -33,6 +68,14 @@ class DuckDBVector(BaseVector):
         database_path: str = "./duckdb_vector.db",
         table_name: str | None = None
     ):
+        """
+        Initialize DuckDB vector store.
+
+        Args:
+            dataset: Dataset configuration object
+            database_path: Path to DuckDB database file
+            table_name: Table name for storage (defaults to dataset.collection_name)
+        """
         super().__init__(dataset)
         if not DUCKDB_AVAILABLE:
             raise ImportError("duckdb is required. Install with: pip install duckdb")
@@ -40,40 +83,28 @@ class DuckDBVector(BaseVector):
         self.database_path = database_path
         self.table_name = table_name or self.dataset.collection_name
         self._connection = duckdb.connect(self.database_path)
+        self._fts_index_created = False
 
-        # Load extensions
+        # Load required extensions
         self._load_extensions()
 
-        # Initialize table schema
-        # We try to infer dimension later, or assume 768/1536 mostly.
-        # DuckDB VSS requires fixed array size?
-        # Yes, FLOAT[N]. We need to know N.
-        # Strategy: Create table on first insertion if not exists, or check existing schema.
-        self._check_and_init_table_if_possible()
-
-    def _load_extensions(self):
+    def _load_extensions(self) -> None:
+        """Load DuckDB extensions for vector search, FTS, and JSON support."""
         try:
-             self._connection.execute("INSTALL vss; LOAD vss;")
-             self._connection.execute("INSTALL fts; LOAD fts;")
-             self._connection.execute("INSTALL json; LOAD json;")
+            self._connection.execute("INSTALL vss; LOAD vss;")
+            self._connection.execute("INSTALL fts; LOAD fts;")
+            self._connection.execute("INSTALL json; LOAD json;")
+            logger.debug("DuckDB extensions loaded: VSS, FTS, JSON")
         except Exception as e:
-             logger.warning(f"Failed to load DuckDB extensions: {e}")
+            logger.warning(f"Failed to load DuckDB extensions: {e}")
 
-    def _check_and_init_table_if_possible(self):
-        # We can't create vector column without dimension.
-        # We rely on 'create' method to do it, or if table exists, we are good.
-        pass
+    def _ensure_table_exists(self, dim: int) -> None:
+        """
+        Ensure the table exists with the correct schema.
 
-    def create(self, texts: list[Document], **kwargs) -> None:
-        """Create or Replace collection."""
-        if not texts:
-            return
-
-        dim = 768
-        if texts[0].vector:
-            dim = len(texts[0].vector)
-
-        # Create table with precise dimension
+        Args:
+            dim: Vector dimension for the embedding column
+        """
         schema = f"""
         CREATE TABLE IF NOT EXISTS {self.table_name} (
             id VARCHAR PRIMARY KEY,
@@ -85,30 +116,103 @@ class DuckDBVector(BaseVector):
         """
         self._connection.execute(schema)
 
-        # Create Indexes (HNSW only for now)
+    def _create_vector_index(self) -> None:
+        """Create HNSW index for vector similarity search."""
         try:
-             # VSS Index
-             self._connection.execute(f"CREATE INDEX IF NOT EXISTS idx_vec_{self.table_name} ON {self.table_name} USING HNSW (embedding)")
+            self._connection.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_vec_{self.table_name} "
+                f"ON {self.table_name} USING HNSW (embedding)"
+            )
+            logger.debug(f"HNSW index created for {self.table_name}")
         except Exception as e:
-             logger.warning(f"Index creation warning: {e}")
+            logger.warning(f"HNSW index creation warning: {e}")
 
-        # FTS Index will be created after data insertion
+    def _create_fts_index(self) -> None:
+        """
+        Create Full-Text Search index on the content column.
 
+        The FTS index uses:
+        - Porter stemmer for word normalization
+        - English stopwords removal
+        - Case-insensitive matching
+        - Accent stripping
+        """
+        if self._fts_index_created:
+            return
+
+        try:
+            # Check if FTS index already exists
+            fts_table = f"fts_main_{self.table_name}"
+            try:
+                self._connection.execute(f"SELECT * FROM {fts_table} LIMIT 0")
+                self._fts_index_created = True
+                logger.debug(f"FTS index already exists for {self.table_name}")
+                return
+            except Exception:
+                pass  # Index doesn't exist, create it
+
+            # Create FTS index with stemming and stopwords
+            self._connection.execute(f"""
+                PRAGMA create_fts_index(
+                    '{self.table_name}',
+                    'id',
+                    'content',
+                    stemmer='porter',
+                    stopwords='english',
+                    strip_accents=1,
+                    lower=1
+                )
+            """)
+            self._fts_index_created = True
+            logger.info(f"FTS index created for {self.table_name}")
+        except Exception as e:
+            logger.warning(f"FTS index creation failed: {e}")
+
+    def create(self, texts: list[Document], **kwargs) -> None:
+        """
+        Create or replace collection with initial documents.
+
+        Args:
+            texts: List of documents to insert
+            **kwargs: Additional arguments (unused)
+        """
+        if not texts:
+            return
+
+        # Determine vector dimension from first document
+        dim = 768  # Default dimension
+        if texts[0].vector:
+            dim = len(texts[0].vector)
+
+        # Create table schema
+        self._ensure_table_exists(dim)
+
+        # Create vector index
+        self._create_vector_index()
+
+        # Insert documents
         self.add_texts(texts, **kwargs)
 
-    def add_texts(self, texts: list[Document], **kwargs) -> None:
-        if not texts: return
+    def add_texts(self, texts: list[Document], **_kwargs) -> None:
+        """
+        Add documents to the vector store.
 
-        # Ensure table exists (if create wasn't called specifically)
-        # If table doesn't exist here, we try to create it inferred from first doc
+        Args:
+            texts: List of documents to add
+            **kwargs: Additional arguments (unused)
+        """
+        if not texts:
+            return
+
+        # Ensure table exists
         try:
-             self._connection.execute(f"SELECT 1 FROM {self.table_name} LIMIT 0")
-        except:
-             # Table missing, call create logic
-             self.create(texts)
-             # return because create calls add_texts
-             return
+            self._connection.execute(f"SELECT 1 FROM {self.table_name} LIMIT 0")
+        except Exception:
+            # Table doesn't exist, create it
+            self.create(texts)
+            return
 
+        # Prepare and insert data
         data = []
         for doc in texts:
             meta_json = json.dumps(doc.metadata)
@@ -117,6 +221,9 @@ class DuckDBVector(BaseVector):
         sql = f"INSERT OR REPLACE INTO {self.table_name} VALUES (?, ?, ?, ?, ?)"
         self._connection.executemany(sql, data)
 
+        # Create FTS index after data insertion (FTS needs data to index)
+        self._create_fts_index()
+
     def search(
         self,
         query: str,
@@ -124,7 +231,19 @@ class DuckDBVector(BaseVector):
         top_k: int = 4,
         **kwargs
     ) -> list[Document]:
+        """
+        Search the vector store.
 
+        Args:
+            query: Text query for FTS search
+            query_vector: Vector for similarity search
+            top_k: Number of results to return
+            **kwargs: Additional arguments
+                - search_type: 'similarity', 'keyword', or 'hybrid'
+
+        Returns:
+            List of matching documents with scores in metadata
+        """
         search_type = kwargs.get('search_type', 'similarity')
 
         if search_type == 'hybrid' and query_vector:
@@ -134,13 +253,23 @@ class DuckDBVector(BaseVector):
         else:
             return self._search_vector(query_vector, top_k)
 
-    def _search_vector(self, query_vector: list[float], top_k: int) -> list[Document]:
-        if not query_vector: return []
+    def _search_vector(self, query_vector: list[float] | None, top_k: int) -> list[Document]:
+        """
+        Perform vector similarity search using cosine distance.
 
-        # list_cosine_distance returns distance (0..2 for cosine).
-        # Similarity = 1 - Distance (Approx for ranking)
+        Args:
+            query_vector: Query embedding vector
+            top_k: Number of results to return
+
+        Returns:
+            List of documents ordered by similarity (highest first)
+        """
+        if not query_vector:
+            return []
+
         sql = f"""
-        SELECT id, content, metadata, list_cosine_distance(embedding, ?::FLOAT[{len(query_vector)}]) as dist
+        SELECT id, content, metadata,
+               list_cosine_distance(embedding, ?::FLOAT[{len(query_vector)}]) as dist
         FROM {self.table_name}
         ORDER BY dist ASC
         LIMIT ?
@@ -150,69 +279,134 @@ class DuckDBVector(BaseVector):
 
     def _search_keyword(self, query: str, top_k: int) -> list[Document]:
         """
-        Full-Text Search (FTS) is NOT IMPLEMENTED in current DuckDB version.
+        Perform Full-Text Search using BM25 ranking.
 
-        This method raises NotImplementedError to clearly indicate that
-        keyword-based text search is not available in DuckDB.
+        Args:
+            query: Text query for keyword search
+            top_k: Number of results to return
 
-        For text search capabilities, consider using other vector stores
-        that support both vector and text search (e.g., ChromaDB, Pinecone).
+        Returns:
+            List of documents ordered by BM25 score (highest first)
         """
-        raise NotImplementedError(
-            "DuckDB Full-Text Search (FTS) is not implemented in current version. "
-            "Keyword search is not available. Use vector search or switch to "
-            "a vector store that supports both vector and text search."
-        )
+        # Ensure FTS index exists
+        self._create_fts_index()
 
-        # Use correct syntax for DuckDB FTS
+        fts_table = f"fts_main_{self.table_name}"
+
         sql = f"""
-        SELECT t.id, t.content, t.metadata, {fts_table}.match_bm25(t.id, ?) as score
-        FROM {self.table_name} t
+        SELECT id, content, metadata,
+               {fts_table}.match_bm25(id, ?) as score
+        FROM {self.table_name}
         WHERE score IS NOT NULL
         ORDER BY score DESC
         LIMIT ?
         """
+
         try:
-            logger.info(f"Executing FTS query: {query}")
             rows = self._connection.execute(sql, [query, top_k]).fetchall()
-            logger.info(f"FTS query returned {len(rows)} rows")
+            return self._rows_to_docs(rows, score_strategy='score')
         except Exception as e:
             logger.error(f"FTS query failed: {e}")
             return []
 
-        return self._rows_to_docs(rows, score_strategy='score')
-
-    def _search_hybrid(self, query: str, query_vector: list[float], top_k: int) -> list[Document]:
+    def _search_hybrid(
+        self,
+        query: str,
+        query_vector: list[float],
+        top_k: int
+    ) -> list[Document]:
         """
-        Hybrid search is NOT IMPLEMENTED because Full-Text Search is unavailable.
+        Perform hybrid search combining vector and FTS with RRF fusion.
 
-        Since DuckDB FTS is not implemented, true hybrid search (combining vector
-        and keyword search) cannot be performed. This method raises NotImplementedError
-        to clearly indicate this limitation.
+        The hybrid search:
+        1. Retrieves top 2*top_k results from vector search
+        2. Retrieves top 2*top_k results from FTS search
+        3. Fuses results using Reciprocal Rank Fusion (RRF)
+        4. Returns top top_k fused results
+
+        Args:
+            query: Text query for FTS
+            query_vector: Query embedding for vector search
+            top_k: Number of final results
+
+        Returns:
+            List of documents with fused scores
         """
-        raise NotImplementedError(
-            "DuckDB Hybrid Search is not implemented because Full-Text Search (FTS) "
-            "is not available in current version. Hybrid search requires both vector "
-            "and keyword search capabilities. Use vector search only or switch to "
-            "a vector store that supports both modalities."
+        # Expand retrieval for fusion
+        expanded_k = top_k * 2
+
+        # Get vector search results
+        vector_results = self._search_vector(query_vector, expanded_k)
+
+        # Get FTS results
+        fts_results = self._search_keyword(query, expanded_k)
+
+        # If one source has no results, return the other
+        if not fts_results:
+            return vector_results[:top_k]
+        if not vector_results:
+            return fts_results[:top_k]
+
+        # Convert to SearchResult objects for RRF
+        vector_search_results = [
+            SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+            for doc in vector_results
+        ]
+        fts_search_results = [
+            SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+            for doc in fts_results
+        ]
+
+        # Fuse results using RRF
+        fused_ranking = reciprocal_rank_fusion(
+            [vector_search_results, fts_search_results],
+            top_k=top_k
         )
 
-    def _rows_to_docs(self, rows, score_strategy='score') -> list[Document]:
+        # Convert back to Document list with fused scores
+        results = []
+        for search_result in fused_ranking:
+            doc = search_result.chunk
+            doc.metadata['score'] = search_result.score
+            doc.metadata['search_type'] = 'hybrid'
+            results.append(doc)
+
+        return results
+
+    def _rows_to_docs(
+        self,
+        rows: list[tuple],
+        score_strategy: str = 'score'
+    ) -> list[Document]:
+        """
+        Convert database rows to Document objects.
+
+        Args:
+            rows: List of (id, content, metadata, score/distance) tuples
+            score_strategy: How to interpret the fourth column:
+                - 'distance': Convert cosine distance to similarity
+                - 'score': Use raw BM25 score
+
+        Returns:
+            List of Document objects with scores in metadata
+        """
         docs = []
         for row in rows:
             doc_id, content, meta_json, val = row
+
             try:
-                meta = json.loads(meta_json)
-            except:
+                meta = json.loads(meta_json) if meta_json else {}
+            except (json.JSONDecodeError, TypeError):
                 meta = {}
 
             if score_strategy == 'distance':
-                # Convert distance to similarity
-                # HNSW Cosine Distance is 1 - CosSim ? Or 1 - (CosSim+1)/2?
-                # Usually we just invert it for ranking. 0 is best.
-                score = 1.0 / (1.0 + val)
+                # Convert cosine distance to similarity score
+                # Cosine distance ranges from 0 (identical) to 2 (opposite)
+                # Convert to 0-1 similarity where 1 is most similar
+                score = 1.0 / (1.0 + val) if val is not None else 0.0
             else:
-                score = val # Raw BM25 score
+                # Raw BM25 score (higher is better)
+                score = val if val is not None else 0.0
 
             meta['score'] = score
 
@@ -221,21 +415,38 @@ class DuckDBVector(BaseVector):
                 page_content=content,
                 metadata=meta
             ))
+
         return docs
 
     def delete_by_ids(self, ids: list[str]) -> None:
-        if not ids: return
-        ph = ",".join("?" for _ in ids)
-        self._connection.execute(f"DELETE FROM {self.table_name} WHERE id IN ({ph})", ids)
+        """
+        Delete documents by their IDs.
+
+        Args:
+            ids: List of document IDs to delete
+        """
+        if not ids:
+            return
+        placeholders = ",".join("?" for _ in ids)
+        self._connection.execute(
+            f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",
+            ids
+        )
 
     def delete(self) -> None:
+        """Delete the entire collection (drop table)."""
         try:
+            # Drop FTS index first
+            with contextlib.suppress(Exception):
+                self._connection.execute(f"PRAGMA drop_fts_index('{self.table_name}')")
+
+            # Drop the main table
             self._connection.execute(f"DROP TABLE IF EXISTS {self.table_name}")
-        except:
-             pass
+            self._fts_index_created = False
+        except Exception as e:
+            logger.warning(f"Error deleting table: {e}")
 
     def __del__(self):
-        try:
-             self._connection.close()
-        except:
-             pass
+        """Clean up database connection."""
+        with contextlib.suppress(Exception):
+            self._connection.close()

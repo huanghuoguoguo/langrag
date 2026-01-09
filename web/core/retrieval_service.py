@@ -245,7 +245,7 @@ class RetrievalService:
         Determine the best search type based on capabilities.
 
         Search type selection logic:
-        - SeekDB + vector → hybrid (best of both worlds)
+        - SeekDB/DuckDB + vector → hybrid (best of both worlds)
         - Any store + vector → vector search
         - No vector → keyword search
 
@@ -258,7 +258,10 @@ class RetrievalService:
         """
         store_class = store.__class__.__name__
 
-        if store_class == 'SeekDBVector' and query_vector:
+        # Stores with hybrid search support (vector + FTS)
+        hybrid_capable_stores = {'SeekDBVector', 'DuckDBVector'}
+
+        if store_class in hybrid_capable_stores and query_vector:
             return "hybrid"
         elif query_vector:
             return "vector"
