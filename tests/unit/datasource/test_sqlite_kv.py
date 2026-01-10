@@ -5,7 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from langrag.datasource.kv.sqlite import SQLiteKV
+from langrag.datasource.kv.sqlite import (
+    SQLiteKV,
+)
 
 
 class TestSQLiteKV:
@@ -182,4 +184,50 @@ class TestSQLiteKV:
         with SQLiteKV(db_path=db_path) as kv:
             value = kv.mget(["persist_key"])[0]
             assert value == "persist_value"
+
+
+class TestSQLiteKVTableNameValidation:
+    """Tests for SQLiteKV table name validation."""
+
+    @pytest.fixture
+    def db_path(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            path = f.name
+        yield path
+        if os.path.exists(path):
+            os.remove(path)
+
+    def test_valid_table_name(self, db_path):
+        """Test that valid table names are accepted."""
+        kv = SQLiteKV(db_path=db_path, table_name="valid_table")
+        assert kv.table_name == "valid_table"
+        kv.close()
+
+    def test_invalid_table_name_raises(self, db_path):
+        """Test that invalid table names raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid table name"):
+            SQLiteKV(db_path=db_path, table_name="invalid-name")
+
+    def test_sql_injection_attempt_blocked(self, db_path):
+        """Test that SQL injection attempts are blocked."""
+        with pytest.raises(ValueError, match="Invalid table name"):
+            SQLiteKV(db_path=db_path, table_name="'; DROP TABLE kv_store;--")
+
+    def test_reserved_word_raises(self, db_path):
+        """Test that SQL reserved words are rejected."""
+        with pytest.raises(ValueError, match="reserved word"):
+            SQLiteKV(db_path=db_path, table_name="select")
+
+    def test_empty_table_name_raises(self, db_path):
+        """Test that empty table name raises ValueError."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            SQLiteKV(db_path=db_path, table_name="")
+
+    def test_default_table_name_works(self, db_path):
+        """Test that default table name works."""
+        kv = SQLiteKV(db_path=db_path)  # Uses default "kv_store"
+        assert kv.table_name == "kv_store"
+        kv.mset({"key": "value"})
+        assert kv.mget(["key"])[0] == "value"
+        kv.close()
 
