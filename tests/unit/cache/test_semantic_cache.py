@@ -10,12 +10,16 @@ These tests verify:
 6. Cache statistics
 """
 
-import time
 import threading
+import time
 
 import pytest
 
-from langrag.cache import SemanticCache, CacheEntry, cosine_similarity
+from langrag.cache import SemanticCache, cosine_similarity
+from langrag.cache.semantic import (
+    NUMPY_AVAILABLE,
+    _cosine_similarity_python,
+)
 from langrag.entities.document import Document
 
 
@@ -57,6 +61,95 @@ class TestCosinesSimilarity:
         vec1 = [0.0, 0.0, 0.0]
         vec2 = [0.1, 0.2, 0.3]
         assert cosine_similarity(vec1, vec2) == 0.0
+
+
+class TestCosinesSimilarityImplementations:
+    """Tests for NumPy vs Python implementation consistency."""
+
+    def test_numpy_available_constant(self):
+        """Test that NUMPY_AVAILABLE constant is a boolean."""
+        assert isinstance(NUMPY_AVAILABLE, bool)
+
+    def test_python_implementation_identical_vectors(self):
+        """Pure Python: identical vectors should have similarity of 1.0."""
+        vec = [0.1, 0.2, 0.3, 0.4]
+        assert _cosine_similarity_python(vec, vec) == pytest.approx(1.0)
+
+    def test_python_implementation_orthogonal_vectors(self):
+        """Pure Python: orthogonal vectors should have similarity of 0.0."""
+        vec1 = [1.0, 0.0]
+        vec2 = [0.0, 1.0]
+        assert _cosine_similarity_python(vec1, vec2) == pytest.approx(0.0)
+
+    def test_python_implementation_opposite_vectors(self):
+        """Pure Python: opposite vectors should have similarity of -1.0."""
+        vec1 = [1.0, 0.0]
+        vec2 = [-1.0, 0.0]
+        assert _cosine_similarity_python(vec1, vec2) == pytest.approx(-1.0)
+
+    def test_python_implementation_different_lengths(self):
+        """Pure Python: different length vectors should return 0.0."""
+        vec1 = [0.1, 0.2, 0.3]
+        vec2 = [0.1, 0.2, 0.3, 0.4]
+        assert _cosine_similarity_python(vec1, vec2) == 0.0
+
+    def test_python_implementation_zero_vector(self):
+        """Pure Python: zero vector should return 0.0 similarity."""
+        vec1 = [0.0, 0.0, 0.0]
+        vec2 = [0.1, 0.2, 0.3]
+        assert _cosine_similarity_python(vec1, vec2) == 0.0
+
+    def test_implementation_consistency(self):
+        """Both implementations should produce the same results."""
+        test_vectors = [
+            ([0.1, 0.2, 0.3, 0.4], [0.1, 0.2, 0.3, 0.4]),
+            ([1.0, 0.0], [0.0, 1.0]),
+            ([1.0, 0.0], [-1.0, 0.0]),
+            ([0.5, 0.5, 0.5], [0.1, 0.2, 0.3]),
+            ([0.1, 0.2, 0.3, 0.4, 0.5], [0.5, 0.4, 0.3, 0.2, 0.1]),
+        ]
+
+        for vec1, vec2 in test_vectors:
+            python_result = _cosine_similarity_python(vec1, vec2)
+            # cosine_similarity uses NumPy if available, else Python
+            auto_result = cosine_similarity(vec1, vec2)
+            assert python_result == pytest.approx(auto_result, rel=1e-5), (
+                f"Mismatch for {vec1}, {vec2}: "
+                f"python={python_result}, auto={auto_result}"
+            )
+
+    def test_large_vectors_performance(self):
+        """Test with larger vectors (typical embedding size)."""
+        import random
+        random.seed(42)
+
+        # Simulate 384-dim embedding (common for small models)
+        vec1 = [random.random() for _ in range(384)]
+        vec2 = [random.random() for _ in range(384)]
+
+        result = cosine_similarity(vec1, vec2)
+        # Just verify it returns a valid similarity score
+        assert -1.0 <= result <= 1.0
+
+    @pytest.mark.skipif(not NUMPY_AVAILABLE, reason="NumPy not available")
+    def test_numpy_implementation_directly(self):
+        """Test NumPy implementation directly when available."""
+        from langrag.cache.semantic import _cosine_similarity_numpy
+
+        vec1 = [0.1, 0.2, 0.3, 0.4]
+        vec2 = [0.1, 0.2, 0.3, 0.4]
+        result = _cosine_similarity_numpy(vec1, vec2)
+        assert result == pytest.approx(1.0)
+
+    @pytest.mark.skipif(not NUMPY_AVAILABLE, reason="NumPy not available")
+    def test_numpy_handles_zero_vector(self):
+        """NumPy implementation should handle zero vectors."""
+        from langrag.cache.semantic import _cosine_similarity_numpy
+
+        vec1 = [0.0, 0.0, 0.0]
+        vec2 = [0.1, 0.2, 0.3]
+        result = _cosine_similarity_numpy(vec1, vec2)
+        assert result == 0.0
 
 
 class TestSemanticCache:
