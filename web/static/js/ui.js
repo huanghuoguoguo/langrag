@@ -1,4 +1,37 @@
 
+
+export function renderEvaluationResult(container, result) {
+    const metrics = [
+        { key: 'faithfulness', label: '忠实度', color: 'var(--success)' },
+        { key: 'answer_relevancy', label: '回答相关性', color: '#3b82f6' },
+        { key: 'context_relevancy', label: '上下文相关性', color: '#f59e0b' }
+    ];
+
+    let html = '<div style="background:rgba(0,0,0,0.2); padding:0.75rem; border-radius:4px;">';
+
+    metrics.forEach(m => {
+        const item = result[m.key];
+        if (!item) return;
+        const width = (item.score * 100).toFixed(1) + '%';
+        html += `
+            <div style="margin-bottom:0.5rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:0.15rem;">
+                    <span>${m.label}</span>
+                    <span>${item.score.toFixed(2)}</span>
+                </div>
+                <div style="height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;">
+                    <div style="height:100%; width:${width}; background:${m.color};"></div>
+                </div>
+                ${item.reason ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">${item.reason}</div>` : ''}
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+    container.style.display = 'block';
+}
+
 export function renderKBList(kbs, container) {
     if (kbs.length === 0) {
         container.innerHTML = `
@@ -170,7 +203,7 @@ export function renderSearchResults(results, container) {
     }
 }
 
-export function appendMessage(container, role, content, sources = []) {
+export function appendMessage(container, role, content, sources = [], question = null) {
     const el = document.createElement('div');
     el.className = `message ${role}`;
 
@@ -232,6 +265,18 @@ export function appendMessage(container, role, content, sources = []) {
         contentHtml += '</div>';
     }
 
+    // Add Eval Button placeholder if assistant and has context
+    if (role === 'assistant' && sources && sources.length > 0 && question) {
+        contentHtml += `
+            <div class="eval-section" style="margin-top:1rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1);">
+                <button class="btn-eval" style="font-size:0.8rem; padding:0.4rem 0.8rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; color:var(--text-main); cursor:pointer; transition:all 0.2s;">
+                    📊此处点击评估回答质量
+                </button>
+                <div class="eval-result" style="margin-top:0.75rem; display:none;"></div>
+            </div>
+        `;
+    }
+
     el.innerHTML = `
         <div class="avatar">${role === 'user' ? 'U' : 'AI'}</div>
         <div class="message-content">${contentHtml}</div>
@@ -239,6 +284,7 @@ export function appendMessage(container, role, content, sources = []) {
 
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
+    return el;
 }
 
 export function renderFilesToUpload(files, container) {
