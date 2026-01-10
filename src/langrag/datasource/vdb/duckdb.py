@@ -52,6 +52,11 @@ SQL_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 MAX_TABLE_NAME_LENGTH = 128
 
 
+class VectorDimensionError(ValueError):
+    """Raised when vector dimensions are inconsistent or invalid."""
+    pass
+
+
 def validate_table_name(table_name: str) -> None:
     """
     Validate a table name to prevent SQL injection.
@@ -157,6 +162,7 @@ class DuckDBVector(BaseVector):
         self._connection = duckdb.connect(self.database_path)
         self._fts_index_created = False
         self._closed = False
+        self._vector_dim: int | None = None  # Track expected vector dimension
 
         # Load required extensions
         self._load_extensions()
@@ -241,6 +247,64 @@ class DuckDBVector(BaseVector):
         except Exception as e:
             logger.warning(f"FTS index creation failed: {e}")
 
+    def _validate_vector_dimensions(self, texts: list[Document]) -> int:
+        """
+        Validate that all documents have vectors with consistent dimensions.
+
+        Args:
+            texts: List of documents to validate
+
+        Returns:
+            The vector dimension (all documents must match)
+
+        Raises:
+            VectorDimensionError: If vectors have inconsistent dimensions or are missing
+        """
+        if not texts:
+            raise VectorDimensionError("Cannot validate empty document list")
+
+        # Get first document's dimension as reference
+        first_doc = texts[0]
+        if first_doc.vector is None:
+            raise VectorDimensionError(
+                f"Document '{first_doc.id}' has no vector. "
+                "All documents must have vectors for vector store insertion."
+            )
+
+        expected_dim = len(first_doc.vector)
+        if expected_dim == 0:
+            raise VectorDimensionError(
+                f"Document '{first_doc.id}' has empty vector (dimension 0)."
+            )
+
+        # Validate all documents have same dimension
+        for i, doc in enumerate(texts[1:], start=1):
+            if doc.vector is None:
+                raise VectorDimensionError(
+                    f"Document '{doc.id}' (index {i}) has no vector. "
+                    "All documents must have vectors for vector store insertion."
+                )
+
+            doc_dim = len(doc.vector)
+            if doc_dim == 0:
+                raise VectorDimensionError(
+                    f"Document '{doc.id}' (index {i}) has empty vector (dimension 0)."
+                )
+            if doc_dim != expected_dim:
+                raise VectorDimensionError(
+                    f"Vector dimension mismatch: document '{doc.id}' (index {i}) "
+                    f"has dimension {doc_dim}, expected {expected_dim}."
+                )
+
+        # If we have a stored dimension, validate against it
+        if self._vector_dim is not None and expected_dim != self._vector_dim:
+            raise VectorDimensionError(
+                f"Vector dimension mismatch: new documents have dimension {expected_dim}, "
+                f"but the collection was created with dimension {self._vector_dim}."
+            )
+
+        return expected_dim
+
     def create(self, texts: list[Document], **kwargs) -> None:
         """
         Create or replace collection with initial documents.
@@ -248,15 +312,17 @@ class DuckDBVector(BaseVector):
         Args:
             texts: List of documents to insert
             **kwargs: Additional arguments (unused)
+
+        Raises:
+            VectorDimensionError: If documents have inconsistent or missing vectors
         """
         self._check_closed()
         if not texts:
             return
 
-        # Determine vector dimension from first document
-        dim = 768  # Default dimension
-        if texts[0].vector:
-            dim = len(texts[0].vector)
+        # Validate vector dimensions and get the dimension
+        dim = self._validate_vector_dimensions(texts)
+        self._vector_dim = dim
 
         # Create table schema
         self._ensure_table_exists(dim)
@@ -274,6 +340,9 @@ class DuckDBVector(BaseVector):
         Args:
             texts: List of documents to add
             **kwargs: Additional arguments (unused)
+
+        Raises:
+            VectorDimensionError: If documents have inconsistent or incompatible vectors
         """
         self._check_closed()
         if not texts:
@@ -286,6 +355,13 @@ class DuckDBVector(BaseVector):
             # Table doesn't exist, create it
             self.create(texts)
             return
+
+        # Validate vector dimensions
+        dim = self._validate_vector_dimensions(texts)
+
+        # Set _vector_dim if not already set (e.g., reconnecting to existing table)
+        if self._vector_dim is None:
+            self._vector_dim = dim
 
         # Prepare and insert data
         data = []
