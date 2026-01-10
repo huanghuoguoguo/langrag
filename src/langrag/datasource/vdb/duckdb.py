@@ -233,7 +233,8 @@ class DuckDBVector(BaseVector):
                 logger.debug(f"FTS index already exists for {self.table_name}")
                 return
             except CatalogException:
-                pass  # Index doesn't exist, create it
+                # FTS index table doesn't exist yet, proceed to create it
+                logger.debug(f"FTS index not found for {self.table_name}, creating...")
 
             # Create FTS index with stemming and stopwords
             self._connection.execute(f"""
@@ -358,6 +359,7 @@ class DuckDBVector(BaseVector):
             self._connection.execute(f"SELECT 1 FROM {self.table_name} LIMIT 0")
         except CatalogException:
             # Table doesn't exist, create it
+            logger.debug(f"Table '{self.table_name}' not found, creating...")
             self.create(texts)
             return
 
