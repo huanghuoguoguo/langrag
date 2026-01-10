@@ -16,4 +16,5 @@ data
 storage/
 .coverage
 coverage.xml
-site/TODO.md
+site
+TODO.md
