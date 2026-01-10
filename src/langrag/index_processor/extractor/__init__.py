@@ -9,7 +9,7 @@ from .factory import ParserFactory
 from .providers.docx import DocxParser
 from .providers.html import HtmlParser
 from .providers.markdown import MarkdownParser
-from .providers.pdf import PdfParser
+from .providers.pdf import FileTooLargeError, PdfParser
 from .providers.simple_text import SimpleTextParser
 
 __all__ = [
@@ -20,4 +20,5 @@ __all__ = [
     "MarkdownParser",
     "HtmlParser",
     "ParserFactory",
+    "FileTooLargeError",
 ]
