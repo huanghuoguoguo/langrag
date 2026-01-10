@@ -17,45 +17,42 @@
 
 ### Phase 8: 关键 Bug 修复 (P0)
 
-- [ ] **Task 15**: 修复 DuckDB 连接资源泄漏
+- [x] **Task 15**: 修复 DuckDB 连接资源泄漏
   - **分支**: `fix/duckdb-connection-leak`
   - **优先级**: P0
+  - **状态**: ✅ 已完成
   - **文件**: `src/langrag/datasource/vdb/duckdb.py:449`
-  - **问题**: `__del__` 方法不可靠，可能导致数据库连接未关闭
-  - **影响**: 文件锁定、资源耗尽
-  - **解决方案**: 实现 Context Manager (`__enter__/__exit__`)
-  - **预计工作量**: 30 分钟
+  - **解决方案**: 实现 Context Manager (`__enter__/__exit__`) + `close()` 方法
+  - **测试**: 5 个新测试用例
 
-- [ ] **Task 16**: 修复 SQLiteKV 连接池问题
+- [x] **Task 16**: 修复 SQLiteKV 连接池问题
   - **分支**: `fix/sqlite-connection-pool`
   - **优先级**: P0
+  - **状态**: ✅ 已完成
   - **文件**: `src/langrag/datasource/kv/sqlite.py:21-25`
-  - **问题**: 每次操作创建新连接，高并发下可能出现 "database is locked"
-  - **影响**: 并发稳定性
-  - **解决方案**: 复用单个连接 + 添加连接超时
-  - **预计工作量**: 1 小时
+  - **解决方案**: 连接复用 + RLock + WAL 模式 + 超时控制
+  - **测试**: 8 个新测试用例
 
-- [ ] **Task 17**: 实现多数据集并行检索
+- [x] **Task 17**: 实现多数据集并行检索
   - **分支**: `feat/parallel-retrieval`
   - **优先级**: P0
+  - **状态**: ✅ 已完成
   - **文件**: `src/langrag/retrieval/workflow.py:110`
-  - **问题**: 多知识库检索是串行的，性能低下 (TODO 注释已存在)
-  - **影响**: 5 个 KB × 500ms = 2.5s 延迟
-  - **解决方案**: 使用 `ThreadPoolExecutor` 并行检索
-  - **预计工作量**: 2 小时
+  - **解决方案**: ThreadPoolExecutor 并行检索 (max_workers=5)
+  - **测试**: 8 个新测试用例
 
 ---
 
 ### Phase 9: 性能优化 (P1)
 
-- [ ] **Task 18**: 优化 SemanticCache 相似度计算
+- [x] **Task 18**: 优化 SemanticCache 相似度计算
   - **分支**: `perf/numpy-cosine-similarity`
   - **优先级**: P1
+  - **状态**: ✅ 已完成
   - **文件**: `src/langrag/cache/semantic.py:34-58`
-  - **问题**: 纯 Python 实现余弦相似度，性能低下
-  - **影响**: 1000 缓存条目 × 1000 维向量 ≈ 100ms+ vs NumPy <1ms
-  - **解决方案**: 使用 NumPy 加速 (可选依赖)
-  - **预计工作量**: 1 小时
+  - **解决方案**: NumPy 加速 + Python fallback，自动检测环境
+  - **性能**: Python ~100ms vs NumPy ~1ms (1000 维向量 × 1000 次)
+  - **测试**: 10 个新测试用例
 
 - [ ] **Task 19**: 添加大文件处理保护
   - **分支**: `fix/large-file-protection`
@@ -256,10 +253,10 @@
 | Task 12 | `feat/batch-indexing` | P2 | ✅ 已完成 | 2026-01 |
 | Task 13 | `feat/llm-judge` | P1 | ✅ 已完成 | 2026-01 |
 | Task 14 | `docs/api-reference` | P2 | ✅ 已完成 | 2026-01 |
-| Task 15 | `fix/duckdb-connection-leak` | P0 | ⏳ 待开始 | - |
-| Task 16 | `fix/sqlite-connection-pool` | P0 | ⏳ 待开始 | - |
-| Task 17 | `feat/parallel-retrieval` | P0 | ⏳ 待开始 | - |
-| Task 18 | `perf/numpy-cosine-similarity` | P1 | ⏳ 待开始 | - |
+| Task 15 | `fix/duckdb-connection-leak` | P0 | ✅ 已完成 | 2026-01 |
+| Task 16 | `fix/sqlite-connection-pool` | P0 | ✅ 已完成 | 2026-01 |
+| Task 17 | `feat/parallel-retrieval` | P0 | ✅ 已完成 | 2026-01 |
+| Task 18 | `perf/numpy-cosine-similarity` | P1 | ✅ 已完成 | 2026-01 |
 | Task 19 | `fix/large-file-protection` | P1 | ⏳ 待开始 | - |
 | Task 20 | `fix/sql-table-name-validation` | P1 | ⏳ 待开始 | - |
 | Task 21 | `fix/specific-exception-handling` | P1 | ⏳ 待开始 | - |
