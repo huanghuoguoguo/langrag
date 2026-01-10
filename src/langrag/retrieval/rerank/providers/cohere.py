@@ -52,9 +52,17 @@ class CohereReranker(BaseReranker):
 
                 return self._parse_response(data, results)
 
-        except Exception as e:
-            logger.error(f"Cohere rerank failed: {e}")
-            # Fallback: return original results
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Cohere API returned error status {e.response.status_code}: {e}")
+            return results[:top_k] if top_k else results
+        except httpx.RequestError as e:
+            logger.error(f"Cohere API request failed (network error): {e}")
+            return results[:top_k] if top_k else results
+        except httpx.TimeoutException as e:
+            logger.error(f"Cohere API request timed out: {e}")
+            return results[:top_k] if top_k else results
+        except (KeyError, ValueError) as e:
+            logger.error(f"Failed to parse Cohere API response: {e}")
             return results[:top_k] if top_k else results
 
     def _parse_response(self, data: dict, original_results: list[SearchResult]) -> list[SearchResult]:

@@ -38,9 +38,14 @@ logger = logging.getLogger(__name__)
 
 try:
     import duckdb
+    from duckdb import CatalogException
+    from duckdb import Error as DuckDBError
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
+    # Provide fallback types for type hints when duckdb is not installed
+    CatalogException = Exception
+    DuckDBError = Exception
 
 
 class DuckDBVector(BaseVector):
@@ -162,7 +167,7 @@ class DuckDBVector(BaseVector):
                 self._fts_index_created = True
                 logger.debug(f"FTS index already exists for {self.table_name}")
                 return
-            except Exception:
+            except CatalogException:
                 pass  # Index doesn't exist, create it
 
             # Create FTS index with stemming and stopwords
@@ -179,7 +184,7 @@ class DuckDBVector(BaseVector):
             """)
             self._fts_index_created = True
             logger.info(f"FTS index created for {self.table_name}")
-        except Exception as e:
+        except DuckDBError as e:
             logger.warning(f"FTS index creation failed: {e}")
 
     def create(self, texts: list[Document], **kwargs) -> None:
@@ -223,7 +228,7 @@ class DuckDBVector(BaseVector):
         # Ensure table exists
         try:
             self._connection.execute(f"SELECT 1 FROM {self.table_name} LIMIT 0")
-        except Exception:
+        except CatalogException:
             # Table doesn't exist, create it
             self.create(texts)
             return
