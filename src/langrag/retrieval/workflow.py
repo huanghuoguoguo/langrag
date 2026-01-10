@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langrag.datasource.service import RetrievalService
 from langrag.entities.dataset import Dataset, RetrievalContext
@@ -9,6 +10,10 @@ from langrag.retrieval.post_processor import PostProcessor
 # from langrag.retrieval.rerank.base import BaseReranker
 
 logger = logging.getLogger(__name__)
+
+# Default max workers for parallel retrieval
+DEFAULT_MAX_WORKERS = 5
+
 
 class RetrievalWorkflow:
     """
@@ -21,12 +26,14 @@ class RetrievalWorkflow:
         router=None,   # BaseRouter
         reranker=None, # BaseReranker
         rewriter=None, # BaseRewriter
-        vector_store_cls=None
+        vector_store_cls=None,
+        max_workers: int = DEFAULT_MAX_WORKERS
     ):
         self.router = router
         self.reranker = reranker
         self.rewriter = rewriter
         self.vector_store_cls = vector_store_cls
+        self.max_workers = max_workers
         self.post_processor = PostProcessor()
         # Callbacks (lazy init or passed)
         self.callback_manager = None
@@ -107,33 +114,21 @@ class RetrievalWorkflow:
                     return []
 
                 # 2. Parallel Retrieval (Dispatch)
-                # TODO: This should be parallelized with ThreadPoolExecutor for production
                 all_documents = []
                 with tracer.start_as_current_span("vector_retrieval") as retrieval_span:
                     if is_tracing_enabled():
                         retrieval_span.set_attribute("dataset_count", len(selected_datasets))
 
-                    for dataset in selected_datasets:
-                        try:
-                            # Decide method based on dataset config (e.g. if economy -> keyword)
-                            if dataset.indexing_technique == 'economy':
-                                 method = "keyword_search"
-                            else:
-                                 method = "semantic_search" # or hybrid if configured
-
-                            docs = RetrievalService.retrieve(
-                                dataset=dataset,
-                                query=query,
-                                retrieval_method=method,
-                                top_k=top_k,
-                                vector_store_cls=self.vector_store_cls
-                            )
-                            all_documents.extend(docs)
-
-                        except Exception as e:
-                            logger.error(f"Error retrieving from dataset {dataset.name}: {e}")
-                            if is_tracing_enabled():
-                                retrieval_span.record_exception(e)
+                    # Use parallel retrieval for multiple datasets
+                    if len(selected_datasets) > 1:
+                        all_documents = self._retrieve_parallel(
+                            query, selected_datasets, top_k, retrieval_span
+                        )
+                    else:
+                        # Single dataset - no need for thread pool overhead
+                        all_documents = self._retrieve_single(
+                            query, selected_datasets[0], top_k, retrieval_span
+                        )
 
                     if is_tracing_enabled():
                         retrieval_span.set_attribute("retrieved_count", len(all_documents))
@@ -247,3 +242,139 @@ class RetrievalWorkflow:
                 if self.callback_manager:
                     self.callback_manager.on_error(e, run_id=run_id)
                 raise e
+
+    def _get_retrieval_method(self, dataset: Dataset) -> str:
+        """
+        Determine retrieval method based on dataset configuration.
+
+        Args:
+            dataset: Dataset to check
+
+        Returns:
+            Retrieval method string: 'keyword_search', 'semantic_search', or 'hybrid_search'
+        """
+        if dataset.indexing_technique == 'economy':
+            return "keyword_search"
+        return "semantic_search"
+
+    def _retrieve_single(
+        self,
+        query: str,
+        dataset: Dataset,
+        top_k: int,
+        retrieval_span
+    ) -> list:
+        """
+        Retrieve documents from a single dataset.
+
+        Args:
+            query: Search query
+            dataset: Dataset to search
+            top_k: Number of results to retrieve
+            retrieval_span: Tracing span for error recording
+
+        Returns:
+            List of retrieved documents
+        """
+        try:
+            method = self._get_retrieval_method(dataset)
+            docs = RetrievalService.retrieve(
+                dataset=dataset,
+                query=query,
+                retrieval_method=method,
+                top_k=top_k,
+                vector_store_cls=self.vector_store_cls
+            )
+            return docs
+        except Exception as e:
+            logger.error(f"Error retrieving from dataset {dataset.name}: {e}")
+            if is_tracing_enabled():
+                retrieval_span.record_exception(e)
+            return []
+
+    def _retrieve_parallel(
+        self,
+        query: str,
+        datasets: list[Dataset],
+        top_k: int,
+        retrieval_span
+    ) -> list:
+        """
+        Retrieve documents from multiple datasets in parallel.
+
+        Uses ThreadPoolExecutor to concurrently search all datasets,
+        significantly reducing latency when searching multiple knowledge bases.
+
+        Args:
+            query: Search query
+            datasets: List of datasets to search
+            top_k: Number of results per dataset
+            retrieval_span: Tracing span for error recording
+
+        Returns:
+            Combined list of documents from all datasets
+
+        Note:
+            Partial failures are logged but don't prevent results from
+            successful retrievals being returned.
+        """
+        all_documents = []
+        errors = []
+
+        # Limit workers to number of datasets or max_workers, whichever is smaller
+        num_workers = min(len(datasets), self.max_workers)
+
+        def retrieve_from_dataset(dataset: Dataset) -> tuple[Dataset, list, Exception | None]:
+            """Worker function for parallel retrieval."""
+            try:
+                method = self._get_retrieval_method(dataset)
+                docs = RetrievalService.retrieve(
+                    dataset=dataset,
+                    query=query,
+                    retrieval_method=method,
+                    top_k=top_k,
+                    vector_store_cls=self.vector_store_cls
+                )
+                return (dataset, docs, None)
+            except Exception as e:
+                return (dataset, [], e)
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all retrieval tasks
+            future_to_dataset = {
+                executor.submit(retrieve_from_dataset, ds): ds
+                for ds in datasets
+            }
+
+            # Collect results as they complete
+            for future in as_completed(future_to_dataset):
+                dataset, docs, error = future.result()
+
+                if error:
+                    logger.error(f"Error retrieving from dataset {dataset.name}: {error}")
+                    errors.append((dataset.name, error))
+                    if is_tracing_enabled():
+                        retrieval_span.record_exception(error)
+                else:
+                    all_documents.extend(docs)
+                    logger.debug(
+                        f"Retrieved {len(docs)} documents from {dataset.name}"
+                    )
+
+        # Log summary
+        if errors:
+            logger.warning(
+                f"Parallel retrieval completed with {len(errors)} errors "
+                f"out of {len(datasets)} datasets"
+            )
+        else:
+            logger.debug(
+                f"Parallel retrieval successful: {len(all_documents)} documents "
+                f"from {len(datasets)} datasets"
+            )
+
+        if is_tracing_enabled():
+            retrieval_span.set_attribute("parallel_workers", num_workers)
+            retrieval_span.set_attribute("error_count", len(errors))
+
+        return all_documents
