@@ -1,4 +1,6 @@
+import contextlib
 import logging
+import os
 from typing import Any
 
 from langrag.datasource.vdb.base import BaseVector
@@ -9,9 +11,14 @@ logger = logging.getLogger(__name__)
 
 try:
     import pyseekdb
+    from pyseekdb.errors import DatabaseNotFoundError
     SEEKDB_AVAILABLE = True
 except ImportError:
     SEEKDB_AVAILABLE = False
+    DatabaseNotFoundError = Exception  # Fallback for type hints
+
+# Default vector dimension (commonly used embedding models)
+DEFAULT_VECTOR_DIMENSION = 768
 
 class SeekDBVector(BaseVector):
     """
@@ -25,8 +32,22 @@ class SeekDBVector(BaseVector):
         mode: str = "embedded",
         db_path: str = "./seekdb_data",
         host: str | None = None,
-        port: int | None = None
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None
     ):
+        """
+        Initialize SeekDB Vector Store.
+
+        Args:
+            dataset: Dataset configuration
+            mode: "embedded" or "server"
+            db_path: Path for embedded database
+            host: Server host (required for server mode)
+            port: Server port (required for server mode)
+            user: Username for server mode (defaults to SEEKDB_USER env var)
+            password: Password for server mode (defaults to SEEKDB_PASSWORD env var)
+        """
         super().__init__(dataset)
         if not SEEKDB_AVAILABLE:
             raise ImportError("pyseekdb is required. Install with: pip install pyseekdb")
@@ -39,6 +60,11 @@ class SeekDBVector(BaseVector):
         self.port = port
         self.db_name = self.collection_name
         self._client_instance = None  # Lazy loaded
+        self._closed = False
+
+        # Load credentials from environment if not provided
+        self._user = user or os.environ.get("SEEKDB_USER")
+        self._password = password or os.environ.get("SEEKDB_PASSWORD", "")
 
         self._escape_table = str.maketrans({
             '\x00': '',
@@ -55,33 +81,45 @@ class SeekDBVector(BaseVector):
         if self._client_instance:
             return self._client_instance
 
+        if self._closed:
+            raise RuntimeError(
+                "Cannot access client: SeekDB connection has been closed. "
+                "Create a new SeekDBVector instance to continue."
+            )
+
         logger.info(f"Lazy initializing SeekDB client: {self.db_name}")
 
         if self.mode == "embedded":
-             # Attempt to create DB if not exists (AdminClient needed)
-             # Only done once on first access
-             try:
-                 admin = pyseekdb.AdminClient(path=self.db_path)
-                 try:
-                     admin.get_database(self.db_name)
-                 except Exception:
-                     logger.info(f"Database '{self.db_name}' not found, creating...")
-                     admin.create_database(self.db_name)
-                 del admin
-             except Exception as e:
-                 logger.warning(f"Failed to check/create SeekDB database during lazy init: {e}")
+            # Attempt to create DB if not exists (AdminClient needed)
+            try:
+                admin = pyseekdb.AdminClient(path=self.db_path)
+                try:
+                    admin.get_database(self.db_name)
+                except DatabaseNotFoundError:
+                    logger.info(f"Database '{self.db_name}' not found, creating...")
+                    admin.create_database(self.db_name)
+                del admin
+            except DatabaseNotFoundError:
+                raise  # Re-raise specific errors
+            except Exception as e:
+                logger.warning(f"Failed to check/create SeekDB database: {e}")
 
-             self._client_instance = pyseekdb.Client(path=self.db_path, database=self.db_name)
+            self._client_instance = pyseekdb.Client(path=self.db_path, database=self.db_name)
         else:
-             if not self.host or not self.port:
-                 raise ValueError("Host and port required for server mode")
-             self._client_instance = pyseekdb.Client(
-                 host=self.host,
-                 port=self.port,
-                 database=self.collection_name,
-                 user="root",
-                 password=""
-             )
+            if not self.host or not self.port:
+                raise ValueError("Host and port required for server mode")
+            if not self._user:
+                raise ValueError(
+                    "Username required for server mode. "
+                    "Set via 'user' parameter or SEEKDB_USER environment variable."
+                )
+            self._client_instance = pyseekdb.Client(
+                host=self.host,
+                port=self.port,
+                database=self.collection_name,
+                user=self._user,
+                password=self._password
+            )
 
         return self._client_instance
 
@@ -105,7 +143,7 @@ class SeekDBVector(BaseVector):
              # Dimension needs to be known. In Dify it comes from EmbeddingModel.
              # Here we might need to infer from texts or config.
              # Fallback to 768 or get from first text.
-             dim = len(texts[0].vector) if texts and texts[0].vector else 768
+             dim = len(texts[0].vector) if texts and texts[0].vector else DEFAULT_VECTOR_DIMENSION
 
              config = HNSWConfiguration(dimension=dim, distance="cosine")
              self._client.create_collection(
@@ -116,7 +154,7 @@ class SeekDBVector(BaseVector):
 
         self.add_texts(texts, **kwargs)
 
-    def add_texts(self, texts: list[Document], **kwargs) -> None:
+    def add_texts(self, texts: list[Document], **_kwargs) -> None:
         if not texts:
             return
 
@@ -124,7 +162,7 @@ class SeekDBVector(BaseVector):
         if not self._client.has_collection(self.collection_name):
              from pyseekdb import HNSWConfiguration
              # Infer dimension from first text vector, default to 384 if not available
-             dim = len(texts[0].vector) if texts and texts[0].vector else 384
+             dim = len(texts[0].vector) if texts and texts[0].vector else DEFAULT_VECTOR_DIMENSION
 
              logger.info(f"Creating SeekDB collection '{self.collection_name}' with dimension {dim}")
              config = HNSWConfiguration(dimension=dim, distance="cosine")
@@ -226,7 +264,42 @@ class SeekDBVector(BaseVector):
         self._client.delete_collection(self.collection_name)
 
     def close(self) -> None:
-        """Close the underlying client connection."""
-        if hasattr(self, '_client_instance') and self._client_instance and hasattr(self._client_instance, '__exit__'):
-            self._client_instance.__exit__(None, None, None)
-            self._client_instance = None
+        """
+        Close the underlying client connection.
+
+        This method should be called when done using the vector store to ensure
+        proper resource cleanup. Alternatively, use the context manager pattern.
+
+        Note:
+            After calling close(), the store instance cannot be used.
+            Any subsequent operations will raise RuntimeError.
+        """
+        if self._closed:
+            return
+
+        try:
+            if self._client_instance is not None:
+                if hasattr(self._client_instance, 'close'):
+                    self._client_instance.close()
+                elif hasattr(self._client_instance, '__exit__'):
+                    self._client_instance.__exit__(None, None, None)
+                self._client_instance = None
+            logger.debug(f"SeekDB connection closed for {self.db_name}")
+        except Exception as e:
+            logger.warning(f"Error closing SeekDB connection: {e}")
+        finally:
+            self._closed = True
+
+    def __enter__(self) -> "SeekDBVector":
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager and close connection."""
+        self.close()
+
+    def __del__(self):
+        """Clean up connection on garbage collection."""
+        if hasattr(self, '_closed') and not self._closed:
+            with contextlib.suppress(Exception):
+                self.close()

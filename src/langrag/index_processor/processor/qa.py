@@ -16,6 +16,12 @@ Text:
 Question:
 """
 
+
+class QAProcessingError(Exception):
+    """Raised when QA processing encounters errors."""
+    pass
+
+
 class QAIndexProcessor(BaseIndexProcessor):
     """
     QA Indexing Processor.
@@ -34,46 +40,81 @@ class QAIndexProcessor(BaseIndexProcessor):
         self.embedder = embedder
         self.splitter = splitter
 
-    def process(self, dataset: Dataset, documents: list[Document], **kwargs) -> None:
+    def process(self, dataset: Dataset, documents: list[Document], **_kwargs) -> dict:
+        """
+        Process documents to generate QA pairs.
 
-        # 1. Split (if needed) - reusing similar logic as ParagraphProcessor
-        chunks = []
-        if self.splitter:
-            chunks = self.splitter.split_documents(documents)
-        else:
-            chunks = documents # Assume already chunked or treat as is
+        Args:
+            dataset: Dataset configuration
+            documents: List of documents to process
+            **_kwargs: Additional arguments (unused)
+
+        Returns:
+            dict: Processing statistics including:
+                - total_chunks: Total number of chunks processed
+                - successful: Number of successful QA generations
+                - failed: Number of failed QA generations
+                - failed_chunk_ids: List of chunk IDs that failed
+        """
+        # 1. Split (if needed)
+        chunks = self.splitter.split_documents(documents) if self.splitter else documents
 
         qa_documents = []
+        stats = {
+            "total_chunks": len(chunks),
+            "successful": 0,
+            "failed": 0,
+            "failed_chunk_ids": []
+        }
 
         # 2. Generate Questions
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks):
+            chunk_id = chunk.id or f"chunk_{idx}"
             try:
-                # Basic Prompting
                 prompt = QA_GEN_PROMPT.format(text=chunk.page_content)
                 response = self.llm.chat([{"role": "user", "content": prompt}])
                 question = response.strip()
 
                 if not question:
+                    logger.warning(
+                        f"Empty question generated for chunk '{chunk_id}', skipping"
+                    )
+                    stats["failed"] += 1
+                    stats["failed_chunk_ids"].append(chunk_id)
                     continue
 
-                # Create a document where content is the Question
-                # Metadata contains the original Answer (chunk content)
                 qa_doc = Document(
                     page_content=question,
                     metadata={
                         "answer": chunk.page_content,
                         "original_doc_id": chunk.metadata.get("document_id"),
+                        "source_chunk_id": chunk_id,
                         "dataset_id": dataset.id,
                         "is_qa": True
                     }
                 )
                 qa_documents.append(qa_doc)
+                stats["successful"] += 1
 
             except Exception as e:
-                logger.error(f"Failed to generate QA for chunk: {e}")
+                stats["failed"] += 1
+                stats["failed_chunk_ids"].append(chunk_id)
+                logger.error(
+                    f"Failed to generate QA for chunk '{chunk_id}': {type(e).__name__}: {e}"
+                )
+
+        # Log summary
+        if stats["failed"] > 0:
+            logger.warning(
+                f"QA generation completed with {stats['failed']}/{stats['total_chunks']} failures. "
+                f"Failed chunk IDs: {stats['failed_chunk_ids'][:10]}"  # Log first 10
+                + (f"... and {len(stats['failed_chunk_ids']) - 10} more"
+                   if len(stats['failed_chunk_ids']) > 10 else "")
+            )
 
         if not qa_documents:
-            return
+            logger.warning("No QA documents generated, skipping indexing")
+            return stats
 
         # 3. Embed (Questions)
         texts = [d.page_content for d in qa_documents]
@@ -83,3 +124,9 @@ class QAIndexProcessor(BaseIndexProcessor):
 
         # 4. Save to VDB
         self.vector_store.create(qa_documents)
+
+        logger.info(
+            f"QA indexing completed: {stats['successful']} QA pairs indexed"
+        )
+
+        return stats

@@ -1,4 +1,5 @@
 import json
+import re
 
 from loguru import logger
 
@@ -18,6 +19,10 @@ Respond with a JSON object: {{"dataset_names": ["name1", "name2"]}}
 If no specific dataset is clear, return all of them.
 """
 
+# Regex to extract JSON object from LLM response
+JSON_PATTERN = re.compile(r'\{[^{}]*"dataset_names"\s*:\s*\[[^\]]*\][^{}]*\}', re.DOTALL)
+
+
 class LLMRouter(BaseRouter):
     """
     Router that uses an LLM to decide which datasets to query.
@@ -25,6 +30,54 @@ class LLMRouter(BaseRouter):
 
     def __init__(self, llm: BaseLLM):
         self.llm = llm
+
+    def _extract_json(self, response: str) -> dict | None:
+        """
+        Extract JSON object from LLM response.
+
+        Handles various formats:
+        - Plain JSON: {"dataset_names": [...]}
+        - Markdown code block: ```json {"dataset_names": [...]} ```
+        - Text with embedded JSON
+
+        Args:
+            response: Raw LLM response text
+
+        Returns:
+            Parsed JSON dict or None if parsing fails
+        """
+        content = response.strip()
+
+        # Try to extract from markdown code block first
+        if "```" in content:
+            # Extract content between code fences
+            parts = content.split("```")
+            for i, part in enumerate(parts):
+                if i % 2 == 1:  # Odd indices are inside code blocks
+                    # Remove language identifier if present (e.g., "json\n")
+                    code_content = part.strip()
+                    if code_content.startswith("json"):
+                        code_content = code_content[4:].strip()
+                    try:
+                        return json.loads(code_content)
+                    except json.JSONDecodeError:
+                        continue
+
+        # Try direct JSON parsing
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        # Try regex extraction for embedded JSON
+        match = JSON_PATTERN.search(content)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+        return None
 
     def route(self, query: str, datasets: list[Dataset]) -> list[Dataset]:
         if not datasets:
@@ -45,28 +98,40 @@ class LLMRouter(BaseRouter):
 
         try:
             response = self.llm.chat([{"role": "user", "content": prompt}])
-            logger.info(f"[LLMRouter] Raw Response: {response}")
+            logger.debug(f"[LLMRouter] Raw Response: {response}")
 
-            # Basic parsing of JSON from text
-            # Often LLMs wrap in ```json ... ```
-            content = response.strip()
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
+            # Parse JSON from response
+            data = self._extract_json(response)
 
-            logger.info(f"[LLMRouter] Parsed JSON Content: {content}")
-            data = json.loads(content)
+            if data is None:
+                logger.warning(
+                    f"[LLMRouter] Failed to parse JSON from response: {response[:200]}..."
+                )
+                return datasets
+
             names = data.get("dataset_names", [])
+
+            if not isinstance(names, list):
+                logger.warning(
+                    f"[LLMRouter] 'dataset_names' is not a list: {type(names)}"
+                )
+                return datasets
 
             selected = [d for d in datasets if d.name in names]
 
             if not selected:
-                logger.warning("Router selected no datasets, falling back to all.")
+                logger.warning("Router selected no matching datasets, falling back to all.")
                 return datasets
 
+            logger.info(f"[LLMRouter] Selected datasets: {[d.name for d in selected]}")
             return selected
 
+        except json.JSONDecodeError as e:
+            logger.error(f"[LLMRouter] JSON parsing error: {e}. Falling back to all datasets.")
+            return datasets
         except Exception as e:
-            logger.error(f"Router failed: {e}. Falling back to all datasets.")
+            logger.error(
+                f"[LLMRouter] Unexpected error: {type(e).__name__}: {e}. "
+                "Falling back to all datasets."
+            )
             return datasets
