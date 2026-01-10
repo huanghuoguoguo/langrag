@@ -51,15 +51,28 @@ class DuckDBVector(BaseVector):
     - Vector similarity search with HNSW indexing (cosine distance)
     - Full-Text Search (FTS) with BM25 ranking
     - Hybrid search combining vector + FTS with Reciprocal Rank Fusion
+    - Context manager support for proper resource cleanup
 
     Note:
         FTS index is created automatically after first data insertion.
         The index uses Porter stemmer, English stopwords, and lowercase normalization.
 
     Example:
+        Using context manager (recommended):
+
+        >>> with DuckDBVector(dataset, database_path="./vectors.db") as store:
+        ...     store.add_texts(documents)
+        ...     results = store.search("query", query_vector, search_type="hybrid")
+        >>> # Connection automatically closed
+
+        Manual resource management:
+
         >>> store = DuckDBVector(dataset, database_path="./vectors.db")
-        >>> store.add_texts(documents)
-        >>> results = store.search("query", query_vector, search_type="hybrid")
+        >>> try:
+        ...     store.add_texts(documents)
+        ...     results = store.search("query", query_vector)
+        ... finally:
+        ...     store.close()
     """
 
     def __init__(
@@ -84,6 +97,7 @@ class DuckDBVector(BaseVector):
         self.table_name = table_name or self.dataset.collection_name
         self._connection = duckdb.connect(self.database_path)
         self._fts_index_created = False
+        self._closed = False
 
         # Load required extensions
         self._load_extensions()
@@ -176,6 +190,7 @@ class DuckDBVector(BaseVector):
             texts: List of documents to insert
             **kwargs: Additional arguments (unused)
         """
+        self._check_closed()
         if not texts:
             return
 
@@ -201,6 +216,7 @@ class DuckDBVector(BaseVector):
             texts: List of documents to add
             **kwargs: Additional arguments (unused)
         """
+        self._check_closed()
         if not texts:
             return
 
@@ -244,6 +260,7 @@ class DuckDBVector(BaseVector):
         Returns:
             List of matching documents with scores in metadata
         """
+        self._check_closed()
         search_type = kwargs.get('search_type', 'similarity')
 
         if search_type == 'hybrid' and query_vector:
@@ -425,6 +442,7 @@ class DuckDBVector(BaseVector):
         Args:
             ids: List of document IDs to delete
         """
+        self._check_closed()
         if not ids:
             return
         placeholders = ",".join("?" for _ in ids)
@@ -435,6 +453,7 @@ class DuckDBVector(BaseVector):
 
     def delete(self) -> None:
         """Delete the entire collection (drop table)."""
+        self._check_closed()
         try:
             # Drop FTS index first
             with contextlib.suppress(Exception):
@@ -446,7 +465,53 @@ class DuckDBVector(BaseVector):
         except Exception as e:
             logger.warning(f"Error deleting table: {e}")
 
-    def __del__(self):
-        """Clean up database connection."""
-        with contextlib.suppress(Exception):
+    def close(self) -> None:
+        """
+        Explicitly close the database connection.
+
+        This method should be called when done using the vector store to ensure
+        proper resource cleanup. Alternatively, use the context manager pattern:
+
+            with DuckDBVector(dataset, path) as store:
+                store.add_texts(docs)
+                results = store.search(...)
+            # Connection automatically closed here
+
+        Note:
+            After calling close(), the vector store instance cannot be used.
+            Any subsequent operations will raise RuntimeError.
+        """
+        if self._closed:
+            return
+
+        try:
             self._connection.close()
+            logger.debug(f"DuckDB connection closed for {self.table_name}")
+        except Exception as e:
+            logger.warning(f"Error closing DuckDB connection: {e}")
+        finally:
+            self._closed = True
+
+    def _check_closed(self) -> None:
+        """Raise an error if the connection has been closed."""
+        if self._closed:
+            raise RuntimeError(
+                "Cannot perform operation: DuckDB connection has been closed. "
+                "Create a new DuckDBVector instance to continue."
+            )
+
+    def __enter__(self) -> "DuckDBVector":
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager and close connection."""
+        self.close()
+
+    def __del__(self):
+        """Clean up database connection on garbage collection."""
+        # Note: __del__ is not guaranteed to be called, so users should
+        # prefer using close() explicitly or the context manager pattern.
+        with contextlib.suppress(Exception):
+            if not self._closed:
+                self.close()
