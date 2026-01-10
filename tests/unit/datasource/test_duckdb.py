@@ -147,3 +147,76 @@ class TestDuckDBVector:
             # This is complex to mock with a single side_effect list because of recursion.
             # Let's just trust we cover enough with delete/hybrid.
             pass
+
+    def test_context_manager(self, mock_duck_connection, dataset):
+        """Test that context manager properly opens and closes connection."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            with DuckDBVector(dataset) as dv:
+                assert dv._closed is False
+                # Can perform operations inside context
+                mock_duck_connection.execute.return_value.fetchall.return_value = []
+
+            # After exiting context, connection should be closed
+            assert dv._closed is True
+            mock_duck_connection.close.assert_called_once()
+
+    def test_close_method(self, mock_duck_connection, dataset):
+        """Test that close() method properly closes connection."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+            assert dv._closed is False
+
+            dv.close()
+
+            assert dv._closed is True
+            mock_duck_connection.close.assert_called_once()
+
+    def test_close_idempotent(self, mock_duck_connection, dataset):
+        """Test that calling close() multiple times is safe."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            dv.close()
+            dv.close()  # Should not raise
+            dv.close()  # Should not raise
+
+            # Connection.close() should only be called once
+            assert mock_duck_connection.close.call_count == 1
+
+    def test_operations_after_close_raise_error(self, mock_duck_connection, dataset):
+        """Test that operations after close() raise RuntimeError."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+            dv.close()
+
+            # All major operations should raise RuntimeError
+            with pytest.raises(RuntimeError, match="connection has been closed"):
+                dv.create([Document(page_content="test", vector=[0.1] * 768)])
+
+            with pytest.raises(RuntimeError, match="connection has been closed"):
+                dv.add_texts([Document(page_content="test", vector=[0.1] * 768)])
+
+            with pytest.raises(RuntimeError, match="connection has been closed"):
+                dv.search("query", [0.1] * 768)
+
+            with pytest.raises(RuntimeError, match="connection has been closed"):
+                dv.delete_by_ids(["1"])
+
+            with pytest.raises(RuntimeError, match="connection has been closed"):
+                dv.delete()
+
+    def test_context_manager_with_exception(self, mock_duck_connection, dataset):
+        """Test that context manager closes connection even when exception occurs."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = None
+            try:
+                with DuckDBVector(dataset) as dv:
+                    raise ValueError("Test exception")
+            except ValueError:
+                pass
+
+            # Connection should still be closed after exception
+            assert dv is not None
+            assert dv._closed is True
+            mock_duck_connection.close.assert_called_once()
+
