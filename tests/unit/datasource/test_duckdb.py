@@ -6,6 +6,7 @@ from langrag.datasource.vdb.duckdb import (
     MAX_TABLE_NAME_LENGTH,
     SQL_IDENTIFIER_PATTERN,
     DuckDBVector,
+    VectorDimensionError,
     validate_table_name,
 )
 from langrag.entities.dataset import Dataset
@@ -341,4 +342,148 @@ class TestTableNameValidation:
         dataset = Dataset(name="test", collection_name="select")
         with pytest.raises(ValueError, match="reserved word"):
             DuckDBVector(dataset)
+
+
+class TestVectorDimensionValidation:
+    """Tests for vector dimension validation in DuckDBVector."""
+
+    @pytest.fixture
+    def mock_duck_connection(self):
+        with patch("langrag.datasource.vdb.duckdb.duckdb.connect") as mock_connect:
+            mock_conn = MagicMock()
+            mock_connect.return_value = mock_conn
+            yield mock_conn
+
+    @pytest.fixture
+    def dataset(self):
+        return Dataset(name="test", collection_name="test_table")
+
+    def test_create_validates_dimensions(self, mock_duck_connection, dataset):
+        """Test that create() validates vector dimensions."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [
+                Document(page_content="doc1", vector=[0.1] * 768),
+                Document(page_content="doc2", vector=[0.2] * 768),
+            ]
+            dv.create(docs)
+
+            # Vector dimension should be stored
+            assert dv._vector_dim == 768
+
+    def test_create_rejects_missing_vector(self, mock_duck_connection, dataset):
+        """Test that create() rejects documents without vectors."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [Document(page_content="doc1", vector=None)]
+
+            with pytest.raises(VectorDimensionError, match="has no vector"):
+                dv.create(docs)
+
+    def test_create_rejects_empty_vector(self, mock_duck_connection, dataset):
+        """Test that create() rejects documents with empty vectors."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [Document(page_content="doc1", vector=[])]
+
+            with pytest.raises(VectorDimensionError, match="empty vector"):
+                dv.create(docs)
+
+    def test_create_rejects_inconsistent_dimensions(self, mock_duck_connection, dataset):
+        """Test that create() rejects documents with inconsistent dimensions."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [
+                Document(page_content="doc1", vector=[0.1] * 768),
+                Document(page_content="doc2", vector=[0.2] * 512),  # Different dimension
+            ]
+
+            with pytest.raises(VectorDimensionError, match="dimension mismatch"):
+                dv.create(docs)
+
+    def test_add_texts_validates_against_stored_dimension(self, mock_duck_connection, dataset):
+        """Test that add_texts() validates against stored dimension."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            # First create with 768-dim vectors
+            docs1 = [Document(page_content="doc1", vector=[0.1] * 768)]
+            dv.create(docs1)
+
+            # Now try to add 512-dim vectors
+            docs2 = [Document(page_content="doc2", vector=[0.2] * 512)]
+
+            with pytest.raises(VectorDimensionError, match="collection was created with dimension"):
+                dv.add_texts(docs2)
+
+    def test_add_texts_accepts_matching_dimension(self, mock_duck_connection, dataset):
+        """Test that add_texts() accepts vectors with matching dimension."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+            mock_duck_connection.execute.return_value.fetchall.return_value = []
+
+            # First create with 768-dim vectors
+            docs1 = [Document(page_content="doc1", vector=[0.1] * 768)]
+            dv.create(docs1)
+
+            # Add more 768-dim vectors - should not raise
+            docs2 = [Document(page_content="doc2", vector=[0.2] * 768)]
+            dv.add_texts(docs2)
+
+            assert dv._vector_dim == 768
+
+    def test_validation_with_multiple_documents(self, mock_duck_connection, dataset):
+        """Test validation with multiple documents where middle one has wrong dimension."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [
+                Document(page_content="doc1", vector=[0.1] * 768),
+                Document(page_content="doc2", vector=[0.2] * 768),
+                Document(page_content="doc3", vector=[0.3] * 512),  # Wrong dimension
+                Document(page_content="doc4", vector=[0.4] * 768),
+            ]
+
+            with pytest.raises(VectorDimensionError, match="index 2"):
+                dv.create(docs)
+
+    def test_validation_with_missing_vector_in_middle(self, mock_duck_connection, dataset):
+        """Test validation when middle document has no vector."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [
+                Document(page_content="doc1", vector=[0.1] * 768),
+                Document(page_content="doc2", vector=None),  # Missing vector
+                Document(page_content="doc3", vector=[0.3] * 768),
+            ]
+
+            with pytest.raises(VectorDimensionError, match="index 1.*has no vector"):
+                dv.create(docs)
+
+    def test_empty_document_list_skips_validation(self, mock_duck_connection, dataset):
+        """Test that empty document list is handled gracefully."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            # Empty list should not raise, just return early
+            dv.create([])
+            assert dv._vector_dim is None
+
+    def test_vector_dim_error_message_includes_document_id(self, mock_duck_connection, dataset):
+        """Test that error messages include document IDs for debugging."""
+        with patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True):
+            dv = DuckDBVector(dataset)
+
+            docs = [
+                Document(id="doc-001", page_content="doc1", vector=[0.1] * 768),
+                Document(id="doc-002", page_content="doc2", vector=[0.2] * 512),
+            ]
+
+            with pytest.raises(VectorDimensionError, match="doc-002"):
+                dv.create(docs)
 
