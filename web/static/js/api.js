@@ -107,3 +107,16 @@ export async function saveLLMConfig(data) {
         throw new Error(err.detail || '保存失败');
     }
 }
+
+export async function evaluateAnswer(data) {
+    const res = await fetch('/api/chat/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '评估失败');
+    }
+    return await res.json();
+}

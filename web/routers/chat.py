@@ -35,6 +35,24 @@ class SourceItem(BaseModel):
     type: str | None = None
 
 
+class EvaluationRequest(BaseModel):
+    question: str
+    answer: str
+    contexts: list[str]
+    ground_truth: str | None = None
+
+
+class MetricResult(BaseModel):
+    score: float
+    reason: str | None = None
+
+
+class EvaluationResponse(BaseModel):
+    faithfulness: MetricResult
+    answer_relevancy: MetricResult
+    context_relevancy: MetricResult
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceItem]
@@ -83,6 +101,42 @@ async def chat(
 
     except ValueError as e:
         # Typically "LLM not configured"
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/evaluate", response_model=EvaluationResponse)
+def evaluate(
+    req: EvaluationRequest,
+    session: Session = Depends(get_session),
+    rag_kernel: RAGKernel = Depends(get_rag_kernel)
+):
+    """Evaluate a RAG response using LLM Judge"""
+    from web.services.evaluation_service import EvaluationService
+    
+    # Check if LLM is ready
+    if not rag_kernel.llm_client:
+        raise HTTPException(status_code=400, detail="LLM is not configured")
+
+    try:
+        service = EvaluationService(rag_kernel)
+        results = service.evaluate_sample(
+            question=req.question,
+            answer=req.answer,
+            contexts=req.contexts,
+            ground_truth=req.ground_truth
+        )
+
+        return EvaluationResponse(
+            faithfulness=MetricResult(**results.get("faithfulness", {"score": 0.0})),
+            answer_relevancy=MetricResult(**results.get("answer_relevancy", {"score": 0.0})),
+            context_relevancy=MetricResult(**results.get("context_relevancy", {"score": 0.0}))
+        )
+
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
