@@ -30,6 +30,7 @@ Example:
 
 import contextlib
 import logging
+import re
 import sqlite3
 import threading
 from typing import Any
@@ -37,6 +38,57 @@ from typing import Any
 from .base import BaseKVStore
 
 logger = logging.getLogger(__name__)
+
+
+# Regex pattern for valid SQL identifiers (table names, column names)
+# Allows: letters, numbers, underscores; must start with letter or underscore
+SQL_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+# Maximum length for table names (conservative limit)
+MAX_TABLE_NAME_LENGTH = 128
+
+
+def validate_table_name(table_name: str) -> None:
+    """
+    Validate a table name to prevent SQL injection.
+
+    Args:
+        table_name: The table name to validate
+
+    Raises:
+        ValueError: If the table name is invalid or potentially unsafe
+    """
+    if not table_name:
+        raise ValueError("Table name cannot be empty")
+
+    if len(table_name) > MAX_TABLE_NAME_LENGTH:
+        raise ValueError(
+            f"Table name too long: {len(table_name)} characters "
+            f"(max: {MAX_TABLE_NAME_LENGTH})"
+        )
+
+    if not SQL_IDENTIFIER_PATTERN.match(table_name):
+        raise ValueError(
+            f"Invalid table name: '{table_name}'. "
+            "Table names must start with a letter or underscore, "
+            "and contain only letters, numbers, and underscores."
+        )
+
+    # Check for SQL reserved words (basic set)
+    reserved_words = {
+        "select", "insert", "update", "delete", "drop", "create", "alter",
+        "table", "index", "from", "where", "and", "or", "not", "null",
+        "primary", "key", "foreign", "references", "constraint", "unique",
+        "default", "check", "in", "between", "like", "order", "by", "group",
+        "having", "limit", "offset", "join", "inner", "outer", "left", "right",
+        "on", "as", "distinct", "all", "union", "except", "intersect",
+    }
+
+    if table_name.lower() in reserved_words:
+        raise ValueError(
+            f"Invalid table name: '{table_name}' is a SQL reserved word. "
+            "Please choose a different name."
+        )
 
 
 class SQLiteKV(BaseKVStore):
@@ -72,12 +124,19 @@ class SQLiteKV(BaseKVStore):
             table_name: Table name for key-value storage
             timeout: Connection timeout in seconds (default: 30.0)
                      Helps prevent deadlocks in concurrent scenarios.
+
+        Raises:
+            ValueError: If table_name contains invalid characters or is a reserved word
         """
         self.db_path = db_path
         self.table_name = table_name
         self.timeout = timeout
+        self._closed = False  # Set early to avoid __del__ issues if validation fails
+
+        # Validate table name to prevent SQL injection
+        validate_table_name(self.table_name)
+
         self._lock = threading.RLock()  # Use RLock for reentrant locking
-        self._closed = False
 
         # Create a single reusable connection
         self._connection = sqlite3.connect(

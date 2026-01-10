@@ -27,6 +27,7 @@ Example:
 import contextlib
 import json
 import logging
+import re
 
 from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.dataset import Dataset
@@ -41,6 +42,57 @@ try:
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
+
+
+# Regex pattern for valid SQL identifiers (table names, column names)
+# Allows: letters, numbers, underscores; must start with letter or underscore
+SQL_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+# Maximum length for table names (conservative limit)
+MAX_TABLE_NAME_LENGTH = 128
+
+
+def validate_table_name(table_name: str) -> None:
+    """
+    Validate a table name to prevent SQL injection.
+
+    Args:
+        table_name: The table name to validate
+
+    Raises:
+        ValueError: If the table name is invalid or potentially unsafe
+    """
+    if not table_name:
+        raise ValueError("Table name cannot be empty")
+
+    if len(table_name) > MAX_TABLE_NAME_LENGTH:
+        raise ValueError(
+            f"Table name too long: {len(table_name)} characters "
+            f"(max: {MAX_TABLE_NAME_LENGTH})"
+        )
+
+    if not SQL_IDENTIFIER_PATTERN.match(table_name):
+        raise ValueError(
+            f"Invalid table name: '{table_name}'. "
+            "Table names must start with a letter or underscore, "
+            "and contain only letters, numbers, and underscores."
+        )
+
+    # Check for SQL reserved words (basic set)
+    reserved_words = {
+        "select", "insert", "update", "delete", "drop", "create", "alter",
+        "table", "index", "from", "where", "and", "or", "not", "null",
+        "primary", "key", "foreign", "references", "constraint", "unique",
+        "default", "check", "in", "between", "like", "order", "by", "group",
+        "having", "limit", "offset", "join", "inner", "outer", "left", "right",
+        "on", "as", "distinct", "all", "union", "except", "intersect",
+    }
+
+    if table_name.lower() in reserved_words:
+        raise ValueError(
+            f"Invalid table name: '{table_name}' is a SQL reserved word. "
+            "Please choose a different name."
+        )
 
 
 class DuckDBVector(BaseVector):
@@ -88,6 +140,9 @@ class DuckDBVector(BaseVector):
             dataset: Dataset configuration object
             database_path: Path to DuckDB database file
             table_name: Table name for storage (defaults to dataset.collection_name)
+
+        Raises:
+            ValueError: If table_name contains invalid characters or is a reserved word
         """
         super().__init__(dataset)
         if not DUCKDB_AVAILABLE:
@@ -95,6 +150,10 @@ class DuckDBVector(BaseVector):
 
         self.database_path = database_path
         self.table_name = table_name or self.dataset.collection_name
+
+        # Validate table name to prevent SQL injection
+        validate_table_name(self.table_name)
+
         self._connection = duckdb.connect(self.database_path)
         self._fts_index_created = False
         self._closed = False

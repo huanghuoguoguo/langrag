@@ -2,7 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from langrag.datasource.vdb.duckdb import DuckDBVector
+from langrag.datasource.vdb.duckdb import (
+    MAX_TABLE_NAME_LENGTH,
+    SQL_IDENTIFIER_PATTERN,
+    DuckDBVector,
+    validate_table_name,
+)
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
 
@@ -219,4 +224,121 @@ class TestDuckDBVector:
             assert dv is not None
             assert dv._closed is True
             mock_duck_connection.close.assert_called_once()
+
+
+class TestTableNameValidation:
+    """Tests for SQL table name validation."""
+
+    def test_valid_table_names(self):
+        """Test that valid table names pass validation."""
+        valid_names = [
+            "documents",
+            "my_table",
+            "_private",
+            "Table123",
+            "a",
+            "A",
+            "_",
+            "snake_case_name",
+            "CamelCaseName",
+            "mixed_Case_123",
+        ]
+
+        for name in valid_names:
+            validate_table_name(name)  # Should not raise
+
+    def test_empty_table_name_raises(self):
+        """Test that empty table name raises ValueError."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_table_name("")
+
+    def test_table_name_too_long_raises(self):
+        """Test that table name exceeding max length raises ValueError."""
+        long_name = "a" * (MAX_TABLE_NAME_LENGTH + 1)
+        with pytest.raises(ValueError, match="too long"):
+            validate_table_name(long_name)
+
+    def test_table_name_max_length_allowed(self):
+        """Test that table name at max length is allowed."""
+        max_name = "a" * MAX_TABLE_NAME_LENGTH
+        validate_table_name(max_name)  # Should not raise
+
+    def test_invalid_characters_raise(self):
+        """Test that table names with invalid characters raise ValueError."""
+        invalid_names = [
+            "table-name",       # hyphen
+            "table.name",       # dot
+            "table name",       # space
+            "table;name",       # semicolon (SQL injection attempt)
+            "table'name",       # quote (SQL injection attempt)
+            "table\"name",      # double quote
+            "1table",           # starts with number
+            "123",              # all numbers
+            "drop table x;--",  # SQL injection attempt
+            "'; DROP TABLE x;", # SQL injection attempt
+        ]
+
+        for name in invalid_names:
+            with pytest.raises(ValueError, match="Invalid table name"):
+                validate_table_name(name)
+
+    def test_sql_reserved_words_raise(self):
+        """Test that SQL reserved words raise ValueError."""
+        reserved_words = [
+            "select",
+            "SELECT",
+            "insert",
+            "INSERT",
+            "drop",
+            "table",
+            "where",
+            "from",
+            "delete",
+            "update",
+        ]
+
+        for word in reserved_words:
+            with pytest.raises(ValueError, match="reserved word"):
+                validate_table_name(word)
+
+    def test_sql_identifier_pattern(self):
+        """Test that the SQL identifier pattern works correctly."""
+        assert SQL_IDENTIFIER_PATTERN.match("valid_name")
+        assert SQL_IDENTIFIER_PATTERN.match("_private")
+        assert SQL_IDENTIFIER_PATTERN.match("Table123")
+        assert not SQL_IDENTIFIER_PATTERN.match("123table")
+        assert not SQL_IDENTIFIER_PATTERN.match("table-name")
+        assert not SQL_IDENTIFIER_PATTERN.match("")
+
+    @patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True)
+    @patch("langrag.datasource.vdb.duckdb.duckdb.connect")
+    def test_duckdb_init_validates_table_name(self, mock_connect):
+        """Test that DuckDBVector validates table name on init."""
+        mock_connect.return_value = MagicMock()
+
+        # Valid table name should work
+        dataset = Dataset(name="test", collection_name="valid_table")
+        dv = DuckDBVector(dataset)
+        assert dv.table_name == "valid_table"
+
+    @patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True)
+    @patch("langrag.datasource.vdb.duckdb.duckdb.connect")
+    def test_duckdb_init_rejects_invalid_table_name(self, mock_connect):
+        """Test that DuckDBVector rejects invalid table name on init."""
+        mock_connect.return_value = MagicMock()
+
+        # Invalid table name should raise
+        dataset = Dataset(name="test", collection_name="invalid-name")
+        with pytest.raises(ValueError, match="Invalid table name"):
+            DuckDBVector(dataset)
+
+    @patch("langrag.datasource.vdb.duckdb.DUCKDB_AVAILABLE", True)
+    @patch("langrag.datasource.vdb.duckdb.duckdb.connect")
+    def test_duckdb_init_rejects_sql_reserved_word(self, mock_connect):
+        """Test that DuckDBVector rejects SQL reserved words."""
+        mock_connect.return_value = MagicMock()
+
+        dataset = Dataset(name="test", collection_name="select")
+        with pytest.raises(ValueError, match="reserved word"):
+            DuckDBVector(dataset)
 
