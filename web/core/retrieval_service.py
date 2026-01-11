@@ -291,7 +291,9 @@ class RetrievalService:
         query: str,
         top_k: int = 5,
         rewrite: bool = True,
-        use_cache: bool = True
+        use_cache: bool = True,
+        search_mode: str | None = None,
+        use_rerank: bool | None = None
     ) -> tuple[list[LangRAGDocument], str]:
         """
         Search a single vector store for relevant documents.
@@ -311,6 +313,8 @@ class RetrievalService:
             top_k: Number of results to return
             rewrite: Whether to apply query rewriting (default: True)
             use_cache: Whether to use semantic caching (default: True)
+            search_mode: Force search mode ("hybrid", "vector", "keyword") or None for auto
+            use_rerank: Force reranking (True/False) or None for default behavior
 
         Returns:
             Tuple of (results list, search type string)
@@ -319,7 +323,7 @@ class RetrievalService:
             >>> results, search_type = service.search(store, "What is RAG?", top_k=5)
             >>> print(f"Found {len(results)} results using {search_type}")
         """
-        logger.info(f"Search: query='{query[:50]}...', top_k={top_k}")
+        logger.info(f"Search: query='{query[:50]}...', top_k={top_k}, mode={search_mode}")
 
         # Step 1: Query rewriting (Agentic RAG)
         final_query = query
@@ -342,10 +346,17 @@ class RetrievalService:
                 return cache_hit.results, f"{search_type}+cached"
 
         # Step 4: Determine search parameters
-        search_type = self._determine_search_type(store, query_vector)
+        # Use forced mode or auto-detect
+        if search_mode and search_mode in ("hybrid", "vector", "keyword"):
+            search_type = search_mode
+        else:
+            search_type = self._determine_search_type(store, query_vector)
 
-        # Expand retrieval if reranker is configured
-        k = top_k * 5 if self.reranker else top_k
+        # Determine if reranking should be applied
+        should_rerank = use_rerank if use_rerank is not None else (self.reranker is not None)
+
+        # Expand retrieval if reranking
+        k = top_k * 5 if should_rerank and self.reranker else top_k
 
         # Step 5: Execute search
         if search_type == "hybrid":
@@ -369,7 +380,7 @@ class RetrievalService:
         self._process_parent_child_results(results)
 
         # Step 7: Rerank
-        if self.reranker and results:
+        if should_rerank and self.reranker and results:
             results = self._rerank_results(final_query, results, top_k)
             search_type += "+rerank"
         else:

@@ -1,0 +1,19 @@
+/* Utility Classes and Alpine.js specifics */
+
+/* Hide elements before Alpine loads */
+[x-cloak] {
+    display: none !important;
+}
+
+/* Utility classes */
+.text-muted {
+    color: var(--text-muted);
+}
+
+.text-sm {
+    font-size: 0.85rem;
+}
+
+.mono {
+    font-family: monospace;
+}

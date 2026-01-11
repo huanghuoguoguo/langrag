@@ -55,11 +55,6 @@
     margin: 0 auto;
 }
 
-.section {
-    display: none;
+.content-section {
     animation: fadeIn 0.3s ease;
-}
-
-.section.active {
-    display: block;
 }

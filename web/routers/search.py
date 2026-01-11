@@ -16,6 +16,9 @@ class SearchRequest(BaseModel):
     kb_id: str
     query: str
     top_k: int = 5
+    search_mode: str | None = None  # "hybrid", "vector", "keyword", or None for auto
+    use_rerank: bool | None = None  # None = use default, True/False = force
+    use_rewrite: bool = True
 
 
 class SearchResultItem(BaseModel):
@@ -42,7 +45,7 @@ def search(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """Execute search"""
+    """Execute search with optional mode and rerank settings"""
     # Verify KB exists
     kb = KBService.get_kb(session, req.kb_id)
     if not kb:
@@ -52,7 +55,10 @@ def search(
         results, search_type = rag_kernel.search(
             kb_id=req.kb_id,
             query=req.query,
-            top_k=req.top_k
+            top_k=req.top_k,
+            search_mode=req.search_mode,
+            use_rerank=req.use_rerank,
+            use_rewrite=req.use_rewrite
         )
 
         items = [

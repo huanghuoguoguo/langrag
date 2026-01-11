@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 try:
     import pyseekdb
-    from pyseekdb.errors import DatabaseNotFoundError
+    # pyseekdb <= 1.0.0b6 doesn't have errors module, uses ValueError
+    DatabaseNotFoundError = ValueError
     SEEKDB_AVAILABLE = True
 except ImportError:
     SEEKDB_AVAILABLE = False
