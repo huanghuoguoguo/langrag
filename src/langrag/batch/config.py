@@ -29,8 +29,18 @@ class BatchConfig:
             Default: 3
 
         retry_delay: Initial delay between retries in seconds.
-            Uses exponential backoff (delay * 2^attempt).
+            Uses exponential backoff (delay * exponential_base^attempt).
             Default: 1.0
+
+        retry_max_delay: Maximum delay between retries in seconds.
+            Default: 60.0
+
+        retry_exponential_base: Base for exponential backoff calculation.
+            Default: 2.0
+
+        retry_jitter: Random jitter factor (0-1) to add to delays.
+            Helps prevent thundering herd problem.
+            Default: 0.1
 
         continue_on_error: Whether to continue processing after an error.
             If True, failed documents are logged and skipped.
@@ -52,6 +62,9 @@ class BatchConfig:
     storage_batch_size: int = 500
     max_retries: int = 3
     retry_delay: float = 1.0
+    retry_max_delay: float = 60.0
+    retry_exponential_base: float = 2.0
+    retry_jitter: float = 0.1
     continue_on_error: bool = False
     show_progress: bool = True
 
@@ -65,3 +78,7 @@ class BatchConfig:
             raise ValueError("max_retries must be non-negative")
         if self.retry_delay < 0:
             raise ValueError("retry_delay must be non-negative")
+        if self.retry_max_delay < self.retry_delay:
+            raise ValueError("retry_max_delay must be >= retry_delay")
+        if not 0 <= self.retry_jitter <= 1:
+            raise ValueError("retry_jitter must be between 0 and 1")

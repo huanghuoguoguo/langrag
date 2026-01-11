@@ -1,24 +1,52 @@
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+"""
+Retrieval Workflow Module.
 
-from langrag.datasource.service import RetrievalService
+This module orchestrates the complete retrieval pipeline:
+Query -> [Rewrite] -> [Route] -> [Retrieve] -> [Rerank] -> [PostProcess] -> Results
+
+The workflow is broken into stages:
+1. Query Rewriting - Optional query enhancement
+2. Routing - Select relevant datasets
+3. Retrieval - Fetch documents from selected datasets
+4. Reranking - Reorder results by relevance
+5. Post Processing - Deduplication and filtering
+"""
+
+import logging
+import time
+import uuid
+from typing import Any
+
 from langrag.entities.dataset import Dataset, RetrievalContext
 from langrag.observability import get_tracer, is_tracing_enabled
+from langrag.retrieval.config import WorkflowConfig, DEFAULT_MAX_WORKERS
+from langrag.retrieval.executor import RetrievalExecutor
 from langrag.retrieval.post_processor import PostProcessor
+from langrag.utils.retry import RetryConfig, execute_with_retry
 
-# from langrag.retrieval.router.base import BaseRouter
-# from langrag.retrieval.rerank.base import BaseReranker
 
 logger = logging.getLogger(__name__)
-
-# Default max workers for parallel retrieval
-DEFAULT_MAX_WORKERS = 5
 
 
 class RetrievalWorkflow:
     """
     Orchestrates the retrieval process:
     Query -> [Router] -> [RetrievalService] -> [Reranker] -> Results
+
+    Features:
+    - Parallel retrieval across multiple datasets
+    - Graceful degradation (partial failures don't break entire retrieval)
+    - Retry logic for transient errors
+    - Comprehensive logging with request IDs
+    - Timeout handling to prevent hung requests
+
+    Example:
+        workflow = RetrievalWorkflow(
+            router=llm_router,
+            reranker=reranker,
+            config=WorkflowConfig(max_workers=10)
+        )
+        results = workflow.retrieve(query, datasets, top_k=5)
     """
 
     def __init__(
@@ -27,18 +55,26 @@ class RetrievalWorkflow:
         reranker=None, # BaseReranker
         rewriter=None, # BaseRewriter
         vector_store_cls=None,
-        max_workers: int = DEFAULT_MAX_WORKERS
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        config: WorkflowConfig | None = None
     ):
         self.router = router
         self.reranker = reranker
         self.rewriter = rewriter
         self.vector_store_cls = vector_store_cls
-        self.max_workers = max_workers
+        self.config = config or WorkflowConfig(max_workers=max_workers)
+        self.max_workers = self.config.max_workers
         self.post_processor = PostProcessor()
-        # Callbacks (lazy init or passed)
         self.callback_manager = None
 
+        # Initialize retrieval executor
+        self._executor = RetrievalExecutor(
+            config=self.config,
+            vector_store_cls=vector_store_cls
+        )
+
     def set_callback_manager(self, manager):
+        """Set the callback manager for lifecycle events."""
         self.callback_manager = manager
 
     def retrieve(
@@ -58,323 +94,364 @@ class RetrievalWorkflow:
             top_k: Initial retrieval count per dataset.
             score_threshold: Minimum score filter.
             rerank_top_k: How many results to return after reranking.
+
+        Returns:
+            List of RetrievalContext objects with retrieved content.
+
+        Raises:
+            RetrievalError: When retrieval fails completely (all datasets fail)
         """
+        request_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
         tracer = get_tracer()
 
+        logger.info(
+            f"[{request_id}] Retrieval started: "
+            f"query_length={len(query)}, datasets={len(datasets)}, top_k={top_k}"
+        )
+
         with tracer.start_as_current_span("retrieval_workflow") as workflow_span:
-            # Set workflow attributes
             if is_tracing_enabled():
+                workflow_span.set_attribute("request_id", request_id)
                 workflow_span.set_attribute("query", query)
                 workflow_span.set_attribute("top_k", top_k)
                 workflow_span.set_attribute("score_threshold", score_threshold)
                 workflow_span.set_attribute("dataset_count", len(datasets))
 
-            # 0. Callback Start
             run_id = None
             if self.callback_manager:
                 run_id = self.callback_manager.on_retrieve_start(query=query)
 
             try:
-                # 0.5. Query Rewrite
-                original_query = query
-                if self.rewriter:
-                    with tracer.start_as_current_span("query_rewrite") as rewrite_span:
-                        try:
-                            query = self.rewriter.rewrite(query)
-                            logger.info(f"Query rewritten: '{original_query}' -> '{query}'")
-                            if is_tracing_enabled():
-                                rewrite_span.set_attribute("original_query", original_query)
-                                rewrite_span.set_attribute("rewritten_query", query)
-                        except Exception as e:
-                            logger.error(f"Query rewrite failed: {e}")
-                            if is_tracing_enabled():
-                                rewrite_span.record_exception(e)
+                # Stage 1: Query Rewrite
+                query = self._stage_rewrite(query, request_id, tracer)
 
-                # 1. Routing (Agentic Step)
-                # If router is present and we have multiple datasets, asking router which ones to query.
-                selected_datasets = datasets
-                if self.router and len(datasets) > 1:
-                    with tracer.start_as_current_span("routing") as route_span:
-                        try:
-                            selected_datasets = self.router.route(query, datasets)
-                            logger.info(f"Router selected {len(selected_datasets)} datasets: {[d.name for d in selected_datasets]}")
-                            if is_tracing_enabled():
-                                route_span.set_attribute("selected_count", len(selected_datasets))
-                                route_span.set_attribute("selected_datasets", [d.name for d in selected_datasets])
-                        except Exception as e:
-                            # If routing fails, we should arguably check if we should fallback to all or empty?
-                            # Current logic falls back to all which is safe.
-                            logger.warning(f"Router failed, falling back to all datasets: {e}")
-                            if is_tracing_enabled():
-                                route_span.record_exception(e)
+                # Stage 2: Routing
+                selected_datasets = self._stage_route(query, datasets, request_id, tracer)
 
                 if not selected_datasets:
+                    logger.warning(f"[{request_id}] No datasets selected, returning empty")
                     if self.callback_manager:
                         self.callback_manager.on_retrieve_end([], run_id=run_id)
                     return []
 
-                # 2. Parallel Retrieval (Dispatch)
-                all_documents = []
-                with tracer.start_as_current_span("vector_retrieval") as retrieval_span:
-                    if is_tracing_enabled():
-                        retrieval_span.set_attribute("dataset_count", len(selected_datasets))
+                # Stage 3: Retrieval
+                all_documents = self._stage_retrieve(
+                    query, selected_datasets, top_k, request_id, tracer
+                )
 
-                    # Use parallel retrieval for multiple datasets
-                    if len(selected_datasets) > 1:
-                        all_documents = self._retrieve_parallel(
-                            query, selected_datasets, top_k, retrieval_span
-                        )
-                    else:
-                        # Single dataset - no need for thread pool overhead
-                        all_documents = self._retrieve_single(
-                            query, selected_datasets[0], top_k, retrieval_span
-                        )
+                logger.info(
+                    f"[{request_id}] Retrieval completed: documents={len(all_documents)}"
+                )
 
-                    if is_tracing_enabled():
-                        retrieval_span.set_attribute("retrieved_count", len(all_documents))
+                # Stage 3.5: QA Processing
+                self._process_qa_documents(all_documents)
 
-                # 2.5. QA Indexing Handling (Swap Question -> Answer)
-                # If we retrieved a "Question" document, we want to return the "Answer" (original text)
-                # and use the original document ID for deduplication.
-                for doc in all_documents:
-                    if doc.metadata.get("is_qa"):
-                        # Swap content
-                        question_text = doc.page_content
-                        # Store question in metadata for potential debugging or UI display
-                        doc.metadata["matched_question"] = question_text
-
-                        # Restore original answer as content
-                        if "answer" in doc.metadata:
-                            doc.page_content = doc.metadata["answer"]
-
-                        # Restore original doc ID for correct deduplication
-                        if "original_doc_id" in doc.metadata:
-                            doc.id = doc.metadata["original_doc_id"]
-                            # Also update metadata doc_id to match (if downstream relies on it)
-                            doc.metadata["document_id"] = doc.metadata["original_doc_id"]
-
-                # 3. Reranking (Optimization)
+                # Stage 4: Reranking
                 if self.reranker and all_documents:
-                    with tracer.start_as_current_span("reranking") as rerank_span:
-                        if is_tracing_enabled():
-                            rerank_span.set_attribute("input_count", len(all_documents))
+                    all_documents = self._stage_rerank(
+                        query, all_documents, rerank_top_k or top_k,
+                        request_id, run_id, tracer
+                    )
 
-                        if self.callback_manager:
-                            self.callback_manager.on_rerank_start(query=query, documents=all_documents, run_id=run_id)
+                # Stage 5: Post Processing
+                all_documents = self._stage_post_process(
+                    all_documents, score_threshold, tracer
+                )
 
-                        try:
-                            # Convert Document objects to SearchResult
-                            from langrag.entities.search_result import SearchResult
+                # Stage 6: Format Results
+                results = self._format_results(all_documents, rerank_top_k or top_k)
 
-                            search_results = [
-                                SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
-                                for doc in all_documents
-                            ]
-
-                            reranked_results = self.reranker.rerank(
-                                query,
-                                search_results,
-                                top_k=rerank_top_k or top_k
-                            )
-
-                            # Update all_documents with reranked documents and their new scores
-                            all_documents = []
-                            for res in reranked_results:
-                                doc = res.chunk
-                                # Update score in metadata (important for PostProcessor)
-                                doc.metadata['score'] = res.score
-                                all_documents.append(doc)
-
-                            if is_tracing_enabled():
-                                rerank_span.set_attribute("output_count", len(all_documents))
-
-                        except Exception as e:
-                            logger.error(f"Reranking failed: {e}")
-                            if is_tracing_enabled():
-                                rerank_span.record_exception(e)
-                            if self.callback_manager:
-                                self.callback_manager.on_error(e, run_id=run_id)
-
-                        if self.callback_manager:
-                            self.callback_manager.on_rerank_end(documents=all_documents, run_id=run_id)
-
-                # 4. Post Processing (Deduplication & Thresholding)
-                with tracer.start_as_current_span("post_processing") as post_span:
-                    if is_tracing_enabled():
-                        post_span.set_attribute("input_count", len(all_documents))
-
-                    all_documents = self.post_processor.run(all_documents, score_threshold=score_threshold)
-
-                    if is_tracing_enabled():
-                        post_span.set_attribute("output_count", len(all_documents))
-
-                # 5. Context Formatting
-                results = []
-                for doc in all_documents:
-                    # Score is guaranteed to be >= threshold
-                    score = doc.metadata.get('score', 0.0)
-
-                    results.append(RetrievalContext(
-                        document_id=doc.metadata.get('document_id', 'unknown'),
-                        content=doc.page_content,
-                        score=score,
-                        metadata=doc.metadata
-                    ))
-
-                # Basic sort if no reranker was used (and if PostProcessor didn't reorder, which it doesn't)
-                if not self.reranker:
-                    results.sort(key=lambda x: x.score, reverse=True)
-
-                final_k = rerank_top_k or top_k
-                final_results = results[:final_k]
+                elapsed = time.time() - start_time
+                logger.info(
+                    f"[{request_id}] Workflow completed: "
+                    f"results={len(results)}, elapsed={elapsed:.2f}s"
+                )
 
                 if is_tracing_enabled():
-                    workflow_span.set_attribute("result_count", len(final_results))
+                    workflow_span.set_attribute("result_count", len(results))
+                    workflow_span.set_attribute("elapsed_seconds", elapsed)
 
                 if self.callback_manager:
-                    self.callback_manager.on_retrieve_end(final_results, run_id=run_id)
+                    self.callback_manager.on_retrieve_end(results, run_id=run_id)
 
-                return final_results
+                return results
 
             except Exception as e:
+                elapsed = time.time() - start_time
+                logger.error(
+                    f"[{request_id}] Workflow failed after {elapsed:.2f}s: "
+                    f"{type(e).__name__}: {e}"
+                )
+
                 if is_tracing_enabled():
                     workflow_span.record_exception(e)
+                    workflow_span.set_attribute("error", str(e))
+
                 if self.callback_manager:
                     self.callback_manager.on_error(e, run_id=run_id)
-                raise e
 
-    def _get_retrieval_method(self, dataset: Dataset) -> str:
+                raise
+
+    # -------------------------------------------------------------------------
+    # Pipeline Stages
+    # -------------------------------------------------------------------------
+
+    def _stage_rewrite(self, query: str, request_id: str, tracer: Any) -> str:
         """
-        Determine retrieval method based on dataset configuration.
+        Stage 1: Query Rewriting.
 
-        Args:
-            dataset: Dataset to check
-
-        Returns:
-            Retrieval method string: 'keyword_search', 'semantic_search', or 'hybrid_search'
+        Falls back to original query on failure.
         """
-        if dataset.indexing_technique == 'economy':
-            return "keyword_search"
-        return "semantic_search"
+        if not self.rewriter:
+            return query
 
-    def _retrieve_single(
+        original_query = query
+
+        with tracer.start_as_current_span("query_rewrite") as span:
+            try:
+                rewritten = self.rewriter.rewrite(query)
+
+                if is_tracing_enabled():
+                    span.set_attribute("original_query", query)
+                    span.set_attribute("rewritten_query", rewritten)
+
+                if rewritten != original_query:
+                    logger.info(
+                        f"[{request_id}] Query rewritten: "
+                        f"'{original_query[:50]}...' -> '{rewritten[:50]}...'"
+                    )
+
+                return rewritten
+
+            except Exception as e:
+                logger.warning(
+                    f"[{request_id}] Query rewrite failed, using original: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+                if is_tracing_enabled():
+                    span.record_exception(e)
+                    span.set_attribute("fallback", True)
+
+                return query
+
+    def _stage_route(
         self,
         query: str,
-        dataset: Dataset,
-        top_k: int,
-        retrieval_span
-    ) -> list:
+        datasets: list[Dataset],
+        request_id: str,
+        tracer: Any
+    ) -> list[Dataset]:
         """
-        Retrieve documents from a single dataset.
+        Stage 2: Dataset Routing.
 
-        Args:
-            query: Search query
-            dataset: Dataset to search
-            top_k: Number of results to retrieve
-            retrieval_span: Tracing span for error recording
-
-        Returns:
-            List of retrieved documents
+        Falls back to all datasets on routing failure.
         """
-        try:
-            method = self._get_retrieval_method(dataset)
-            docs = RetrievalService.retrieve(
-                dataset=dataset,
-                query=query,
-                retrieval_method=method,
-                top_k=top_k,
-                vector_store_cls=self.vector_store_cls
-            )
-            return docs
-        except Exception as e:
-            logger.error(f"Error retrieving from dataset {dataset.name}: {e}")
-            if is_tracing_enabled():
-                retrieval_span.record_exception(e)
-            return []
+        if not self.router or len(datasets) <= 1:
+            return datasets
 
-    def _retrieve_parallel(
+        with tracer.start_as_current_span("routing") as span:
+            try:
+                if self.config.enable_router_retry:
+                    retry_config = RetryConfig(
+                        max_attempts=self.config.router_max_retries,
+                        base_delay=0.5,
+                        max_delay=5.0,
+                    )
+                    selected = execute_with_retry(
+                        self.router.route,
+                        query,
+                        datasets,
+                        config=retry_config
+                    )
+                else:
+                    selected = self.router.route(query, datasets)
+
+                logger.info(
+                    f"[{request_id}] Router selected {len(selected)}/{len(datasets)} datasets: "
+                    f"{[d.name for d in selected]}"
+                )
+
+                if is_tracing_enabled():
+                    span.set_attribute("selected_count", len(selected))
+                    span.set_attribute("selected_datasets", [d.name for d in selected])
+
+                return selected if selected else datasets
+
+            except Exception as e:
+                logger.warning(
+                    f"[{request_id}] Router failed, falling back to all datasets: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+                if is_tracing_enabled():
+                    span.record_exception(e)
+                    span.set_attribute("fallback", True)
+
+                return datasets
+
+    def _stage_retrieve(
         self,
         query: str,
         datasets: list[Dataset],
         top_k: int,
-        retrieval_span
+        request_id: str,
+        tracer: Any
     ) -> list:
         """
-        Retrieve documents from multiple datasets in parallel.
+        Stage 3: Document Retrieval.
 
-        Uses ThreadPoolExecutor to concurrently search all datasets,
-        significantly reducing latency when searching multiple knowledge bases.
-
-        Args:
-            query: Search query
-            datasets: List of datasets to search
-            top_k: Number of results per dataset
-            retrieval_span: Tracing span for error recording
-
-        Returns:
-            Combined list of documents from all datasets
-
-        Note:
-            Partial failures are logged but don't prevent results from
-            successful retrievals being returned.
+        Delegates to RetrievalExecutor for parallel/single retrieval.
         """
-        all_documents = []
-        errors = []
+        with tracer.start_as_current_span("vector_retrieval") as span:
+            if is_tracing_enabled():
+                span.set_attribute("dataset_count", len(datasets))
 
-        # Limit workers to number of datasets or max_workers, whichever is smaller
-        num_workers = min(len(datasets), self.max_workers)
+            documents = self._executor.execute(
+                query, datasets, top_k, request_id, span
+            )
 
-        def retrieve_from_dataset(dataset: Dataset) -> tuple[Dataset, list, Exception | None]:
-            """Worker function for parallel retrieval."""
-            try:
-                method = self._get_retrieval_method(dataset)
-                docs = RetrievalService.retrieve(
-                    dataset=dataset,
-                    query=query,
-                    retrieval_method=method,
-                    top_k=top_k,
-                    vector_store_cls=self.vector_store_cls
+            if is_tracing_enabled():
+                span.set_attribute("retrieved_count", len(documents))
+
+            return documents
+
+    def _stage_rerank(
+        self,
+        query: str,
+        documents: list,
+        top_k: int,
+        request_id: str,
+        run_id: str | None,
+        tracer: Any
+    ) -> list:
+        """
+        Stage 4: Document Reranking.
+
+        Falls back to original order on reranker failure.
+        """
+        with tracer.start_as_current_span("reranking") as span:
+            if is_tracing_enabled():
+                span.set_attribute("input_count", len(documents))
+
+            if self.callback_manager:
+                self.callback_manager.on_rerank_start(
+                    query=query, documents=documents, run_id=run_id
                 )
-                return (dataset, docs, None)
-            except Exception as e:
-                return (dataset, [], e)
 
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            # Submit all retrieval tasks
-            future_to_dataset = {
-                executor.submit(retrieve_from_dataset, ds): ds
-                for ds in datasets
-            }
+            try:
+                from langrag.entities.search_result import SearchResult
 
-            # Collect results as they complete
-            for future in as_completed(future_to_dataset):
-                dataset, docs, error = future.result()
+                search_results = [
+                    SearchResult(chunk=doc, score=doc.metadata.get('score', 0.0))
+                    for doc in documents
+                ]
 
-                if error:
-                    logger.error(f"Error retrieving from dataset {dataset.name}: {error}")
-                    errors.append((dataset.name, error))
-                    if is_tracing_enabled():
-                        retrieval_span.record_exception(error)
-                else:
-                    all_documents.extend(docs)
-                    logger.debug(
-                        f"Retrieved {len(docs)} documents from {dataset.name}"
+                reranked_results = self.reranker.rerank(
+                    query, search_results, top_k=top_k
+                )
+
+                result_documents = []
+                for res in reranked_results:
+                    doc = res.chunk
+                    doc.metadata['score'] = res.score
+                    result_documents.append(doc)
+
+                logger.debug(
+                    f"[{request_id}] Reranking completed: "
+                    f"{len(documents)} -> {len(result_documents)}"
+                )
+
+                if is_tracing_enabled():
+                    span.set_attribute("output_count", len(result_documents))
+
+                if self.callback_manager:
+                    self.callback_manager.on_rerank_end(
+                        documents=result_documents, run_id=run_id
                     )
 
-        # Log summary
-        if errors:
-            logger.warning(
-                f"Parallel retrieval completed with {len(errors)} errors "
-                f"out of {len(datasets)} datasets"
-            )
-        else:
-            logger.debug(
-                f"Parallel retrieval successful: {len(all_documents)} documents "
-                f"from {len(datasets)} datasets"
+                return result_documents
+
+            except Exception as e:
+                logger.warning(
+                    f"[{request_id}] Reranking failed, using original order: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+                if is_tracing_enabled():
+                    span.record_exception(e)
+                    span.set_attribute("fallback", True)
+
+                if self.callback_manager:
+                    self.callback_manager.on_error(e, run_id=run_id)
+                    self.callback_manager.on_rerank_end(documents=documents, run_id=run_id)
+
+                return documents
+
+    def _stage_post_process(
+        self,
+        documents: list,
+        score_threshold: float,
+        tracer: Any
+    ) -> list:
+        """
+        Stage 5: Post Processing (deduplication and filtering).
+        """
+        with tracer.start_as_current_span("post_processing") as span:
+            if is_tracing_enabled():
+                span.set_attribute("input_count", len(documents))
+
+            processed = self.post_processor.run(
+                documents, score_threshold=score_threshold
             )
 
-        if is_tracing_enabled():
-            retrieval_span.set_attribute("parallel_workers", num_workers)
-            retrieval_span.set_attribute("error_count", len(errors))
+            if is_tracing_enabled():
+                span.set_attribute("output_count", len(processed))
 
-        return all_documents
+            return processed
+
+    # -------------------------------------------------------------------------
+    # Helper Methods
+    # -------------------------------------------------------------------------
+
+    def _process_qa_documents(self, documents: list) -> None:
+        """
+        Process QA-indexed documents by swapping question content with answer.
+        """
+        for doc in documents:
+            if doc.metadata.get("is_qa"):
+                question_text = doc.page_content
+                doc.metadata["matched_question"] = question_text
+
+                if "answer" in doc.metadata:
+                    doc.page_content = doc.metadata["answer"]
+
+                if "original_doc_id" in doc.metadata:
+                    doc.id = doc.metadata["original_doc_id"]
+                    doc.metadata["document_id"] = doc.metadata["original_doc_id"]
+
+    def _format_results(
+        self,
+        documents: list,
+        top_k: int
+    ) -> list[RetrievalContext]:
+        """
+        Format documents into RetrievalContext objects.
+        """
+        results = []
+        for doc in documents:
+            score = doc.metadata.get('score', 0.0)
+
+            results.append(RetrievalContext(
+                document_id=doc.metadata.get('document_id', 'unknown'),
+                content=doc.page_content,
+                score=score,
+                metadata=doc.metadata
+            ))
+
+        # Sort if no reranker was used
+        if not self.reranker:
+            results.sort(key=lambda x: x.score, reverse=True)
+
+        return results[:top_k]
