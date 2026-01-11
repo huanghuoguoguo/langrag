@@ -83,8 +83,8 @@ function kbDetailPage() {
             await Alpine.store('kbs').search(this.searchQuery);
         },
 
-        deleteKB() {
-            Alpine.store('kbs').deleteKB(this.kb.id);
+        async deleteKB() {
+            await Alpine.store('kbs').deleteKB(this.kb.id);
         }
     };
 }

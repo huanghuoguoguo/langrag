@@ -64,7 +64,8 @@ document.addEventListener('alpine:init', () => {
         },
 
         async deleteKB(id) {
-            if (!confirm('确定要删除这个知识库吗？')) return;
+            // User requested immediate deletion without confirmation
+            // if (!confirm('确定要删除这个知识库吗？')) return;
             try {
                 await api.deleteKB(id);
                 showToast('知识库已删除', 'success');
@@ -165,7 +166,7 @@ document.addEventListener('alpine:init', () => {
     // Chat Store
     Alpine.store('chat', {
         messages: [
-            { role: 'assistant', content: '你好！请先在左侧选择一个或多个知识库，然后开始提问。', sources: [] }
+            { role: 'assistant', content: '你好！', sources: [] }
         ],
         selectedKBs: [],
         loading: false,
@@ -183,11 +184,16 @@ document.addEventListener('alpine:init', () => {
             return this.selectedKBs.includes(kbId);
         },
 
+        selectAllKBs(allIds) {
+            this.selectedKBs = [...allIds];
+        },
+
+        deselectAllKBs() {
+            this.selectedKBs = [];
+        },
+
         async send(input) {
-            if (!input.trim() || this.selectedKBs.length === 0) {
-                showToast('请选择至少一个知识库', 'error');
-                return;
-            }
+            if (!input.trim()) return;
 
             const userMessage = { role: 'user', content: input, sources: [] };
             this.messages.push(userMessage);
@@ -226,6 +232,9 @@ document.addEventListener('alpine:init', () => {
             const msg = this.messages[msgIndex];
             if (!msg || msg.role !== 'assistant' || !msg.sources?.length) return null;
 
+            // Set evaluating state
+            msg.evaluating = true;
+
             try {
                 const result = await api.evaluate({
                     question: msg.question || '',
@@ -236,7 +245,10 @@ document.addEventListener('alpine:init', () => {
             } catch (e) {
                 showToast(e.message, 'error');
                 return null;
+            } finally {
+                msg.evaluating = false;
             }
         }
     });
+});
 });

@@ -35,6 +35,24 @@ function chatPage() {
             Alpine.store('chat').toggleKB(kbId);
         },
 
+        toggleAll() {
+            const allIds = this.kbs.map(k => k.id);
+            const store = Alpine.store('chat');
+            if (store.selectedKBs.length === allIds.length) {
+                store.deselectAllKBs();
+            } else {
+                store.selectAllKBs(allIds);
+            }
+        },
+
+        get isAllSelected() {
+            return this.kbs.length > 0 && Alpine.store('chat').selectedKBs.length === this.kbs.length;
+        },
+
+        get isNoneSelected() {
+            return Alpine.store('chat').selectedKBs.length === 0;
+        },
+
         async send() {
             if (!this.input.trim()) return;
             const msg = this.input;

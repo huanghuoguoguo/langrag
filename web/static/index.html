@@ -180,7 +180,7 @@
                             <div class="info-grid">
                                 <div class="info-item">
                                     <label>ID</label>
-                                    <div class="info-value mono" x-text="kb.kb_id"></div>
+                                    <div class="info-value mono" x-text="kb.id"></div>
                                 </div>
                                 <div class="info-item">
                                     <label>向量数据库</label>
@@ -340,13 +340,28 @@
                         </div>
 
                         <div class="form-group" style="flex:1; display:flex; flex-direction:column;">
-                            <label>选择知识库</label>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <label>选择知识库</label>
+                                <button class="btn-sm" @click="toggleAll()"
+                                    x-text="isAllSelected ? '取消全选' : '全选'"></button>
+                            </div>
                             <div class="kb-selector">
-                                <template x-for="kb in kbs" :key="kb.kb_id">
-                                    <div class="kb-selector-item" @click="toggleKB(kb.kb_id)"
-                                        :class="{ selected: isSelected(kb.kb_id) }">
+                                <template x-if="isNoneSelected">
+                                    <div class="kb-selector-item" style="opacity:0.7; border-style:dashed;">
                                         <div class="kb-selector-check">
-                                            <span x-show="isSelected(kb.kb_id)">✓</span>
+                                            <span>🤖</span>
+                                        </div>
+                                        <div>
+                                            <div>智能路由模式</div>
+                                            <div class="text-muted text-sm">LLM 将自动选择合适的知识库</div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-for="kb in kbs" :key="kb.id">
+                                    <div class="kb-selector-item" @click="toggleKB(kb.id)"
+                                        :class="{ selected: isSelected(kb.id) }">
+                                        <div class="kb-selector-check">
+                                            <span x-show="isSelected(kb.id)">✓</span>
                                         </div>
                                         <div>
                                             <div x-text="kb.name"></div>
@@ -394,8 +409,10 @@
                                     <!-- Evaluation -->
                                     <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
                                         <div class="eval-section">
-                                            <button class="btn-sm" @click="evaluate(index)" x-show="!msg.evaluation">
-                                                📊 评估回答质量
+                                            <button class="btn-sm" @click="evaluate(index)" x-show="!msg.evaluation"
+                                                :disabled="msg.evaluating">
+                                                <span x-show="!msg.evaluating">📊 评估回答质量</span>
+                                                <span x-show="msg.evaluating">⏳ 正在评估...</span>
                                             </button>
                                             <template x-if="msg.evaluation">
                                                 <div class="eval-results">

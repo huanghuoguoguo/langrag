@@ -2,8 +2,8 @@
 from typing import Dict, Any, List
 import logging
 
-from langrag.evaluation.runner import EvaluationRunner
-from langrag.evaluation.types import EvaluationSample, EvaluationReport, BatchEvaluationResult
+from langrag.evaluation.runner import EvaluationRunner, EvaluationReport
+from langrag.evaluation.types import EvaluationSample, BatchEvaluationResult
 from langrag.evaluation.metrics.faithfulness import FaithfulnessEvaluator
 from langrag.evaluation.metrics.answer_relevancy import AnswerRelevancyEvaluator
 from langrag.evaluation.metrics.context_relevancy import ContextRelevancyEvaluator

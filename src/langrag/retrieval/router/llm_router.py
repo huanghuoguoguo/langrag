@@ -16,7 +16,8 @@ The user's query is: "{query}"
 
 Which datasets should be queried to answer this question?
 Respond with a JSON object: {{"dataset_names": ["name1", "name2"]}}
-If no specific dataset is clear, return all of them.
+If no dataset is relevant to the question, return an empty list: [].
+Do NOT select datasets unless they are clearly relevant.
 """
 
 # Regex to extract JSON object from LLM response
@@ -117,12 +118,17 @@ class LLMRouter(BaseRouter):
                 )
                 return datasets
 
+            # Note: We respect empty list if LLM explicitly decides no KB is relevant.
             selected = [d for d in datasets if d.name in names]
 
-            if not selected:
-                logger.warning("Router selected no matching datasets, falling back to all.")
-                return datasets
-
+            if not selected and names:
+                # If names were provided but none matched (e.g. hallucinated names), warning.
+                # But if names was [], selected is [], which is valid.
+                logger.warning(f"Router returned names {names} but none matched available datasets.")
+                # In this specific case, maybe we should return [] or all? 
+                # Let's return [] because the intent was likely specific.
+                return []
+            
             logger.info(f"[LLMRouter] Selected datasets: {[d.name for d in selected]}")
             return selected
 

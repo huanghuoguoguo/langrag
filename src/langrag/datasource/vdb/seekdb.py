@@ -195,6 +195,10 @@ class SeekDBVector(BaseVector):
         **kwargs
     ) -> list[Document]:
 
+        if not self._client.has_collection(self.collection_name):
+            logger.debug(f"Collection {self.collection_name} does not exist, returning empty results.")
+            return []
+
         coll = self._client.get_collection(self.collection_name, embedding_function=None)
         search_type = kwargs.get('search_type', 'similarity')
 
