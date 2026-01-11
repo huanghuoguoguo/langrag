@@ -42,7 +42,7 @@ class TestCohereReranker:
 
 class TestWorkflowRerank:
     
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_workflow_uses_reranker(self, mock_service):
         mock_reranker = MagicMock()
         workflow = RetrievalWorkflow(reranker=mock_reranker)

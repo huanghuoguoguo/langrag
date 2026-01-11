@@ -13,6 +13,32 @@ from .batch import BatchConfig, BatchProcessor, BatchProgress, ProgressCallback
 # Cache
 from .cache import BaseCache, CacheEntry, SemanticCache
 
+# Errors
+from .errors import (
+    LangRAGError,
+    RetryableError,
+    RateLimitError,
+    ServiceUnavailableError,
+    ConnectionError,
+    TransientError,
+    TimeoutError,
+    ConnectTimeoutError,
+    ReadTimeoutError,
+    PermanentError,
+    AuthenticationError,
+    InvalidRequestError,
+    NotFoundError,
+    ConfigurationError,
+    QuotaExceededError,
+    EmbeddingError,
+    RetrievalError,
+    IndexingError,
+    VectorStoreError,
+    is_retryable,
+    classify_http_error,
+    wrap_exception,
+)
+
 # Evaluation
 from .evaluation import (
     BaseEvaluator,
@@ -67,6 +93,30 @@ __all__ = [
     "BaseCache",
     "CacheEntry",
     "SemanticCache",
+
+    # Errors
+    "LangRAGError",
+    "RetryableError",
+    "RateLimitError",
+    "ServiceUnavailableError",
+    "ConnectionError",
+    "TransientError",
+    "TimeoutError",
+    "ConnectTimeoutError",
+    "ReadTimeoutError",
+    "PermanentError",
+    "AuthenticationError",
+    "InvalidRequestError",
+    "NotFoundError",
+    "ConfigurationError",
+    "QuotaExceededError",
+    "EmbeddingError",
+    "RetrievalError",
+    "IndexingError",
+    "VectorStoreError",
+    "is_retryable",
+    "classify_http_error",
+    "wrap_exception",
 
     # Evaluation
     "BaseEvaluator",

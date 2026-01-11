@@ -4,7 +4,7 @@ import pytest
 
 from langrag.entities.dataset import Dataset
 from langrag.entities.document import Document
-from langrag.retrieval.workflow import DEFAULT_MAX_WORKERS, RetrievalWorkflow
+from langrag.retrieval import DEFAULT_MAX_WORKERS, RetrievalWorkflow, RetrievalExecutor
 
 
 class TestRetrievalWorkflow:
@@ -17,7 +17,7 @@ class TestRetrievalWorkflow:
         results = workflow.retrieve("query", [])
         assert results == []
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_retrieve_single_dataset(self, mock_service, workflow):
         # Mock Service response
         doc = Document(page_content="foo", metadata={"score": 0.9, "document_id": "d1"})
@@ -30,7 +30,7 @@ class TestRetrievalWorkflow:
         assert results[0].content == "foo"
         assert results[0].score == 0.9
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_retrieve_filtering(self, mock_service, workflow):
         # Doc with low score
         doc = Document(page_content="foo", metadata={"score": 0.1, "document_id": "d1"})
@@ -42,7 +42,7 @@ class TestRetrievalWorkflow:
 
         assert len(results) == 0
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_retrieve_workflow_router(self, mock_service, workflow):
         # Setup router
         mock_router = MagicMock()
@@ -68,7 +68,7 @@ class TestRetrievalWorkflow:
         args = mock_service.retrieve.call_args[1]
         assert args['dataset'] == ds1
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_retrieve_error_handling(self, mock_service, workflow):
         # Service raises exception
         mock_service.retrieve.side_effect = Exception("DB Error")
@@ -89,7 +89,7 @@ class TestRetrievalWorkflow:
         workflow = RetrievalWorkflow()
         assert workflow.max_workers == DEFAULT_MAX_WORKERS
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_retrieval_multiple_datasets(self, mock_service):
         """Test that multiple datasets are retrieved in parallel."""
         workflow = RetrievalWorkflow(max_workers=3)
@@ -119,7 +119,7 @@ class TestRetrievalWorkflow:
         # Should have 3 results (one from each dataset)
         assert len(results) == 3
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_retrieval_partial_failure(self, mock_service):
         """Test that partial failures don't prevent successful results."""
         workflow = RetrievalWorkflow(max_workers=3)
@@ -153,7 +153,7 @@ class TestRetrievalWorkflow:
         # Should have 2 results (ds1 and ds3 succeeded, ds2 failed)
         assert len(results) == 2
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_single_dataset_no_parallel(self, mock_service):
         """Test that single dataset retrieval doesn't use thread pool overhead."""
         workflow = RetrievalWorkflow()
@@ -171,7 +171,7 @@ class TestRetrievalWorkflow:
         # Service should be called once
         assert mock_service.retrieve.call_count == 1
 
-    @patch("langrag.retrieval.workflow.RetrievalService")
+    @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_respects_max_workers(self, mock_service):
         """Test that parallel retrieval respects max_workers limit."""
         # Use a very small max_workers
@@ -210,13 +210,13 @@ class TestRetrievalWorkflow:
         """Test retrieval method selection for economy indexing."""
         workflow = RetrievalWorkflow()
         dataset = Dataset(name="ds", collection_name="col", indexing_technique="economy")
-        method = workflow._get_retrieval_method(dataset)
+        method = workflow._executor._get_retrieval_method(dataset)
         assert method == "keyword_search"
 
     def test_get_retrieval_method_default(self):
         """Test retrieval method selection for default indexing."""
         workflow = RetrievalWorkflow()
         dataset = Dataset(name="ds", collection_name="col")
-        method = workflow._get_retrieval_method(dataset)
+        method = workflow._executor._get_retrieval_method(dataset)
         assert method == "semantic_search"
 

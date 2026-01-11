@@ -45,6 +45,7 @@ class TestWebLLMAdapter:
     def test_chat_success(self, mock_post):
         """chat returns LLM response content."""
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Hello, world!"}}]
         }
@@ -66,6 +67,7 @@ class TestWebLLMAdapter:
     def test_chat_with_temperature(self, mock_post):
         """chat uses provided temperature."""
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "response"}}]
         }
@@ -94,6 +96,7 @@ class TestWebLLMAdapter:
         """stream_chat yields content chunks."""
         # Mock the streaming response
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.iter_lines.return_value = [
             'data: {"choices": [{"delta": {"content": "Hello"}}]}',
             'data: {"choices": [{"delta": {"content": " world"}}]}',
@@ -121,6 +124,7 @@ class TestWebLLMAdapter:
     def test_stream_chat_handles_empty_content(self, mock_client_class):
         """stream_chat skips chunks without content."""
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.iter_lines.return_value = [
             'data: {"choices": [{"delta": {}}]}',  # No content
             'data: {"choices": [{"delta": {"content": "text"}}]}',
@@ -161,6 +165,7 @@ class TestWebLLMAdapter:
     def test_stream_chat_handles_json_decode_error(self, mock_client_class):
         """stream_chat ignores malformed JSON."""
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.iter_lines.return_value = [
             "data: invalid json",
             'data: {"choices": [{"delta": {"content": "valid"}}]}',

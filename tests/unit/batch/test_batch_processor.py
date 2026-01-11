@@ -216,10 +216,12 @@ class TestBatchProcessor:
 
     def test_retry_logic(self, mock_embedder, mock_vector_store, sample_documents):
         """Test that retry logic works correctly."""
-        # First two calls fail, third succeeds
+        from langrag.errors import TransientError
+
+        # First two calls fail with retryable error, third succeeds
         mock_embedder.embed.side_effect = [
-            Exception("Error 1"),
-            Exception("Error 2"),
+            TransientError("Error 1"),
+            TransientError("Error 2"),
             [[0.1, 0.2, 0.3]] * 10
         ]
 

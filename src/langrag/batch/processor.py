@@ -5,12 +5,14 @@ This module provides the main BatchProcessor class that handles
 efficient processing of large document collections with:
 - Configurable batch sizes for embedding and storage
 - Progress tracking via callbacks
-- Error handling with optional retry logic
+- Error handling with exponential backoff retry
 - Memory-efficient chunked processing
+- Comprehensive logging for debugging
 """
 
 import logging
 import time
+import uuid
 from typing import Any
 
 from langrag.batch.config import BatchConfig
@@ -22,7 +24,13 @@ from langrag.batch.progress import (
 )
 from langrag.datasource.vdb.base import BaseVector
 from langrag.entities.document import Document
+from langrag.errors import (
+    EmbeddingError,
+    IndexingError,
+    is_retryable,
+)
 from langrag.llm.embedder.base import BaseEmbedder
+from langrag.utils.retry import RetryConfig, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +41,20 @@ class BatchProcessor:
 
     This processor handles the embedding and storage of large document
     collections by processing them in configurable batches, with support
-    for progress tracking and error handling.
+    for progress tracking, error handling, and automatic retry.
 
     The processing flow:
     1. Split documents into embedding batches
-    2. Generate embeddings for each batch
+    2. Generate embeddings for each batch (with retry on transient errors)
     3. Accumulate embedded documents
     4. Store in storage batches when threshold reached
     5. Report progress throughout
+
+    Features:
+    - Exponential backoff with jitter for transient errors
+    - Respects rate limit headers (Retry-After)
+    - Request ID tracking for log correlation
+    - Detailed statistics including timing and error tracking
 
     Attributes:
         embedder: The embedding model to use
@@ -74,6 +88,15 @@ class BatchProcessor:
         self.vector_store = vector_store
         self.config = config or BatchConfig()
 
+        # Build retry config from batch config
+        self._retry_config = RetryConfig(
+            max_attempts=self.config.max_retries + 1,  # +1 because max_retries is additional attempts
+            base_delay=self.config.retry_delay,
+            max_delay=self.config.retry_max_delay,
+            exponential_base=self.config.retry_exponential_base,
+            jitter=self.config.retry_jitter,
+        )
+
     def process_documents(
         self,
         documents: list[Document],
@@ -97,20 +120,28 @@ class BatchProcessor:
             - stored: Documents successfully stored
             - errors: Number of errors encountered
             - duration: Total processing time in seconds
+            - request_id: Unique identifier for this batch job
 
         Raises:
             Exception: If continue_on_error is False and an error occurs
         """
+        # Generate request ID for log correlation
+        request_id = str(uuid.uuid4())[:8]
         start_time = time.time()
+
         stats = {
             "total": len(documents),
             "embedded": 0,
             "stored": 0,
             "errors": 0,
-            "duration": 0.0
+            "duration": 0.0,
+            "request_id": request_id,
+            "embedding_time": 0.0,
+            "storage_time": 0.0,
         }
 
         if not documents:
+            logger.debug(f"[{request_id}] No documents to process")
             return stats
 
         reporter = CallbackProgressReporter(on_progress) if on_progress else None
@@ -123,8 +154,9 @@ class BatchProcessor:
         total_embed_batches = (total_docs + embed_batch_size - 1) // embed_batch_size
 
         logger.info(
-            f"Starting batch processing: {total_docs} documents, "
-            f"embed_batch={embed_batch_size}, store_batch={store_batch_size}"
+            f"[{request_id}] Batch processing started: "
+            f"documents={total_docs}, embed_batch_size={embed_batch_size}, "
+            f"store_batch_size={store_batch_size}, max_retries={self.config.max_retries}"
         )
 
         # Process embedding batches
@@ -146,20 +178,40 @@ class BatchProcessor:
                 ))
 
             # Embed batch with retry
+            embed_start = time.time()
             try:
-                batch_with_embeddings = self._embed_batch(batch_docs)
+                batch_with_embeddings = self._embed_batch(batch_docs, request_id, batch_num)
                 embedded_docs.extend(batch_with_embeddings)
                 stats["embedded"] += len(batch_with_embeddings)
+                stats["embedding_time"] += time.time() - embed_start
+
+                logger.debug(
+                    f"[{request_id}] Batch {batch_num}/{total_embed_batches} embedded: "
+                    f"{len(batch_with_embeddings)} docs in {time.time() - embed_start:.2f}s"
+                )
+
             except Exception as e:
                 stats["errors"] += len(batch_docs)
-                logger.error(f"Embedding batch {batch_num} failed: {e}")
+                stats["embedding_time"] += time.time() - embed_start
+
+                logger.error(
+                    f"[{request_id}] Embedding batch {batch_num} failed after retries: "
+                    f"{type(e).__name__}: {e}"
+                )
+
                 if not self.config.continue_on_error:
-                    raise
+                    raise EmbeddingError(
+                        f"Batch {batch_num} embedding failed",
+                        details={"batch_num": batch_num, "doc_count": len(batch_docs)},
+                        original_error=e
+                    )
 
             # Store when we have enough embedded documents
             if len(embedded_docs) >= store_batch_size:
-                stored = self._store_batch(embedded_docs, stats, reporter)
+                store_start = time.time()
+                stored = self._store_batch(embedded_docs, stats, reporter, request_id)
                 stats["stored"] += stored
+                stats["storage_time"] += time.time() - store_start
                 embedded_docs = []
 
         # Store remaining documents
@@ -172,8 +224,11 @@ class BatchProcessor:
                     message="Storing final batch",
                     errors=stats["errors"]
                 ))
-            stored = self._store_batch(embedded_docs, stats, reporter)
+
+            store_start = time.time()
+            stored = self._store_batch(embedded_docs, stats, reporter, request_id)
             stats["stored"] += stored
+            stats["storage_time"] += time.time() - store_start
 
         # Report completion
         stats["duration"] = time.time() - start_time
@@ -187,19 +242,32 @@ class BatchProcessor:
                 errors=stats["errors"]
             ))
 
+        # Log final summary
         logger.info(
-            f"Batch processing complete: {stats['stored']}/{total_docs} stored, "
-            f"{stats['errors']} errors, {stats['duration']:.2f}s"
+            f"[{request_id}] Batch processing complete: "
+            f"stored={stats['stored']}/{total_docs}, errors={stats['errors']}, "
+            f"duration={stats['duration']:.2f}s "
+            f"(embed={stats['embedding_time']:.2f}s, store={stats['storage_time']:.2f}s)"
         )
 
         return stats
 
-    def _embed_batch(self, documents: list[Document]) -> list[Document]:
+    def _embed_batch(
+        self,
+        documents: list[Document],
+        request_id: str,
+        batch_num: int
+    ) -> list[Document]:
         """
         Embed a batch of documents with retry logic.
 
+        Uses exponential backoff with jitter for transient errors.
+        Respects rate limit headers if present.
+
         Args:
             documents: Documents to embed
+            request_id: Request ID for logging
+            batch_num: Current batch number for logging
 
         Returns:
             Documents with embeddings attached
@@ -208,35 +276,36 @@ class BatchProcessor:
             Exception: If all retries fail
         """
         texts = [doc.page_content for doc in documents]
-        last_error = None
 
-        for attempt in range(self.config.max_retries + 1):
-            try:
-                embeddings = self.embedder.embed(texts)
+        @retry_with_backoff(config=self._retry_config)
+        def _do_embed() -> list[list[float]]:
+            return self.embedder.embed(texts)
 
-                # Attach embeddings to documents
-                for doc, embedding in zip(documents, embeddings):
-                    doc.vector = embedding
+        try:
+            embeddings = _do_embed()
 
-                return documents
+            # Attach embeddings to documents
+            for doc, embedding in zip(documents, embeddings):
+                doc.vector = embedding
 
-            except Exception as e:
-                last_error = e
-                if attempt < self.config.max_retries:
-                    delay = self.config.retry_delay * (2 ** attempt)
-                    logger.warning(
-                        f"Embedding attempt {attempt + 1} failed, "
-                        f"retrying in {delay}s: {e}"
-                    )
-                    time.sleep(delay)
+            return documents
 
-        raise last_error
+        except Exception as e:
+            # Log detailed error info for debugging
+            logger.error(
+                f"[{request_id}] Embedding failed for batch {batch_num}: "
+                f"error_type={type(e).__name__}, "
+                f"retryable={is_retryable(e)}, "
+                f"doc_count={len(documents)}"
+            )
+            raise
 
     def _store_batch(
         self,
         documents: list[Document],
         stats: dict[str, Any],
-        reporter: CallbackProgressReporter | None
+        reporter: CallbackProgressReporter | None,
+        request_id: str
     ) -> int:
         """
         Store a batch of documents in the vector store.
@@ -245,19 +314,35 @@ class BatchProcessor:
             documents: Documents to store
             stats: Statistics dict to update on error
             reporter: Progress reporter
+            request_id: Request ID for logging
 
         Returns:
             Number of documents successfully stored
         """
         try:
             self.vector_store.add_texts(documents)
+
+            logger.debug(
+                f"[{request_id}] Stored {len(documents)} documents"
+            )
+
             return len(documents)
 
         except Exception as e:
-            logger.error(f"Storage batch failed: {e}")
+            logger.error(
+                f"[{request_id}] Storage failed: {type(e).__name__}: {e}, "
+                f"doc_count={len(documents)}"
+            )
+
             stats["errors"] += len(documents)
+
             if not self.config.continue_on_error:
-                raise
+                raise IndexingError(
+                    "Vector store insertion failed",
+                    details={"doc_count": len(documents)},
+                    original_error=e
+                )
+
             return 0
 
 

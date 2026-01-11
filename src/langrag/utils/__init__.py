@@ -2,6 +2,13 @@
 
 from .async_helpers import run_async_in_sync_context
 from .performance import timed, timer
+from .retry import (
+    RetryConfig,
+    RetryContext,
+    RetryState,
+    execute_with_retry,
+    retry_with_backoff,
+)
 from .rrf import reciprocal_rank_fusion, weighted_rrf
 from .similarity import cosine_similarity
 
@@ -12,4 +19,10 @@ __all__ = [
     "run_async_in_sync_context",
     "timer",
     "timed",
+    # Retry utilities
+    "RetryConfig",
+    "RetryContext",
+    "RetryState",
+    "retry_with_backoff",
+    "execute_with_retry",
 ]

@@ -31,7 +31,7 @@ class TestWorkflowCallbacks:
         # Mock RetrievalService to avoid hitting DB
         with (
             pytest.MonkeyPatch.context() as m,
-            patch("langrag.retrieval.workflow.RetrievalService") as mock_service
+            patch("langrag.retrieval.executor.RetrievalService") as mock_service
         ):
             mock_service.retrieve.return_value = [Document(page_content="foo", metadata={"score": 0.5})]
             
