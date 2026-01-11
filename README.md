@@ -21,11 +21,18 @@
 
 ## What is LangRAG?
 
-**LangRAG** is a **RAG (Retrieval-Augmented Generation) Kernel** — a modular, extensible core library designed to power intelligent knowledge systems. Unlike end-to-end RAG applications, LangRAG focuses on providing **high-quality, reusable RAG primitives** that can be integrated into any application.
+**LangRAG** is a **"Small and Beautiful" RAG Kernel**. It is designed to be the lightweight, robust engine at the heart of your intelligent knowledge systems.
 
-> 🎯 **Core Philosophy**: LangRAG is NOT an application. It's a **kernel** that your application drives.
+LangRAG strikes a unique balance: it implements **industry-standard best practices** (like Parent-Child Indexing, Hybrid Search, and LLM Judges) while maintaining a **minimal footprint** and a **flat, transparent code structure**.
 
-The `web/` directory contains a **demo application** that showcases how to integrate LangRAG into a real-world system.
+We believe in an **Out-of-the-Box** philosophy that doesn't sacrifice control. You get production-ready primitives—with built-in Telemetry, Caching, and Evaluation—without the weight and "magic" of monolithic frameworks.
+
+> 🎯 **Why LangRAG?**
+> *   **Opinionated & Ready**: Best-practices like RRF and Recursive Chunking are the default, not a config hell.
+> *   **Transparent Kernel**: ~3k LOC core with no deep abstraction layers. You can read, understand, and mod the code in minutes.
+> *   **Application Driven**: LangRAG is a library you use, not a framework that uses you.
+
+The `web/` directory contains a **demo application** showcasing how a sophisticated, "industry-grade" RAG flow can be built with minimal glue code.
 
 ---
 
@@ -54,7 +61,7 @@ The `web/` directory contains a **demo application** that showcases how to integ
 | **Observability** | OpenTelemetry | Distributed tracing for retrieval and indexing pipelines |
 | **Generation** | Streaming | Server-Sent Events for real-time responses |
 | | LLM Abstraction | OpenAI-compatible interface with injection |
-| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (357 tests) |
+| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (541 tests) |
 
 ### 🔧 Architecture Highlights
 
@@ -215,12 +222,12 @@ Visit: [http://localhost:8000](http://localhost:8000) for local docs.
 |---------|---------|-----------|------------|----------|
 | **Focus** | RAG Kernel | General LLM Framework | Data Framework | Production Pipelines |
 | **Philosophy** | Inject, Don't Manage | All-in-one | Index-centric | Component-based |
-| **Parent-Child Indexing** | ✅ Built-in | ❌ Manual | ✅ Supported | ❌ Manual |
-| **QA Indexing** | ✅ Built-in | ❌ N/A | ❌ N/A | ❌ N/A |
+| **Parent-Child Indexing** | ✅ Built-in | ✅ Supported | ✅ Supported | ⚠️ Manual |
+| **QA Indexing** | ✅ Built-in | ⚠️ Chains | ✅ Supported | ⚠️ Nodes |
 | **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Pipelines |
-| **Hybrid Search** | ✅ DuckDB, SeekDB | ❌ External | ✅ External | ✅ External |
+| **Hybrid Search** | ✅ DuckDB, SeekDB | ✅ Ensemble | ✅ External | ✅ External |
 | **Semantic Cache** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
-| **LLM Judge Evaluation** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
+| **LLM Judge Evaluation** | ✅ Built-in | ⚠️ Integration | ✅ Built-in | ⚠️ Integration |
 | **OpenTelemetry** | ✅ Native | ⚠️ Partial | ⚠️ Partial | ✅ Native |
 | **Streaming** | ✅ Native SSE | ✅ Callbacks | ✅ Streaming | ✅ Streaming |
 | **Web Search Integration** | ✅ Multi-provider | ✅ Tools | ✅ Tools | ✅ Nodes |
