@@ -61,4 +61,12 @@ window.api = {
     listLLMs: () => window.api.get('/api/config/llms'),
     saveLLM: (data) => window.api.post('/api/config/llm', data),
     activateLLM: (name) => window.api.post('/api/config/llm/activate', { name }),
+
+    // Playground
+    compareSearchModes: (data) => window.api.post('/api/playground/search-compare', data),
+    testQueryRewrite: (data) => window.api.post('/api/playground/query-rewrite', data),
+    compareReranking: (data) => window.api.post('/api/playground/rerank-compare', data),
+    getCacheStats: () => window.api.get('/api/playground/cache-stats'),
+    testCache: (data) => window.api.post('/api/playground/cache-test', data),
+    clearCache: () => window.api.post('/api/playground/cache-clear', {}),
 };

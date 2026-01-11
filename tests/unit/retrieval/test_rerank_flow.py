@@ -36,7 +36,7 @@ class TestRerankFlow:
         kernel.reranker = reranker
         
         # 2. Execute Search (top_k=2)
-        results, search_type = kernel.search("test_kb", "query", top_k=2)
+        results, search_type, rewritten_query = kernel.search("test_kb", "query", top_k=2)
         
         # 3. Asserts
         

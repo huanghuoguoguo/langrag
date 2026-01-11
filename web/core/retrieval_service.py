@@ -294,7 +294,7 @@ class RetrievalService:
         use_cache: bool = True,
         search_mode: str | None = None,
         use_rerank: bool | None = None
-    ) -> tuple[list[LangRAGDocument], str]:
+    ) -> tuple[list[LangRAGDocument], str, str | None]:
         """
         Search a single vector store for relevant documents.
 
@@ -317,20 +317,25 @@ class RetrievalService:
             use_rerank: Force reranking (True/False) or None for default behavior
 
         Returns:
-            Tuple of (results list, search type string)
+            Tuple of (results list, search type string, rewritten query or None)
 
         Example:
-            >>> results, search_type = service.search(store, "What is RAG?", top_k=5)
+            >>> results, search_type, rewritten = service.search(store, "What is RAG?", top_k=5)
             >>> print(f"Found {len(results)} results using {search_type}")
         """
-        logger.info(f"Search: query='{query[:50]}...', top_k={top_k}, mode={search_mode}")
+        # Get store info for logging
+        store_class = store.__class__.__name__
+        logger.info(f"Search: query='{query[:50]}...', top_k={top_k}, mode={search_mode}, store={store_class}")
 
         # Step 1: Query rewriting (Agentic RAG)
         final_query = query
+        rewritten_query = None
         if rewrite and self.rewriter:
             try:
                 final_query = self.rewriter.rewrite(query)
-                logger.info(f"[Agentic RAG] Query rewrite: '{query}' -> '{final_query}'")
+                if final_query != query:
+                    rewritten_query = final_query
+                    logger.info(f"[Agentic RAG] Query rewrite: '{query}' -> '{final_query}'")
             except Exception as e:
                 logger.error(f"Query rewrite failed: {e}")
 
@@ -343,20 +348,26 @@ class RetrievalService:
             if cache_hit:
                 search_type = cache_hit.metadata.get("search_type", "cached")
                 logger.info(f"Semantic cache hit for query: '{final_query[:50]}...'")
-                return cache_hit.results, f"{search_type}+cached"
+                return cache_hit.results, f"{search_type}+cached", rewritten_query
 
         # Step 4: Determine search parameters
         # Use forced mode or auto-detect
         if search_mode and search_mode in ("hybrid", "vector", "keyword"):
             search_type = search_mode
+            logger.info(f"[Search] Using forced mode: {search_type}")
         else:
             search_type = self._determine_search_type(store, query_vector)
+            logger.info(f"[Search] Auto-detected mode: {search_type} (store={store.__class__.__name__}, has_vector={query_vector is not None})")
 
         # Determine if reranking should be applied
         should_rerank = use_rerank if use_rerank is not None else (self.reranker is not None)
 
         # Expand retrieval if reranking
         k = top_k * 5 if should_rerank and self.reranker else top_k
+
+        # Log search execution details
+        rerank_info = f", rerank={should_rerank}" if should_rerank else ""
+        logger.info(f"[Search] Executing: strategy={search_type}, k={k}{rerank_info}")
 
         # Step 5: Execute search
         if search_type == "hybrid":
@@ -395,7 +406,9 @@ class RetrievalService:
                 metadata={"search_type": search_type, "top_k": top_k}
             )
 
-        return results, search_type
+        logger.info(f"[Search] Complete: {len(results)} results, type={search_type}")
+
+        return results, search_type, rewritten_query
 
     def multi_search(
         self,

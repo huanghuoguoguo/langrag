@@ -536,7 +536,7 @@ class RAGKernel:
         search_mode: str | None = None,
         use_rerank: bool | None = None,
         use_rewrite: bool = True
-    ) -> tuple[list[LangRAGDocument], str]:
+    ) -> tuple[list[LangRAGDocument], str, str | None]:
         """
         Search a single knowledge base.
 
@@ -549,7 +549,7 @@ class RAGKernel:
             use_rewrite: Whether to apply query rewriting (default: True)
 
         Returns:
-            Tuple of (results list, search type string)
+            Tuple of (results list, search type string, rewritten query or None)
 
         Raises:
             ValueError: If the KB doesn't exist

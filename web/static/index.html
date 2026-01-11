@@ -14,6 +14,7 @@
     <script src="js/pages/kb-detail.js"></script>
     <script src="js/pages/chat.js"></script>
     <script src="js/pages/models.js"></script>
+    <script src="js/pages/playground.js"></script>
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -277,6 +278,13 @@
                                             <option :value="false">禁用</option>
                                         </select>
                                     </div>
+                                    <div class="form-group">
+                                        <label>Query 重写</label>
+                                        <select x-model="useRewrite">
+                                            <option :value="false">禁用</option>
+                                            <option :value="true">启用 (LLM优化)</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 
@@ -287,6 +295,16 @@
                                     <span x-show="!searchLoading">搜索</span>
                                     <span x-show="searchLoading" class="loader"></span>
                                 </button>
+                            </div>
+
+                            <!-- Query Rewrite Visualization -->
+                            <div class="rewrite-display" x-show="rewrittenQuery">
+                                <div class="rewrite-label">✨ Query 已重写:</div>
+                                <div class="rewrite-content">
+                                    <span class="rewrite-original" x-text="searchQuery"></span>
+                                    <span class="rewrite-arrow">→</span>
+                                    <span class="rewrite-result" x-text="rewrittenQuery"></span>
+                                </div>
                             </div>
 
                             <!-- Results -->
@@ -463,7 +481,7 @@
         <!-- ================================================================== -->
         <!-- Playground Section -->
         <!-- ================================================================== -->
-        <div x-show="nav.isActive('playground')" class="content-section" x-cloak>
+        <div x-show="nav.isActive('playground')" x-data="playgroundPage()" class="content-section" x-cloak>
             <div class="section-header">
                 <div>
                     <h1>🧪 Playground</h1>
@@ -472,17 +490,204 @@
             </div>
 
             <div class="container">
+                <!-- Global KB Selector & Query -->
                 <div class="card">
-                    <h2>🚧 Coming Soon</h2>
-                    <p class="text-muted">Playground 功能正在开发中，敬请期待！</p>
-                    <ul style="margin-top:1rem; color:var(--text-muted);">
-                        <li>索引技术对比（标准分块 / QA问答对 / Parent-Child）</li>
-                        <li>检索模式切换（语义 / 关键词 / 混合）</li>
-                        <li>Query 重写可视化</li>
-                        <li>Reranking 效果对比</li>
-                        <li>语义缓存命中分析</li>
-                    </ul>
+                    <h2>🎯 测试配置</h2>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label>选择知识库</label>
+                            <select x-model="selectedKB">
+                                <option value="">请选择知识库...</option>
+                                <template x-for="kb in kbs" :key="kb.id">
+                                    <option :value="kb.id" x-text="kb.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:2;">
+                            <label>测试查询</label>
+                            <input type="text" x-model="query" placeholder="输入测试查询...">
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Search Mode Comparison -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>🔍 检索模式对比</h2>
+                        <button class="btn-primary" @click="compareSearchModes()" :disabled="searchCompareLoading">
+                            <span x-show="!searchCompareLoading">开始对比</span>
+                            <span x-show="searchCompareLoading" class="loader"></span>
+                        </button>
+                    </div>
+                    <p class="text-muted">对比 向量检索、关键词检索、混合检索 三种模式的效果</p>
+
+                    <template x-if="searchCompareResults">
+                        <div class="compare-grid">
+                            <template x-for="mode in searchCompareResults.modes" :key="mode.mode">
+                                <div class="compare-column">
+                                    <div class="compare-header">
+                                        <span x-text="getModeIcon(mode.mode)"></span>
+                                        <span x-text="getModeLabel(mode.mode)"></span>
+                                        <span class="badge" x-text="mode.time_ms + 'ms'"></span>
+                                    </div>
+                                    <div class="compare-results">
+                                        <template x-for="(r, i) in mode.results" :key="i">
+                                            <div class="compare-item">
+                                                <div class="compare-item-header">
+                                                    <span class="rank-badge" x-text="'#' + (i+1)"></span>
+                                                    <span class="score-badge" x-text="r.score.toFixed(3)"></span>
+                                                </div>
+                                                <div class="compare-item-content" x-text="r.content"></div>
+                                            </div>
+                                        </template>
+                                        <div x-show="mode.results.length === 0" class="text-muted">无结果</div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Query Rewrite -->
+                <div class="card">
+                    <h2>✨ Query 重写可视化</h2>
+                    <p class="text-muted">使用 LLM 优化查询以提高检索效果</p>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <input type="text" x-model="rewriteQuery" placeholder="输入原始查询...">
+                        </div>
+                        <button class="btn-primary" @click="testRewrite()" :disabled="rewriteLoading">
+                            <span x-show="!rewriteLoading">测试重写</span>
+                            <span x-show="rewriteLoading" class="loader"></span>
+                        </button>
+                    </div>
+
+                    <template x-if="rewriteResult">
+                        <div class="rewrite-result">
+                            <div class="rewrite-box original">
+                                <label>原始查询</label>
+                                <div x-text="rewriteResult.original"></div>
+                            </div>
+                            <div class="rewrite-arrow">→</div>
+                            <div class="rewrite-box rewritten" :class="{ error: rewriteResult.error }">
+                                <label x-text="rewriteResult.error ? '错误' : '重写后'"></label>
+                                <div x-text="rewriteResult.rewritten || rewriteResult.error"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Reranking Comparison -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>📊 Reranking 效果对比</h2>
+                        <button class="btn-primary" @click="compareReranking()" :disabled="rerankLoading">
+                            <span x-show="!rerankLoading">对比重排序</span>
+                            <span x-show="rerankLoading" class="loader"></span>
+                        </button>
+                    </div>
+                    <p class="text-muted">对比重排序前后的结果排名变化</p>
+
+                    <template x-if="rerankResults">
+                        <div>
+                            <div class="rerank-status">
+                                <span class="badge" :class="{ success: rerankResults.reranker_active }">
+                                    <span x-text="rerankResults.reranker_active ? '✓ Reranker: ' + rerankResults.reranker_name : '⚠ 未配置 Reranker'"></span>
+                                </span>
+                            </div>
+                            <div class="rerank-table">
+                                <div class="rerank-header">
+                                    <span>内容</span>
+                                    <span>原始分数</span>
+                                    <span>原始排名</span>
+                                    <span>重排分数</span>
+                                    <span>新排名</span>
+                                    <span>变化</span>
+                                </div>
+                                <template x-for="(r, i) in rerankResults.results" :key="i">
+                                    <div class="rerank-row">
+                                        <span class="rerank-content" x-text="r.content"></span>
+                                        <span x-text="r.original_score.toFixed(3)"></span>
+                                        <span class="rank-badge" x-text="'#' + r.rank_before"></span>
+                                        <span x-text="r.reranked_score !== null ? r.reranked_score.toFixed(3) : '-'"></span>
+                                        <span class="rank-badge" x-text="r.rank_after !== null ? '#' + r.rank_after : '-'"></span>
+                                        <span :class="getRankChangeClass(r.rank_change)">
+                                            <span x-show="r.rank_change !== null" x-text="getRankChangeIcon(r.rank_change) + Math.abs(r.rank_change || 0)"></span>
+                                            <span x-show="r.rank_change === null">-</span>
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Semantic Cache Analysis -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>💾 语义缓存分析</h2>
+                        <button class="btn-secondary" @click="clearCache()">清空缓存</button>
+                    </div>
+                    <p class="text-muted">分析语义缓存命中情况</p>
+
+                    <template x-if="cacheStats">
+                        <div class="cache-stats-grid">
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" :class="{ success: cacheStats.enabled }">
+                                    <span x-text="cacheStats.enabled ? '启用' : '禁用'"></span>
+                                </div>
+                                <div class="cache-stat-label">缓存状态</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.hits"></div>
+                                <div class="cache-stat-label">命中次数</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.misses"></div>
+                                <div class="cache-stat-label">未命中</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="formatHitRate(cacheStats.hit_rate)"></div>
+                                <div class="cache-stat-label">命中率</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.size + '/' + cacheStats.max_size"></div>
+                                <div class="cache-stat-label">缓存大小</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.similarity_threshold"></div>
+                                <div class="cache-stat-label">相似度阈值</div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="cache-test-section">
+                        <h3>缓存命中测试</h3>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <input type="text" x-model="cacheTestQuery" placeholder="输入查询测试缓存命中...">
+                            </div>
+                            <button class="btn-primary" @click="testCacheHit()" :disabled="cacheLoading">
+                                <span x-show="!cacheLoading">测试</span>
+                                <span x-show="cacheLoading" class="loader"></span>
+                            </button>
+                        </div>
+
+                        <template x-if="cacheTestResult">
+                            <div class="cache-test-result" :class="{ hit: cacheTestResult.is_cache_hit }">
+                                <div class="cache-result-icon">
+                                    <span x-text="cacheTestResult.is_cache_hit ? '✓' : '✗'"></span>
+                                </div>
+                                <div class="cache-result-info">
+                                    <div class="cache-result-status" x-text="cacheTestResult.is_cache_hit ? '缓存命中!' : '缓存未命中'"></div>
+                                    <div class="text-muted" x-text="'搜索类型: ' + cacheTestResult.search_type"></div>
+                                    <div x-show="cacheTestResult.matched_query" class="text-muted" x-text="'匹配查询: ' + cacheTestResult.matched_query"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
             </div>
         </div>
 

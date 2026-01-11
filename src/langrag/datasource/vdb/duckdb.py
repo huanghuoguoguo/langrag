@@ -225,17 +225,6 @@ class DuckDBVector(BaseVector):
             return
 
         try:
-            # Check if FTS index already exists
-            fts_table = f"fts_main_{self.table_name}"
-            try:
-                self._connection.execute(f"SELECT * FROM {fts_table} LIMIT 0")
-                self._fts_index_created = True
-                logger.debug(f"FTS index already exists for {self.table_name}")
-                return
-            except CatalogException:
-                # FTS index table doesn't exist yet, proceed to create it
-                logger.debug(f"FTS index not found for {self.table_name}, creating...")
-
             # Create FTS index with stemming and stopwords
             self._connection.execute(f"""
                 PRAGMA create_fts_index(
@@ -251,7 +240,13 @@ class DuckDBVector(BaseVector):
             self._fts_index_created = True
             logger.info(f"FTS index created for {self.table_name}")
         except DuckDBError as e:
-            logger.warning(f"FTS index creation failed: {e}")
+            error_msg = str(e)
+            # If index already exists, mark as created (not an error)
+            if "already exists" in error_msg.lower():
+                self._fts_index_created = True
+                logger.debug(f"FTS index already exists for {self.table_name}")
+            else:
+                logger.warning(f"FTS index creation failed: {e}")
 
     def _validate_vector_dimensions(self, texts: list[Document]) -> int:
         """

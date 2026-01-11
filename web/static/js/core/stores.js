@@ -29,6 +29,8 @@ document.addEventListener('alpine:init', () => {
         searchLoading: false,
         searchMode: 'auto',
         useRerank: null,
+        useRewrite: false,
+        rewrittenQuery: null,
 
         async load() {
             this.loading = true;
@@ -79,15 +81,18 @@ document.addEventListener('alpine:init', () => {
         async search(query) {
             if (!query.trim() || !this.current) return;
             this.searchLoading = true;
+            this.rewrittenQuery = null;
             try {
                 const result = await api.search({
                     kb_id: this.current.id,
                     query: query,
                     top_k: 5,
                     search_mode: this.searchMode === 'auto' ? null : this.searchMode,
-                    use_rerank: this.useRerank
+                    use_rerank: this.useRerank,
+                    use_rewrite: this.useRewrite
                 });
                 this.searchResults = result.results || [];
+                this.rewrittenQuery = result.rewritten_query;
             } catch (e) {
                 showToast(e.message, 'error');
             } finally {
@@ -250,5 +255,4 @@ document.addEventListener('alpine:init', () => {
             }
         }
     });
-});
 });

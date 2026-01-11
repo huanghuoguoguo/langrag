@@ -51,6 +51,7 @@ class TestSearchRouter:
                 )
             ],
             "vector",
+            None,  # rewritten_query
         )
 
         app = FastAPI()
@@ -116,7 +117,7 @@ class TestSearchRouter:
 
     def test_search_empty_results(self, mock_rag_kernel, mock_session, mock_kb):
         """Search with no results returns empty list."""
-        mock_rag_kernel.search.return_value = ([], "vector")
+        mock_rag_kernel.search.return_value = ([], "vector", None)
 
         app = FastAPI()
         app.include_router(router)
@@ -173,6 +174,7 @@ class TestSearchModels:
                 )
             ],
             search_type="vector",
+            original_query="test query",
         )
 
         assert len(resp.results) == 1

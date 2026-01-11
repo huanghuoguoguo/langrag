@@ -40,6 +40,18 @@ function kbDetailPage() {
             Alpine.store('kbs').useRerank = val;
         },
 
+        get useRewrite() {
+            return Alpine.store('kbs').useRewrite;
+        },
+
+        set useRewrite(val) {
+            Alpine.store('kbs').useRewrite = val;
+        },
+
+        get rewrittenQuery() {
+            return Alpine.store('kbs').rewrittenQuery;
+        },
+
         goBack() {
             Alpine.store('kbs').load();
             Alpine.store('nav').goto('kb-list');

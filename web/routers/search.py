@@ -18,7 +18,7 @@ class SearchRequest(BaseModel):
     top_k: int = 5
     search_mode: str | None = None  # "hybrid", "vector", "keyword", or None for auto
     use_rerank: bool | None = None  # None = use default, True/False = force
-    use_rewrite: bool = True
+    use_rewrite: bool = False  # Disabled by default for plain search
 
 
 class SearchResultItem(BaseModel):
@@ -31,6 +31,8 @@ class SearchResultItem(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResultItem]
     search_type: str
+    original_query: str
+    rewritten_query: str | None = None  # Only set if query was rewritten
 
 
 def get_rag_kernel():
@@ -52,7 +54,7 @@ def search(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     try:
-        results, search_type = rag_kernel.search(
+        results, search_type, rewritten_query = rag_kernel.search(
             kb_id=req.kb_id,
             query=req.query,
             top_k=req.top_k,
@@ -73,7 +75,9 @@ def search(
 
         return SearchResponse(
             results=items,
-            search_type=search_type
+            search_type=search_type,
+            original_query=req.query,
+            rewritten_query=rewritten_query
         )
 
     except Exception as e:

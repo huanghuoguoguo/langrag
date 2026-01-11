@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from langrag.datasource.vdb.base import BaseVector
 from langrag.datasource.vdb.vector_manager import VectorManager
@@ -44,7 +45,9 @@ class WebVectorStoreManager(VectorManager):
 
         elif vdb_type == "duckdb":
             from langrag.datasource.vdb.duckdb import DuckDBVector
-            store = DuckDBVector(dataset, database_path=str(DUCKDB_DIR))
+            # DuckDB expects a file path, not a directory
+            db_file = Path(DUCKDB_DIR) / "vector.db"
+            store = DuckDBVector(dataset, database_path=str(db_file))
 
         elif vdb_type == "seekdb":
             from langrag.datasource.vdb.seekdb import SeekDBVector
