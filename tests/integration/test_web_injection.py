@@ -81,7 +81,7 @@ class TestWebLLMInjection:
         # We mock RetrievalService just to avoid needing a real DB for this test
         # but we verify Router and Rewriter (which use the LLM) are called.
         
-        with patch("langrag.retrieval.workflow.RetrievalService") as mock_service:
+        with patch("langrag.retrieval.executor.RetrievalService") as mock_service:
             # Setup mock return for retrieval
             mock_service.retrieve.return_value = [
                 Document(page_content="Paxos is a consensus algorithm.", metadata={"score": 0.9})

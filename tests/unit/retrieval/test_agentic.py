@@ -44,7 +44,7 @@ class TestAgenticComponents:
         from langrag.entities.document import Document
         with pytest.MonkeyPatch.context() as m:
              mock_retrieve = MagicMock(return_value=[])
-             m.setattr("langrag.retrieval.workflow.RetrievalService.retrieve", mock_retrieve)
+             m.setattr("langrag.retrieval.executor.RetrievalService.retrieve", mock_retrieve)
              
              ds = Dataset(name="ds", collection_name="c")
              workflow.retrieve("original", [ds])
