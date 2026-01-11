@@ -176,6 +176,7 @@ class PdfParser(BaseParser):
 
                 # Extract text
                 text_content = []
+                extraction_errors = []
                 for page_num in range(start, end):
                     try:
                         page = pdf_reader.pages[page_num]
@@ -183,7 +184,26 @@ class PdfParser(BaseParser):
                         if text and text.strip():
                             text_content.append(text)
                     except Exception as e:
-                        logger.warning(f"Failed to extract page {page_num}: {e}")
+                        error_msg = str(e)
+                        logger.warning(f"Failed to extract page {page_num}: {error_msg}")
+                        extraction_errors.append((page_num, error_msg))
+
+                # Check if all pages failed due to encryption
+                total_pages_to_extract = end - start
+                if len(extraction_errors) == total_pages_to_extract and extraction_errors:
+                    # All pages failed - check if it's an encryption issue
+                    first_error = extraction_errors[0][1]
+                    if "cryptography" in first_error.lower() or "AES" in first_error:
+                        raise ValueError(
+                            f"PDF is encrypted with AES and cannot be read. "
+                            f"Please install cryptography>=3.1 or provide an unencrypted PDF. "
+                            f"Error: {first_error}"
+                        )
+                    else:
+                        raise ValueError(
+                            f"Failed to extract text from all {total_pages_to_extract} pages. "
+                            f"First error: {first_error}"
+                        )
 
                 content = "\n".join(text_content)
 

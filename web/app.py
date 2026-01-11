@@ -92,8 +92,10 @@ app.include_router(document_router)
 app.include_router(search_router)
 app.include_router(config_router)
 from web.routers.chat import router as chat_router
+from web.routers.playground import router as playground_router
 
 app.include_router(chat_router)
+app.include_router(playground_router)
 
 # Mount static files
 app.mount("/", StaticFiles(directory="web/static", html=True), name="static")

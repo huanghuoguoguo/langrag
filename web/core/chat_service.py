@@ -165,12 +165,13 @@ class ChatService:
             selected_datasets = self.router.route(query, candidate_datasets)
             selected_ids = [d.name for d in selected_datasets]
 
-            if selected_ids and len(selected_ids) < len(kb_stores):
+            if len(selected_ids) < len(kb_stores):
                 logger.info(
                     f"[Agentic RAG] Router filtered KBs: "
                     f"{list(kb_stores.keys())} -> {selected_ids}"
                 )
-                return selected_ids
+            
+            return selected_ids
 
         except Exception as e:
             logger.error(f"Router failed: {e}")
@@ -388,7 +389,10 @@ Context:
             }
 
             # Retrieve from selected KBs
-            results, search_type = self.retrieval_service.multi_search(
+            # Retrieve from selected KBs
+            import asyncio
+            results, search_type = await asyncio.to_thread(
+                self.retrieval_service.multi_search,
                 stores=selected_stores,
                 query=query,
                 top_k=5,

@@ -532,8 +532,11 @@ class RAGKernel:
         self,
         kb_id: str,
         query: str,
-        top_k: int = 5
-    ) -> tuple[list[LangRAGDocument], str]:
+        top_k: int = 5,
+        search_mode: str | None = None,
+        use_rerank: bool | None = None,
+        use_rewrite: bool = True
+    ) -> tuple[list[LangRAGDocument], str, str | None]:
         """
         Search a single knowledge base.
 
@@ -541,16 +544,19 @@ class RAGKernel:
             kb_id: The knowledge base to search
             query: The search query
             top_k: Number of results to return (default: 5)
+            search_mode: Force search mode ("hybrid", "vector", "keyword") or None for auto
+            use_rerank: Force reranking on/off, or None for default (use if configured)
+            use_rewrite: Whether to apply query rewriting (default: True)
 
         Returns:
-            Tuple of (results list, search type string)
+            Tuple of (results list, search type string, rewritten query or None)
 
         Raises:
             ValueError: If the KB doesn't exist
         """
         logger.info(
             f"[RAGKernel] Search: kb_id={kb_id}, "
-            f"query='{query[:50]}...', top_k={top_k}"
+            f"query='{query[:50]}...', top_k={top_k}, mode={search_mode}"
         )
 
         store = self.get_vector_store(kb_id)
@@ -571,7 +577,9 @@ class RAGKernel:
             store=store,
             query=query,
             top_k=top_k,
-            rewrite=self.rewriter is not None
+            rewrite=use_rewrite and self.rewriter is not None,
+            search_mode=search_mode,
+            use_rerank=use_rerank
         )
 
     def multi_search(

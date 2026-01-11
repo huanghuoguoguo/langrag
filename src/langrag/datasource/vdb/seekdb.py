@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 try:
     import pyseekdb
-    from pyseekdb.errors import DatabaseNotFoundError
+    # pyseekdb <= 1.0.0b6 doesn't have errors module, uses ValueError
+    DatabaseNotFoundError = ValueError
     SEEKDB_AVAILABLE = True
 except ImportError:
     SEEKDB_AVAILABLE = False
@@ -193,6 +194,10 @@ class SeekDBVector(BaseVector):
         top_k: int = 4,
         **kwargs
     ) -> list[Document]:
+
+        if not self._client.has_collection(self.collection_name):
+            logger.debug(f"Collection {self.collection_name} does not exist, returning empty results.")
+            return []
 
         coll = self._client.get_collection(self.collection_name, embedding_function=None)
         search_type = kwargs.get('search_type', 'similarity')

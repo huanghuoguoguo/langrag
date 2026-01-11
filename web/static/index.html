@@ -6,9 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LangRAG 控制台</title>
     <link rel="stylesheet" href="style.css">
+    <!-- JS Modules (load before Alpine.js) -->
+    <script src="js/core/api.js"></script>
+    <script src="js/core/utils.js"></script>
+    <script src="js/core/stores.js"></script>
+    <script src="js/pages/kb-list.js"></script>
+    <script src="js/pages/kb-detail.js"></script>
+    <script src="js/pages/chat.js"></script>
+    <script src="js/pages/models.js"></script>
+    <script src="js/pages/playground.js"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 
-<body>
+<body x-data="{ nav: $store.nav }">
 
     <!-- Sidebar -->
     <div class="sidebar">
@@ -20,378 +31,838 @@
             LangRAG
         </div>
 
-        <div class="nav-item active" data-target="kb-list">
-            <span>知识库列表</span>
+        <div class="nav-item" :class="{ active: nav.isActive('kb-list') }" @click="nav.goto('kb-list')">
+            <span>📚 知识库列表</span>
         </div>
-        <div class="nav-item" data-target="kb-detail" style="display:none;">
-            <span>知识库详情</span>
+        <div class="nav-item" :class="{ active: nav.isActive('kb-detail') }" x-show="nav.currentKB"
+            @click="nav.goto('kb-detail')">
+            <span>📄 知识库详情</span>
         </div>
-        <div class="nav-item" data-target="chat-page">
-            <span>AI 对话</span>
+        <div class="nav-item" :class="{ active: nav.isActive('chat') }" @click="nav.goto('chat')">
+            <span>💬 AI 对话</span>
         </div>
-        <div class="nav-item" data-target="models">
-            <span>模型配置</span>
+        <div class="nav-item" :class="{ active: nav.isActive('playground') }" @click="nav.goto('playground')">
+            <span>🧪 Playground</span>
+        </div>
+        <div class="nav-item" :class="{ active: nav.isActive('models') }" @click="nav.goto('models')">
+            <span>⚙️ 模型配置</span>
         </div>
     </div>
 
     <!-- Main Content -->
     <div class="main-content">
 
+        <!-- ================================================================== -->
         <!-- KB List Section -->
-        <div id="kb-list" class="section active">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
+        <!-- ================================================================== -->
+        <div x-show="nav.isActive('kb-list')" x-data="kbListPage()" class="content-section" x-cloak>
+            <div class="section-header">
                 <div>
                     <h1>知识库列表</h1>
                     <p class="subtitle">管理您的所有知识库</p>
                 </div>
-                <button id="btn-show-create-modal"
-                    style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));">
-                    + 创建知识库
-                </button>
+                <button class="btn-primary" @click="openModal()">+ 创建知识库</button>
             </div>
 
             <div class="container">
-                <div id="kb-list-container">
-                    <!-- Knowledge bases will be loaded here -->
+                <!-- Loading State -->
+                <div x-show="loading" class="loading-state">
+                    <div class="loader"></div>
+                    <p>加载中...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="!loading && kbs.length === 0" class="empty-state">
+                    <p>📚 还没有知识库</p>
+                    <p style="font-size:0.9rem; margin-top:0.5rem; color:var(--text-muted);">点击"创建知识库"开始</p>
+                </div>
+
+                <!-- KB Cards -->
+                <div class="kb-grid" x-show="!loading && kbs.length > 0">
+                    <template x-for="kb in kbs" :key="kb.id">
+                        <div class="card kb-card" @click="selectKB(kb)">
+                            <div class="kb-card-header">
+                                <div class="kb-card-title" x-text="kb.name"></div>
+                                <p class="kb-card-desc" x-text="kb.description || '无描述'"></p>
+                            </div>
+                            <div class="kb-card-meta">
+                                <span class="badge primary" x-text="kb.vdb_type"></span>
+                                <span class="badge success" x-show="kb.embedder_name" x-text="kb.embedder_name"></span>
+                                <span class="badge" x-show="!kb.embedder_name">无 Embedder</span>
+                                <span class="badge" x-text="'Chunk: ' + kb.chunk_size"></span>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
-        </div>
 
-        <!-- KB Detail Section -->
-        <div id="kb-detail" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
-                <div>
-                    <h1 id="kb-detail-name">知识库名称</h1>
-                    <p class="subtitle" id="kb-detail-desc">描述</p>
-                </div>
-                <button id="btn-back-to-list" class="secondary">
-                    ← 返回列表
-                </button>
-            </div>
-
-            <div class="container">
-                <!-- KB Info Card -->
-                <div class="card">
-                    <h2>知识库信息</h2>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
-                        <div>
-                            <label style="margin-bottom:0.25rem;">ID</label>
-                            <div id="kb-info-id" style="color:var(--text-main); font-family:monospace;"></div>
+            <!-- Create KB Modal -->
+            <div class="modal" :class="{ active: showModal }" @click.self="showModal = false">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>创建知识库</h2>
+                        <span class="modal-close" @click="showModal = false">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>名称 *</label>
+                            <input type="text" x-model="form.name" placeholder="例如：2024财务文档">
                         </div>
-                        <div>
-                            <label style="margin-bottom:0.25rem;">向量数据库</label>
-                            <div id="kb-info-vdb" style="color:var(--text-main);"></div>
+                        <div class="form-group">
+                            <label>描述</label>
+                            <textarea x-model="form.description" rows="2" placeholder="关于该数据集的描述..."></textarea>
                         </div>
-                        <div>
-                            <label style="margin-bottom:0.25rem;">Embedding 模型</label>
-                            <div id="kb-info-embedder" style="color:var(--text-main);"></div>
+                        <div class="form-group">
+                            <label>向量数据库 *</label>
+                            <select x-model="form.vdb_type">
+                                <option value="chroma">ChromaDB</option>
+                                <option value="duckdb">DuckDB</option>
+                                <option value="seekdb">SeekDB（支持混合检索）</option>
+                                <option value="web_search">🌐 互联网搜索（实时联网）</option>
+                            </select>
+                            <p class="form-hint">
+                                💡 <strong>SeekDB</strong> 支持混合检索（向量+全文）<br>
+                                🌐 <strong>互联网搜索</strong> 使用 DuckDuckGo 实时搜索
+                            </p>
                         </div>
-                        <div>
-                            <label style="margin-bottom:0.25rem;">分块大小</label>
-                            <div id="kb-info-chunk" style="color:var(--text-main);"></div>
+                        <div class="form-group" x-show="!isWebSearch">
+                            <label>Embedding 模型 *</label>
+                            <select x-model="form.embedder_name">
+                                <option value="">请选择 Embedder...</option>
+                                <template x-for="emb in embedders" :key="emb.name">
+                                    <option :value="emb.name" x-text="emb.name + ' (' + emb.embedder_type + ')'">
+                                    </option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="form-row" x-show="!isWebSearch">
+                            <div class="form-group">
+                                <label>分块大小</label>
+                                <input type="number" x-model.number="form.chunk_size" min="100" max="4000" step="100">
+                            </div>
+                            <div class="form-group">
+                                <label>分块重叠</label>
+                                <input type="number" x-model.number="form.chunk_overlap" min="0" max="500" step="50">
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Upload Documents Card -->
-                <div class="card">
-                    <h2>上传文档</h2>
-                    <div id="dropzone" class="dropzone">
-                        <p>将文件拖拽至此，或点击选择文件</p>
-                        <input type="file" id="file-input" multiple style="display:none">
-                    </div>
-
-                    <div id="file-list" class="file-list"></div>
-
-                    <div style="margin-top: 1.5rem; text-align: right;">
-                        <button id="btn-upload">
-                            开始处理
-                            <span class="loader"></span>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" @click="showModal = false">取消</button>
+                        <button class="btn-primary" @click="createKB()" :disabled="creating">
+                            <span x-show="!creating">创建</span>
+                            <span x-show="creating" class="loader"></span>
                         </button>
                     </div>
                 </div>
-
-                <!-- Documents List Card -->
-                <div class="card">
-                    <h2>已上传文档</h2>
-                    <div id="documents-list">
-                        <!-- Documents will be loaded here -->
-                    </div>
-                </div>
-
-                <!-- Search Test Card -->
-                <div class="card">
-                    <h2>检索测试</h2>
-                    <div class="form-group">
-                        <label>查询语句</label>
-                        <div style="display:flex; gap:0.5rem;">
-                            <input type="text" id="search-query" placeholder="请输入您的问题...">
-                            <button id="btn-search">搜索 <span class="loader"></span></button>
-                        </div>
-                    </div>
-
-                    <div id="search-results">
-                        <!-- Results will appear here -->
-                    </div>
-                </div>
-
-
             </div>
         </div>
 
-        <!-- Chat Page Section -->
-        <div id="chat-page" class="section">
-            <div style="display: grid; grid-template-columns: 350px 1fr; gap: 2rem; height: calc(100vh - 4rem);">
+        <!-- ================================================================== -->
+        <!-- KB Detail Section -->
+        <!-- ================================================================== -->
+        <div x-show="nav.isActive('kb-detail')" x-data="kbDetailPage()" class="content-section" x-cloak>
+            <template x-if="kb">
+                <div>
+                    <div class="section-header">
+                        <div>
+                            <h1 x-text="kb.name"></h1>
+                            <p class="subtitle" x-text="kb.description || '无描述'"></p>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-secondary" @click="goBack()">← 返回列表</button>
+                            <button class="btn-danger" @click="deleteKB()">删除</button>
+                        </div>
+                    </div>
 
-                <!-- Chat Settings (Left) -->
-                <div style="display:flex; flex-direction:column; gap:1.5rem;">
+                    <div class="container">
+                        <!-- KB Info Card -->
+                        <div class="card">
+                            <h2>📋 知识库信息</h2>
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <label>ID</label>
+                                    <div class="info-value mono" x-text="kb.id"></div>
+                                </div>
+                                <div class="info-item">
+                                    <label>向量数据库</label>
+                                    <div class="info-value" x-text="kb.vdb_type"></div>
+                                </div>
+                                <div class="info-item">
+                                    <label>Embedding 模型</label>
+                                    <div class="info-value" x-text="kb.embedder_name || '未配置'"></div>
+                                </div>
+                                <div class="info-item">
+                                    <label>分块配置</label>
+                                    <div class="info-value" x-text="kb.chunk_size + ' / ' + kb.chunk_overlap"></div>
+                                </div>
+                            </div>
+                        </div>
 
-                    <div class="card" style="flex:1; display:flex; flex-direction:column; margin-bottom:0;">
-                        <h2>配置</h2>
+                        <!-- Upload Card -->
+                        <div class="card">
+                            <h2>📤 上传文档</h2>
+                            <div class="dropzone" @dragover.prevent="$el.classList.add('dragover')"
+                                @dragleave.prevent="$el.classList.remove('dragover')"
+                                @drop.prevent="$el.classList.remove('dragover'); handleFiles($event)"
+                                @click="$refs.fileInput.click()">
+                                <p>将文件拖拽至此，或点击选择文件</p>
+                                <input type="file" x-ref="fileInput" multiple @change="handleFiles($event)"
+                                    style="display:none">
+                            </div>
+
+                            <!-- Files to upload -->
+                            <div class="file-list" x-show="filesToUpload.length > 0">
+                                <template x-for="(file, index) in filesToUpload" :key="index">
+                                    <div class="file-item">
+                                        <span x-text="file.name"></span>
+                                        <div class="file-item-actions">
+                                            <span class="badge" x-text="(file.size / 1024).toFixed(1) + ' KB'"></span>
+                                            <button class="btn-icon" @click="removeFile(index)">×</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div class="card-actions">
+                                <button class="btn-primary" @click="upload()"
+                                    :disabled="uploading || filesToUpload.length === 0">
+                                    <span x-show="!uploading">开始处理</span>
+                                    <span x-show="uploading" class="loader"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Documents List -->
+                        <div class="card">
+                            <h2>📁 已上传文档</h2>
+                            <div x-show="documents.length === 0" class="empty-hint">还没有上传文档</div>
+                            <div class="file-list" x-show="documents.length > 0">
+                                <template x-for="doc in documents" :key="doc.id">
+                                    <div class="file-item">
+                                        <div>
+                                            <div x-text="doc.filename"></div>
+                                            <div class="file-meta">
+                                                <span x-text="(doc.file_size / 1024).toFixed(1) + ' KB'"></span>
+                                                <span>·</span>
+                                                <span x-text="doc.chunk_count + ' chunks'"></span>
+                                            </div>
+                                        </div>
+                                        <span class="badge" :class="{ success: doc.status === 'completed' }"
+                                            x-text="doc.status"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Search Card -->
+                        <div class="card">
+                            <h2>🔍 检索测试</h2>
+
+                            <!-- Search Options -->
+                            <div class="search-options">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>检索模式</label>
+                                        <select x-model="searchMode">
+                                            <option value="auto">自动选择</option>
+                                            <option value="hybrid">混合检索 (向量+关键词)</option>
+                                            <option value="vector">向量检索</option>
+                                            <option value="keyword">关键词检索</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Rerank 重排序</label>
+                                        <select x-model="useRerank">
+                                            <option :value="null">默认 (自动)</option>
+                                            <option :value="true">启用</option>
+                                            <option :value="false">禁用</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Query 重写</label>
+                                        <select x-model="useRewrite">
+                                            <option :value="false">禁用</option>
+                                            <option :value="true">启用 (LLM优化)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="search-box">
+                                <input type="text" x-model="searchQuery" placeholder="请输入您的问题..."
+                                    @keyup.enter="search()">
+                                <button class="btn-primary" @click="search()" :disabled="searchLoading">
+                                    <span x-show="!searchLoading">搜索</span>
+                                    <span x-show="searchLoading" class="loader"></span>
+                                </button>
+                            </div>
+
+                            <!-- Query Rewrite Visualization -->
+                            <div class="rewrite-display" x-show="rewrittenQuery">
+                                <div class="rewrite-label">✨ Query 已重写:</div>
+                                <div class="rewrite-content">
+                                    <span class="rewrite-original" x-text="searchQuery"></span>
+                                    <span class="rewrite-arrow">→</span>
+                                    <span class="rewrite-result" x-text="rewrittenQuery"></span>
+                                </div>
+                            </div>
+
+                            <!-- Results -->
+                            <div class="search-results" x-show="searchResults.length > 0">
+                                <template x-for="(item, index) in searchResults" :key="index">
+                                    <div class="result-item">
+                                        <div class="result-header">
+                                            <span class="result-score"
+                                                x-text="'Score: ' + item.score.toFixed(3)"></span>
+                                            <span class="badge" :class="{
+                                                success: item.search_type.includes('vector'),
+                                                primary: item.search_type.includes('hybrid')
+                                            }" x-text="formatSearchType(item.search_type)"></span>
+                                        </div>
+                                        <div class="result-content" x-text="item.content"></div>
+                                        <div class="result-source">
+                                            <span x-text="'来源: ' + (item.source || '未知')"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ================================================================== -->
+        <!-- Chat Section -->
+        <!-- ================================================================== -->
+        <div x-show="nav.isActive('chat')" x-data="chatPage()" class="content-section" x-cloak>
+            <div class="chat-layout">
+                <!-- Left: Settings -->
+                <div class="chat-sidebar">
+                    <div class="card">
+                        <h2>⚙️ 配置</h2>
 
                         <div class="form-group">
                             <label>LLM 模型</label>
-                            <div
-                                style="font-size:0.9rem; color:var(--text-main); background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:var(--radius);">
-                                <div id="active-llm-display">检测中...</div>
+                            <div class="config-display">
+                                <template x-if="activeLLM">
+                                    <div>
+                                        <div x-text="activeLLM.name"></div>
+                                        <div class="text-muted" x-text="activeLLM.model"></div>
+                                    </div>
+                                </template>
+                                <template x-if="!activeLLM">
+                                    <div class="text-muted">未配置 LLM</div>
+                                </template>
                             </div>
-                            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
-                                请在“模型配置”页面切换或激活模型
-                            </p>
                         </div>
 
-                        <div class="form-group" style="flex:1; display:flex; flex-direction:column; min-height:0;">
-                            <label>可用知识库 (智能路由)</label>
-                            <div id="chat-kb-list"
-                                style="overflow-y:auto; flex:1; border:1px solid var(--border-color); border-radius:var(--radius); padding:0.5rem; background:var(--bg-dark);">
-                                <!-- KB Checkboxes will be rendered here -->
-                                <p style="color:var(--text-muted); padding:0.5rem;">加载中...</p>
+                        <div class="form-group" style="flex:1; display:flex; flex-direction:column;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <label>选择知识库</label>
+                                <button class="btn-sm" @click="toggleAll()"
+                                    x-text="isAllSelected ? '取消全选' : '全选'"></button>
+                            </div>
+                            <div class="kb-selector">
+                                <template x-if="isNoneSelected">
+                                    <div class="kb-selector-item" style="opacity:0.7; border-style:dashed;">
+                                        <div class="kb-selector-check">
+                                            <span>🤖</span>
+                                        </div>
+                                        <div>
+                                            <div>智能路由模式</div>
+                                            <div class="text-muted text-sm">LLM 将自动选择合适的知识库</div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-for="kb in kbs" :key="kb.id">
+                                    <div class="kb-selector-item" @click="toggleKB(kb.id)"
+                                        :class="{ selected: isSelected(kb.id) }">
+                                        <div class="kb-selector-check">
+                                            <span x-show="isSelected(kb.id)">✓</span>
+                                        </div>
+                                        <div>
+                                            <div x-text="kb.name"></div>
+                                            <div class="text-muted text-sm" x-text="kb.vdb_type"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="kbs.length === 0" class="text-muted">暂无可用知识库</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chat Area (Right) -->
-                <div class="card"
-                    style="margin-bottom:0; display:flex; flex-direction:column; height:100%; padding:0; overflow:hidden;">
-                    <div
-                        style="padding:1.5rem; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.1);">
-                        <h2 style="margin:0; font-size:1.2rem;">多知识库问答</h2>
+                <!-- Right: Chat Area -->
+                <div class="card chat-main">
+                    <div class="chat-header">
+                        <h2>💬 多知识库问答</h2>
                     </div>
 
-                    <div class="chat-container"
-                        style="border:none; border-radius:0; flex:1; height:auto; background:transparent;">
-                        <div id="chat-messages" class="chat-messages">
-                            <div class="message assistant">
-                                <div class="avatar">AI</div>
-                                <div class="message-content">你好！请先在左侧选择一个或多个知识库，然后开始提问。</div>
+                    <div id="chat-messages" class="chat-messages">
+                        <template x-for="(msg, index) in messages" :key="index">
+                            <div class="message" :class="msg.role">
+                                <div class="avatar" x-text="msg.role === 'user' ? 'U' : 'AI'"></div>
+                                <div class="message-content">
+                                    <div x-html="msg.content.replace(/\n/g, '<br>')"></div>
+
+                                    <!-- Sources -->
+                                    <template x-if="msg.sources && msg.sources.length > 0">
+                                        <div class="message-sources">
+                                            <strong>参考来源:</strong>
+                                            <template x-for="(s, si) in msg.sources" :key="si">
+                                                <div class="source-item">
+                                                    <span class="source-icon"
+                                                        x-text="s.type === 'web_search' ? '🌐' : '📄'"></span>
+                                                    <div>
+                                                        <div x-text="s.source || s.title || '来源 ' + (si + 1)"></div>
+                                                        <div class="text-muted text-sm"
+                                                            x-text="'Score: ' + s.score.toFixed(2)"></div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <!-- Evaluation -->
+                                    <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
+                                        <div class="eval-section">
+                                            <button class="btn-sm" @click="evaluate(index)" x-show="!msg.evaluation"
+                                                :disabled="msg.evaluating">
+                                                <span x-show="!msg.evaluating">📊 评估回答质量</span>
+                                                <span x-show="msg.evaluating">⏳ 正在评估...</span>
+                                            </button>
+                                            <template x-if="msg.evaluation">
+                                                <div class="eval-results">
+                                                    <template x-for="(metric, key) in msg.evaluation" :key="key">
+                                                        <div class="eval-metric">
+                                                            <div class="eval-metric-header">
+                                                                <span
+                                                                    x-text="key === 'faithfulness' ? '忠实度' : (key === 'answer_relevancy' ? '回答相关性' : '上下文相关性')"></span>
+                                                                <span x-text="metric.score.toFixed(2)"></span>
+                                                            </div>
+                                                            <div class="eval-bar">
+                                                                <div class="eval-bar-fill"
+                                                                    :style="'width:' + (metric.score * 100) + '%'">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Loading indicator -->
+                        <div class="message assistant" x-show="loading">
+                            <div class="avatar">AI</div>
+                            <div class="message-content">
+                                <div class="typing-indicator">
+                                    <span></span><span></span><span></span>
+                                </div>
                             </div>
                         </div>
-                        <div class="chat-input-area">
-                            <input type="text" id="chat-input" placeholder="输入问题..." style="flex:1;">
-                            <button id="btn-send">发送 <span class="loader"></span></button>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <input type="text" x-model="input" placeholder="输入问题..." @keyup.enter="send()">
+                        <button class="btn-primary" @click="send()" :disabled="loading">
+                            <span x-show="!loading">发送</span>
+                            <span x-show="loading" class="loader"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================================== -->
+        <!-- Playground Section -->
+        <!-- ================================================================== -->
+        <div x-show="nav.isActive('playground')" x-data="playgroundPage()" class="content-section" x-cloak>
+            <div class="section-header">
+                <div>
+                    <h1>🧪 Playground</h1>
+                    <p class="subtitle">探索 LangRAG 的各项功能</p>
+                </div>
+            </div>
+
+            <div class="container">
+                <!-- Global KB Selector & Query -->
+                <div class="card">
+                    <h2>🎯 测试配置</h2>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label>选择知识库</label>
+                            <select x-model="selectedKB">
+                                <option value="">请选择知识库...</option>
+                                <template x-for="kb in kbs" :key="kb.id">
+                                    <option :value="kb.id" x-text="kb.name"></option>
+                                </template>
+                            </select>
                         </div>
+                        <div class="form-group" style="flex:2;">
+                            <label>测试查询</label>
+                            <input type="text" x-model="query" placeholder="输入测试查询...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Mode Comparison -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>🔍 检索模式对比</h2>
+                        <button class="btn-primary" @click="compareSearchModes()" :disabled="searchCompareLoading">
+                            <span x-show="!searchCompareLoading">开始对比</span>
+                            <span x-show="searchCompareLoading" class="loader"></span>
+                        </button>
+                    </div>
+                    <p class="text-muted">对比 向量检索、关键词检索、混合检索 三种模式的效果</p>
+
+                    <template x-if="searchCompareResults">
+                        <div class="compare-grid">
+                            <template x-for="mode in searchCompareResults.modes" :key="mode.mode">
+                                <div class="compare-column">
+                                    <div class="compare-header">
+                                        <span x-text="getModeIcon(mode.mode)"></span>
+                                        <span x-text="getModeLabel(mode.mode)"></span>
+                                        <span class="badge" x-text="mode.time_ms + 'ms'"></span>
+                                    </div>
+                                    <div class="compare-results">
+                                        <template x-for="(r, i) in mode.results" :key="i">
+                                            <div class="compare-item">
+                                                <div class="compare-item-header">
+                                                    <span class="rank-badge" x-text="'#' + (i+1)"></span>
+                                                    <span class="score-badge" x-text="r.score.toFixed(3)"></span>
+                                                </div>
+                                                <div class="compare-item-content" x-text="r.content"></div>
+                                            </div>
+                                        </template>
+                                        <div x-show="mode.results.length === 0" class="text-muted">无结果</div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Query Rewrite -->
+                <div class="card">
+                    <h2>✨ Query 重写可视化</h2>
+                    <p class="text-muted">使用 LLM 优化查询以提高检索效果</p>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <input type="text" x-model="rewriteQuery" placeholder="输入原始查询...">
+                        </div>
+                        <button class="btn-primary" @click="testRewrite()" :disabled="rewriteLoading">
+                            <span x-show="!rewriteLoading">测试重写</span>
+                            <span x-show="rewriteLoading" class="loader"></span>
+                        </button>
+                    </div>
+
+                    <template x-if="rewriteResult">
+                        <div class="rewrite-result">
+                            <div class="rewrite-box original">
+                                <label>原始查询</label>
+                                <div x-text="rewriteResult.original"></div>
+                            </div>
+                            <div class="rewrite-arrow">→</div>
+                            <div class="rewrite-box rewritten" :class="{ error: rewriteResult.error }">
+                                <label x-text="rewriteResult.error ? '错误' : '重写后'"></label>
+                                <div x-text="rewriteResult.rewritten || rewriteResult.error"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Reranking Comparison -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>📊 Reranking 效果对比</h2>
+                        <button class="btn-primary" @click="compareReranking()" :disabled="rerankLoading">
+                            <span x-show="!rerankLoading">对比重排序</span>
+                            <span x-show="rerankLoading" class="loader"></span>
+                        </button>
+                    </div>
+                    <p class="text-muted">对比重排序前后的结果排名变化</p>
+
+                    <template x-if="rerankResults">
+                        <div>
+                            <div class="rerank-status">
+                                <span class="badge" :class="{ success: rerankResults.reranker_active }">
+                                    <span x-text="rerankResults.reranker_active ? '✓ Reranker: ' + rerankResults.reranker_name : '⚠ 未配置 Reranker'"></span>
+                                </span>
+                            </div>
+                            <div class="rerank-table">
+                                <div class="rerank-header">
+                                    <span>内容</span>
+                                    <span>原始分数</span>
+                                    <span>原始排名</span>
+                                    <span>重排分数</span>
+                                    <span>新排名</span>
+                                    <span>变化</span>
+                                </div>
+                                <template x-for="(r, i) in rerankResults.results" :key="i">
+                                    <div class="rerank-row">
+                                        <span class="rerank-content" x-text="r.content"></span>
+                                        <span x-text="r.original_score.toFixed(3)"></span>
+                                        <span class="rank-badge" x-text="'#' + r.rank_before"></span>
+                                        <span x-text="r.reranked_score !== null ? r.reranked_score.toFixed(3) : '-'"></span>
+                                        <span class="rank-badge" x-text="r.rank_after !== null ? '#' + r.rank_after : '-'"></span>
+                                        <span :class="getRankChangeClass(r.rank_change)">
+                                            <span x-show="r.rank_change !== null" x-text="getRankChangeIcon(r.rank_change) + Math.abs(r.rank_change || 0)"></span>
+                                            <span x-show="r.rank_change === null">-</span>
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Semantic Cache Analysis -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>💾 语义缓存分析</h2>
+                        <button class="btn-secondary" @click="clearCache()">清空缓存</button>
+                    </div>
+                    <p class="text-muted">分析语义缓存命中情况</p>
+
+                    <template x-if="cacheStats">
+                        <div class="cache-stats-grid">
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" :class="{ success: cacheStats.enabled }">
+                                    <span x-text="cacheStats.enabled ? '启用' : '禁用'"></span>
+                                </div>
+                                <div class="cache-stat-label">缓存状态</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.hits"></div>
+                                <div class="cache-stat-label">命中次数</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.misses"></div>
+                                <div class="cache-stat-label">未命中</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="formatHitRate(cacheStats.hit_rate)"></div>
+                                <div class="cache-stat-label">命中率</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.size + '/' + cacheStats.max_size"></div>
+                                <div class="cache-stat-label">缓存大小</div>
+                            </div>
+                            <div class="cache-stat">
+                                <div class="cache-stat-value" x-text="cacheStats.similarity_threshold"></div>
+                                <div class="cache-stat-label">相似度阈值</div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="cache-test-section">
+                        <h3>缓存命中测试</h3>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <input type="text" x-model="cacheTestQuery" placeholder="输入查询测试缓存命中...">
+                            </div>
+                            <button class="btn-primary" @click="testCacheHit()" :disabled="cacheLoading">
+                                <span x-show="!cacheLoading">测试</span>
+                                <span x-show="cacheLoading" class="loader"></span>
+                            </button>
+                        </div>
+
+                        <template x-if="cacheTestResult">
+                            <div class="cache-test-result" :class="{ hit: cacheTestResult.is_cache_hit }">
+                                <div class="cache-result-icon">
+                                    <span x-text="cacheTestResult.is_cache_hit ? '✓' : '✗'"></span>
+                                </div>
+                                <div class="cache-result-info">
+                                    <div class="cache-result-status" x-text="cacheTestResult.is_cache_hit ? '缓存命中!' : '缓存未命中'"></div>
+                                    <div class="text-muted" x-text="'搜索类型: ' + cacheTestResult.search_type"></div>
+                                    <div x-show="cacheTestResult.matched_query" class="text-muted" x-text="'匹配查询: ' + cacheTestResult.matched_query"></div>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
             </div>
         </div>
 
-        <!-- Models Section -->
-        <div id="models" class="section">
-            <h1>模型配置</h1>
-            <p class="subtitle">配置 Embedding 和 LLM 模型</p>
+        <!-- ================================================================== -->
+        <!-- Models Config Section -->
+        <!-- ================================================================== -->
+        <div x-show="nav.isActive('models')" x-data="modelsPage()" class="content-section" x-cloak>
+            <div class="section-header">
+                <div>
+                    <h1>⚙️ 模型配置</h1>
+                    <p class="subtitle">配置 Embedding 和 LLM 模型</p>
+                </div>
+            </div>
 
             <div class="container">
-
-                <!-- Embedder Block -->
-                <div style="margin-bottom: 3rem;">
-                    <h2
-                        style="margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center;">
-                        <span
-                            style="background:var(--primary-color); width:8px; height:8px; border-radius:50%; margin-right:0.75rem; display:inline-block;"></span>
+                <!-- Embedder Section -->
+                <div class="config-section">
+                    <h2 class="config-section-title">
+                        <span class="dot primary"></span>
                         Embedding 模型
                     </h2>
-                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+
+                    <div class="config-grid">
+                        <!-- Embedder List -->
                         <div class="card">
                             <h3>已配置列表</h3>
-                            <div id="embedder-list">
-                                <!-- Embedders will be loaded here -->
+                            <div class="config-list" x-show="embedders.length === 0">
+                                <p class="text-muted">暂无配置</p>
+                            </div>
+                            <div class="config-list" x-show="embedders.length > 0">
+                                <template x-for="emb in embedders" :key="emb.name">
+                                    <div class="config-item" @click="activateEmbedder(emb.name)">
+                                        <div>
+                                            <div class="config-item-name" x-text="emb.name"></div>
+                                            <div class="text-muted text-sm" x-text="emb.model"></div>
+                                        </div>
+                                        <span class="badge" :class="{ success: emb.is_active }"
+                                            x-text="emb.is_active ? 'Active' : emb.embedder_type"></span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
 
+                        <!-- Embedder Form -->
                         <div class="card">
                             <h3>添加新配置</h3>
                             <div class="form-group">
                                 <label>配置名称 *</label>
-                                <input type="text" id="emb-name" placeholder="例如：seekdb-default">
+                                <input type="text" x-model="embForm.name" placeholder="例如：openai-default">
                             </div>
                             <div class="form-group">
                                 <label>类型 *</label>
-                                <select id="emb-type">
+                                <select x-model="embForm.embedder_type" @change="onEmbTypeChange()">
                                     <option value="openai">OpenAI 兼容 API</option>
                                     <option value="seekdb">SeekDB 内置模型</option>
                                 </select>
                             </div>
-                            <div class="form-group" id="emb-base-url-group">
-                                <label>Base URL *</label>
-                                <input type="text" id="emb-base-url" placeholder="https://api.openai.com/v1">
+
+                            <!-- SeekDB Info -->
+                            <div class="info-box" x-show="isSeekDB">
+                                <strong>SeekDB 内置模型</strong><br>
+                                <span class="text-muted">
+                                    模型：all-MiniLM-L6-v2 (384维)<br>
+                                    完全离线，无需 API Key
+                                </span>
                             </div>
-                            <div class="form-group" id="emb-api-key-group">
-                                <label>API Key *</label>
-                                <input type="password" id="emb-api-key" placeholder="sk-...">
-                            </div>
-                            <div class="form-group" id="emb-model-group">
-                                <label>Model Name *</label>
-                                <input type="text" id="emb-model" placeholder="text-embedding-3-small">
-                            </div>
-                            <div id="seekdb-info"
-                                style="display:none; padding:1rem; background:rgba(99,102,241,0.1); border-radius:var(--radius); margin-bottom:1rem;">
-                                <p style="margin:0; color:var(--text-main);">
-                                    <strong>SeekDB 内置模型</strong><br>
-                                    <span style="font-size:0.9rem; color:var(--text-muted);">
-                                        使用 pyseekdb 的默认 embedding function<br>
-                                        模型：all-MiniLM-L6-v2 (384维)<br>
-                                        完全离线，无需 API Key<br>
-                                        <span style="color:var(--primary-color);">⚠️ CPU 运行，大文档处理较慢（建议使用 OpenAI API
-                                            以获得更快速度）</span>
-                                    </span>
-                                </p>
-                            </div>
-                            <button id="btn-save-config">保存 Embedder <span class="loader"></span></button>
+
+                            <!-- OpenAI Fields -->
+                            <template x-if="!isSeekDB">
+                                <div>
+                                    <div class="form-group">
+                                        <label>Base URL *</label>
+                                        <input type="text" x-model="embForm.base_url"
+                                            placeholder="https://api.openai.com/v1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>API Key *</label>
+                                        <input type="password" x-model="embForm.api_key" placeholder="sk-...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Model Name *</label>
+                                        <input type="text" x-model="embForm.model" placeholder="text-embedding-3-small">
+                                    </div>
+                                </div>
+                            </template>
+
+                            <button class="btn-primary" @click="saveEmbedder()" :disabled="embSaving">
+                                <span x-show="!embSaving">保存 Embedder</span>
+                                <span x-show="embSaving" class="loader"></span>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- LLM Block -->
-                <div>
-                    <h2
-                        style="margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center;">
-                        <span
-                            style="background:var(--success); width:8px; height:8px; border-radius:50%; margin-right:0.75rem; display:inline-block;"></span>
+                <!-- LLM Section -->
+                <div class="config-section">
+                    <h2 class="config-section-title">
+                        <span class="dot success"></span>
                         LLM (对话模型)
                     </h2>
-                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+
+                    <div class="config-grid">
+                        <!-- LLM List -->
                         <div class="card">
                             <h3>已配置列表</h3>
-                            <div id="llm-list">
-                                <p style="color:var(--text-muted);">加载中...</p>
+                            <div class="config-list" x-show="llms.length === 0">
+                                <p class="text-muted">暂无配置</p>
+                            </div>
+                            <div class="config-list" x-show="llms.length > 0">
+                                <template x-for="llm in llms" :key="llm.name">
+                                    <div class="config-item" @click="activateLLM(llm.name)">
+                                        <div>
+                                            <div class="config-item-name" x-text="llm.name"></div>
+                                            <div class="text-muted text-sm" x-text="llm.model"></div>
+                                        </div>
+                                        <span class="badge" :class="{ success: llm.is_active }"
+                                            x-text="llm.is_active ? 'Active' : 'Inactive'"></span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
 
+                        <!-- LLM Form -->
                         <div class="card">
                             <h3>添加新配置</h3>
                             <div class="form-group">
-                                <label>供应商 (Provider)</label>
-                                <select id="llm-provider">
+                                <label>供应商</label>
+                                <select x-model="llmForm.provider" @change="onLLMProviderChange()">
                                     <option value="kimi">Moonshot AI (Kimi)</option>
                                     <option value="custom">Custom (OpenAI 兼容)</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>配置名称 *</label>
-                                <input type="text" id="llm-name" placeholder="例如：kimi-default">
+                                <input type="text" x-model="llmForm.name" placeholder="例如：kimi-default">
                             </div>
                             <div class="form-group">
                                 <label>Base URL *</label>
-                                <input type="text" id="llm-base-url" placeholder="https://api.moonshot.cn/v1">
+                                <input type="text" x-model="llmForm.base_url" placeholder="https://api.moonshot.cn/v1">
                             </div>
                             <div class="form-group">
                                 <label>API Key *</label>
-                                <input type="password" id="llm-api-key" placeholder="sk-...">
+                                <input type="password" x-model="llmForm.api_key" placeholder="sk-...">
                             </div>
                             <div class="form-group">
                                 <label>Model Name *</label>
-                                <input type="text" id="llm-model" placeholder="kimi-k2-turbo-preview">
+                                <input type="text" x-model="llmForm.model" placeholder="moonshot-v1-8k">
                             </div>
-                            <div class="form-group">
-                                <label>Temperature</label>
-                                <input type="number" id="llm-temp" value="0.7" step="0.1" min="0" max="2">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Temperature</label>
+                                    <input type="number" x-model.number="llmForm.temperature" step="0.1" min="0"
+                                        max="2">
+                                </div>
+                                <div class="form-group">
+                                    <label>Max Tokens</label>
+                                    <input type="number" x-model.number="llmForm.max_tokens" step="128">
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>Max Tokens</label>
-                                <input type="number" id="llm-tokens" value="2048" step="128">
-                            </div>
-                            <button id="btn-save-llm">保存 LLM <span class="loader"></span></button>
+
+                            <button class="btn-primary" @click="saveLLM()" :disabled="llmSaving">
+                                <span x-show="!llmSaving">保存 LLM</span>
+                                <span x-show="llmSaving" class="loader"></span>
+                            </button>
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
 
-
-    </div>
-
-    <!-- Create KB Modal -->
-    <div id="create-kb-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>创建知识库</h2>
-                <span class="modal-close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>名称 *</label>
-                    <input type="text" id="modal-kb-name" placeholder="例如：2024财务文档">
-                </div>
-                <div class="form-group">
-                    <label>描述</label>
-                    <textarea id="modal-kb-desc" rows="3" placeholder="关于该数据集的描述..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label>向量数据库 *</label>
-                    <select id="modal-kb-vdb">
-                        <option value="chroma">ChromaDB</option>
-                        <option value="duckdb">DuckDB</option>
-                        <option value="seekdb">SeekDB（支持混合检索）</option>
-                        <option value="web_search">🌐 互联网搜索（实时联网）</option>
-                    </select>
-                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
-                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文），检索效果更好<br>
-                        🌐 <strong>互联网搜索</strong> 使用 DuckDuckGo 实时搜索，无需上传文档
-                    </p>
-                </div>
-                <div class="form-group" id="modal-kb-embedder-group">
-                    <label>Embedding 模型 *</label>
-                    <select id="modal-kb-embedder" required>
-                        <option value="">请选择 Embedder...</option>
-                        <!-- Will be populated dynamically -->
-                    </select>
-                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
-                        💡 必须配置 Embedder（在"模型配置"页面添加）<br>
-                        💡 SeekDB 向量库 + 任何 Embedder = 混合检索
-                    </p>
-                </div>
-                <div class="form-group" id="modal-kb-chunk-size-group">
-                    <label>分块大小 (字符数)</label>
-                    <input type="number" id="modal-kb-chunk-size" value="1000" min="100" max="4000" step="100">
-                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
-                        推荐：1000-2000（较大的 chunk 可减少总数，提升处理速度）
-                    </p>
-                </div>
-                <div class="form-group" id="modal-kb-chunk-overlap-group">
-                    <label>分块重叠 (字符数)</label>
-                    <input type="number" id="modal-kb-chunk-overlap" value="100" min="0" max="500" step="50">
-                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
-                        推荐：chunk_size 的 10-20%
-                    </p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="secondary modal-close">取消</button>
-                <button id="btn-create-kb-confirm">
-                    创建
-                    <span class="loader"></span>
-                </button>
-            </div>
-        </div>
     </div>
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>

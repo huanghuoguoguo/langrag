@@ -16,6 +16,9 @@ class SearchRequest(BaseModel):
     kb_id: str
     query: str
     top_k: int = 5
+    search_mode: str | None = None  # "hybrid", "vector", "keyword", or None for auto
+    use_rerank: bool | None = None  # None = use default, True/False = force
+    use_rewrite: bool = False  # Disabled by default for plain search
 
 
 class SearchResultItem(BaseModel):
@@ -28,6 +31,8 @@ class SearchResultItem(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResultItem]
     search_type: str
+    original_query: str
+    rewritten_query: str | None = None  # Only set if query was rewritten
 
 
 def get_rag_kernel():
@@ -42,17 +47,20 @@ def search(
     session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """Execute search"""
+    """Execute search with optional mode and rerank settings"""
     # Verify KB exists
     kb = KBService.get_kb(session, req.kb_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     try:
-        results, search_type = rag_kernel.search(
+        results, search_type, rewritten_query = rag_kernel.search(
             kb_id=req.kb_id,
             query=req.query,
-            top_k=req.top_k
+            top_k=req.top_k,
+            search_mode=req.search_mode,
+            use_rerank=req.use_rerank,
+            use_rewrite=req.use_rewrite
         )
 
         items = [
@@ -67,7 +75,9 @@ def search(
 
         return SearchResponse(
             results=items,
-            search_type=search_type
+            search_type=search_type,
+            original_query=req.query,
+            rewritten_query=rewritten_query
         )
 
     except Exception as e:
