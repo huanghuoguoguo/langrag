@@ -89,9 +89,6 @@ function modelsPage() {
             }
         },
 
-        async activateEmbedder(name) {
-            await Alpine.store('models').activateEmbedder(name);
-        },
 
         async saveLLM() {
             if (!this.llmForm.name) {
@@ -126,9 +123,6 @@ function modelsPage() {
             }
         },
 
-        async activateLLM(name) {
-            await Alpine.store('models').activateLLM(name);
-        }
     };
 }
 

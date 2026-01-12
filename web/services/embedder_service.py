@@ -62,27 +62,15 @@ class EmbedderService:
         rag_kernel: RAGKernel,
         name: str
     ) -> EmbedderConfig | None:
-        """Activate the specified configuration"""
-        # Deactivate all
-        statement = select(EmbedderConfig)
-        configs = session.exec(statement).all()
-        for cfg in configs:
-            cfg.is_active = False
-            session.add(cfg)
-
-        # Activate target
+        """Set as default configuration (for backward compatibility)"""
+        # Find target config
         statement = select(EmbedderConfig).where(EmbedderConfig.name == name)
         config = session.exec(statement).first()
         if config:
-            config.is_active = True
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-
-            # Inject into RAG kernel
-            rag_kernel.set_embedder(config.embedder_type, config.model, config.base_url, config.api_key)
-
-        return config
+            # No longer enforce single active, just return the config
+            # This method is kept for backward compatibility
+            return config
+        return None
 
     @staticmethod
     def list_all(session: Session) -> list[EmbedderConfig]:

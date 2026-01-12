@@ -7,20 +7,30 @@ function chatPage() {
         input: '',
         selectedLLM: null,
 
+        // 检索配置
+        useRerank: false,
+        selectedReranker: '',
+        selectedRerankerLLM: '',
+        useRouter: false,
+        selectedRouter: '',
+        useRewriter: false,
+        selectedRewriter: '',
+
         init() {
             console.log('Chat page initializing...');
             Alpine.store('kbs').load();
             Alpine.store('models').load().then(() => {
                 console.log('Models loaded:', Alpine.store('models').llms);
-                console.log('Active LLM:', Alpine.store('models').activeLLM);
                 console.log('Available LLMs:', this.availableLLMs);
+                // Auto-select first available LLM if none selected
+                if (!this.selectedLLM && this.availableLLMs.length > 0) {
+                    this.selectedLLM = this.availableLLMs[0].name;
+                }
+                // Auto-select first available LLM for reranker if none selected
+                if (!this.selectedRerankerLLM && this.availableLLMs.length > 0) {
+                    this.selectedRerankerLLM = this.availableLLMs[0].name;
+                }
             });
-            this.$watch('activeLLM', (val) => {
-                console.log('Active LLM changed:', val);
-                if (val && !this.selectedLLM) this.selectedLLM = val.name;
-            });
-            // Init selected if available
-            if (this.activeLLM && !this.selectedLLM) this.selectedLLM = this.activeLLM.name;
         },
 
         get availableLLMs() {
@@ -39,9 +49,6 @@ function chatPage() {
             return Alpine.store('chat').loading;
         },
 
-        get activeLLM() {
-            return Alpine.store('models').activeLLM;
-        },
 
         isSelected(kbId) {
             return Alpine.store('chat').isKBSelected(kbId);
@@ -73,7 +80,19 @@ function chatPage() {
             if (!this.input.trim()) return;
             const msg = this.input;
             this.input = '';
-            await Alpine.store('chat').send(msg, this.selectedLLM);
+
+            // 构建检索配置参数
+            const retrievalConfig = {
+                use_rerank: this.useRerank,
+                reranker_type: this.selectedReranker,
+                reranker_model: this.selectedRerankerLLM,
+                use_router: this.useRouter,
+                router_model: this.selectedRouter,
+                use_rewriter: this.useRewriter,
+                rewriter_model: this.selectedRewriter
+            };
+
+            await Alpine.store('chat').send(msg, this.selectedLLM, retrievalConfig);
             // Scroll to bottom
             this.$nextTick(() => {
                 const container = document.getElementById('chat-messages');

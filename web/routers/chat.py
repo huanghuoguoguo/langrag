@@ -24,6 +24,15 @@ class ChatRequest(BaseModel):
     stream: bool = False
     model_name: str | None = None
 
+    # 检索配置参数
+    use_rerank: bool = False
+    reranker_type: str | None = None
+    reranker_model: str | None = None  # For llm_template reranker
+    use_router: bool = False
+    router_model: str | None = None
+    use_rewriter: bool = False
+    rewriter_model: str | None = None
+
 
 class SourceItem(BaseModel):
     content: str
@@ -87,7 +96,14 @@ async def chat(
             query=req.query,
             history=history_dicts,
             stream=req.stream,
-            model_name=req.model_name
+            model_name=req.model_name,
+            use_rerank=req.use_rerank,
+            reranker_type=req.reranker_type,
+            reranker_model=req.reranker_model,
+            use_router=req.use_router,
+            router_model=req.router_model,
+            use_rewriter=req.use_rewriter,
+            rewriter_model=req.rewriter_model
         )
 
         if req.stream:

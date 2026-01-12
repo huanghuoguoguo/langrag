@@ -52,11 +52,7 @@ class LLMService:
         session.commit()
         session.refresh(config)
 
-        # If it was active or it's the only one, activate it
-        statement = select(LLMConfig)
-        all_configs = session.exec(statement).all()
-        if len(all_configs) == 1 or config.is_active:
-            LLMService.activate_config(session, rag_kernel, config.name)
+        # No longer auto-activate, all models are available by default
 
         return config
 
@@ -72,40 +68,15 @@ class LLMService:
         rag_kernel: RAGKernel,
         name: str
     ) -> LLMConfig | None:
-        """Activate the specified configuration"""
-        # Deactivate all
-        statement = select(LLMConfig)
-        configs = session.exec(statement).all()
-        for cfg in configs:
-            cfg.is_active = False
-            session.add(cfg)
-
-        # Activate target
+        """Set as default configuration (for backward compatibility)"""
+        # Find target config
         statement = select(LLMConfig).where(LLMConfig.name == name)
         config = session.exec(statement).first()
         if config:
-            config.is_active = True
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-
-            # Inject into RAG kernel using generic add_llm logic
-            llm_conf = {
-                "temperature": config.temperature,
-                "max_tokens": config.max_tokens,
-            }
-            if config.model_path:
-                llm_conf["type"] = "local"
-                llm_conf["model_path"] = config.model_path
-            else:
-                llm_conf["type"] = "remote"
-                llm_conf["base_url"] = config.base_url
-                llm_conf["api_key"] = config.api_key
-                llm_conf["model"] = config.model
-            
-            rag_kernel.add_llm(name=config.name, config=llm_conf, set_as_default=True)
-
-        return config
+            # No longer enforce single active, just return the config
+            # This method is kept for backward compatibility
+            return config
+        return None
 
     @staticmethod
     def list_all(session: Session) -> list[LLMConfig]:

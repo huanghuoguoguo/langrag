@@ -23,13 +23,12 @@
                     </div>
                     <div class="config-list" x-show="embedders.length > 0">
                         <template x-for="emb in embedders" :key="emb.name">
-                            <div class="config-item" @click="activateEmbedder(emb.name)">
+                            <div class="config-item">
                                 <div>
                                     <div class="config-item-name" x-text="emb.name"></div>
                                     <div class="text-muted text-sm" x-text="emb.model"></div>
                                 </div>
-                                <span class="badge" :class="{ success: emb.is_active }"
-                                    x-text="emb.is_active ? 'Active' : emb.embedder_type"></span>
+                                <span class="badge primary" x-text="emb.embedder_type"></span>
                             </div>
                         </template>
                     </div>
@@ -101,13 +100,12 @@
                     </div>
                     <div class="config-list" x-show="llms.length > 0">
                         <template x-for="llm in llms" :key="llm.name">
-                            <div class="config-item" @click="activateLLM(llm.name)">
+                            <div class="config-item">
                                 <div>
                                     <div class="config-item-name" x-text="llm.name"></div>
                                     <div class="text-muted text-sm" x-text="llm.model"></div>
                                 </div>
-                                <span class="badge" :class="{ success: llm.is_active }"
-                                    x-text="llm.is_active ? 'Active' : 'Inactive'"></span>
+                                <span class="badge success" x-text="'可用'"></span>
                             </div>
                         </template>
                     </div>

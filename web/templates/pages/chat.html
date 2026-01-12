@@ -6,13 +6,69 @@
                 <h2>⚙️ 配置</h2>
 
                 <div class="form-group">
-                    <label>LLM 模型</label>
+                    <label>对话模型</label>
                     <select class="form-select" x-model="selectedLLM">
                         <template x-for="llm in availableLLMs" :key="llm.name">
-                            <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"
-                                :selected="llm.name == activeLLM?.name"></option>
+                            <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"></option>
                         </template>
                     </select>
+                </div>
+
+                <!-- 检索配置 -->
+                <div class="form-group">
+                    <label>检索配置</label>
+                    <div class="retrieval-config">
+                        <!-- Rerank配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRerank">
+                                <span>重排序 (Rerank)</span>
+                            </label>
+                            <select x-model="selectedReranker" :disabled="!useRerank" class="form-select-mini">
+                                <option value="">选择类型...</option>
+                                <option value="llm_template">LLM模板</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="qwen">Qwen</option>
+                                <option value="noop">NoOp</option>
+                            </select>
+                        </div>
+
+                        <!-- Reranker LLM选择 (仅在选择llm_template时显示) -->
+                        <div class="config-row" x-show="useRerank && selectedReranker === 'llm_template'">
+                            <label class="config-label-small">重排序模型:</label>
+                            <select x-model="selectedRerankerLLM" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- Router配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRouter">
+                                <span>智能路由 (Router)</span>
+                            </label>
+                            <select x-model="selectedRouter" :disabled="!useRouter" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- Rewriter配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRewriter">
+                                <span>查询重写 (Rewriter)</span>
+                            </label>
+                            <select x-model="selectedRewriter" :disabled="!useRewriter" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group" style="flex:1; display:flex; flex-direction:column;">

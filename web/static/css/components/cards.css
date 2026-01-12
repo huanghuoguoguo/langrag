@@ -137,3 +137,62 @@
     padding: 0.35rem 0.75rem;
     font-size: 0.8rem;
 }
+
+/* Retrieval Config Styles */
+.retrieval-config {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.config-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.config-row[x-show="false"] {
+    display: none;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.checkbox-label span {
+    color: var(--text-main);
+}
+
+.config-label-small {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.form-select-mini {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    min-width: 120px;
+}
+
+.form-select-mini:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
