@@ -94,12 +94,12 @@ def list_embedders(session: Session = Depends(get_session)):
 
 class LLMConfigRequest(BaseModel):
     name: str = "default"
-    base_url: str
-    api_key: str
+    base_url: str = ""
+    api_key: str = ""
     model: str
     temperature: float = 0.7
     max_tokens: int = 2048
-
+    model_path: str | None = None
 
 @router.post("/llm")
 def save_llm_config(
@@ -118,7 +118,8 @@ def save_llm_config(
             api_key=req.api_key,
             model=req.model,
             temperature=req.temperature,
-            max_tokens=req.max_tokens
+            max_tokens=req.max_tokens,
+            model_path=req.model_path
         )
 
         return {
@@ -149,3 +150,52 @@ def list_llms(session: Session = Depends(get_session)):
             for cfg in configs
         ]
     }
+
+class ActivateRequest(BaseModel):
+    name: str
+
+@router.post("/llm/activate")
+def activate_llm_config(
+    req: ActivateRequest,
+    session: Session = Depends(get_session),
+    rag_kernel: RAGKernel = Depends(get_rag_kernel)
+):
+    """Activate an LLM configuration"""
+    from web.services.llm_service import LLMService
+    try:
+        config = LLMService.activate_config(session, rag_kernel, req.name)
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+            
+        return {
+             "status": "ok",
+             "message": f"Activated LLM: {config.name}",
+             "config": {
+                 "name": config.name
+             }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/embedder/activate")
+def activate_embedder_config(
+    req: ActivateRequest,
+    session: Session = Depends(get_session),
+    rag_kernel: RAGKernel = Depends(get_rag_kernel)
+):
+    """Activate an Embedder configuration"""
+    try:
+        config = EmbedderService.activate_config(session, rag_kernel, req.name)
+        if not config:
+             raise HTTPException(status_code=404, detail="Configuration not found")
+
+        return {
+             "status": "ok",
+             "message": f"Activated Embedder: {config.name}",
+             "config": {
+                 "name": config.name 
+             }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

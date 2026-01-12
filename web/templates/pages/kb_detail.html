@@ -1,0 +1,316 @@
+<div x-show="nav.isActive('kb-detail')" x-data="kbDetailPage()" class="content-section" x-cloak>
+    <template x-if="kb">
+        <div>
+            <div class="section-header">
+                <div>
+                    <h1 x-text="kb.name"></h1>
+                    <p class="subtitle" x-text="kb.description || '无描述'"></p>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-secondary" @click="goBack()">← 返回列表</button>
+                    <button class="btn-danger" @click="deleteKB()">删除</button>
+                </div>
+            </div>
+
+            <div class="container">
+                <!-- KB Info Card -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>📋 知识库信息</h2>
+                        <button class="btn-secondary btn-sm" @click="showEditModal = true">✏️ 编辑配置</button>
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>ID</label>
+                            <div class="info-value mono" x-text="kb.id"></div>
+                        </div>
+                        <div class="info-item">
+                            <label>向量数据库</label>
+                            <div class="info-value" x-text="kb.vdb_type"></div>
+                        </div>
+                        <div class="info-item">
+                            <label>Embedding 模型</label>
+                            <div class="info-value" x-text="kb.embedder_name || '未配置'"></div>
+                        </div>
+                        <div class="info-item">
+                            <label>分块配置</label>
+                            <div class="info-value" x-text="kb.chunk_size + ' / ' + kb.chunk_overlap"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 检索配置信息 -->
+                    <h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">🔍 检索配置</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>搜索模式</label>
+                            <div class="info-value">
+                                <span class="badge primary" x-text="kb.search_mode || 'hybrid'"></span>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Top-K / 阈值</label>
+                            <div class="info-value" x-text="(kb.top_k || 5) + ' / ' + (kb.score_threshold || 0)"></div>
+                        </div>
+                        <div class="info-item">
+                            <label>Reranker</label>
+                            <div class="info-value">
+                                <template x-if="kb.reranker && kb.reranker.enabled">
+                                    <span class="badge success" x-text="kb.reranker.reranker_type + (kb.reranker.model ? ' (' + kb.reranker.model + ')' : '')"></span>
+                                </template>
+                                <template x-if="!kb.reranker || !kb.reranker.enabled">
+                                    <span class="badge">未启用</span>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Query Rewriter</label>
+                            <div class="info-value">
+                                <template x-if="kb.rewriter && kb.rewriter.enabled">
+                                    <span class="badge success" x-text="'LLM: ' + kb.rewriter.llm_name"></span>
+                                </template>
+                                <template x-if="!kb.rewriter || !kb.rewriter.enabled">
+                                    <span class="badge">未启用</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Card -->
+                <div class="card">
+                    <h2>📤 上传文档</h2>
+                    <div class="dropzone" @dragover.prevent="$el.classList.add('dragover')"
+                        @dragleave.prevent="$el.classList.remove('dragover')"
+                        @drop.prevent="$el.classList.remove('dragover'); handleFiles($event)"
+                        @click="$refs.fileInput.click()">
+                        <p>将文件拖拽至此，或点击选择文件</p>
+                        <input type="file" x-ref="fileInput" multiple @change="handleFiles($event)"
+                            style="display:none">
+                    </div>
+
+                    <!-- Files to upload -->
+                    <div class="file-list" x-show="filesToUpload.length > 0">
+                        <template x-for="(file, index) in filesToUpload" :key="index">
+                            <div class="file-item">
+                                <span x-text="file.name"></span>
+                                <div class="file-item-actions">
+                                    <span class="badge" x-text="(file.size / 1024).toFixed(1) + ' KB'"></span>
+                                    <button class="btn-icon" @click="removeFile(index)">×</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="btn-primary" @click="upload()"
+                            :disabled="uploading || filesToUpload.length === 0">
+                            <span x-show="!uploading">开始处理</span>
+                            <span x-show="uploading" class="loader"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Documents List -->
+                <div class="card">
+                    <h2>📁 已上传文档</h2>
+                    <div x-show="documents.length === 0" class="empty-hint">还没有上传文档</div>
+                    <div class="file-list" x-show="documents.length > 0">
+                        <template x-for="doc in documents" :key="doc.id">
+                            <div class="file-item">
+                                <div>
+                                    <div x-text="doc.filename"></div>
+                                    <div class="file-meta">
+                                        <span x-text="(doc.file_size / 1024).toFixed(1) + ' KB'"></span>
+                                        <span>·</span>
+                                        <span x-text="doc.chunk_count + ' chunks'"></span>
+                                    </div>
+                                </div>
+                                <span class="badge" :class="{ success: doc.status === 'completed' }"
+                                    x-text="doc.status"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Search Card -->
+                <div class="card">
+                    <h2>🔍 检索测试</h2>
+
+                    <!-- Search Options -->
+                    <div class="search-options">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>检索模式</label>
+                                <select x-model="searchMode">
+                                    <option value="auto">自动选择</option>
+                                    <option value="hybrid">混合检索 (向量+关键词)</option>
+                                    <option value="vector">向量检索</option>
+                                    <option value="keyword">关键词检索</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Rerank 重排序</label>
+                                <select x-model="useRerank">
+                                    <option :value="null">默认 (自动)</option>
+                                    <option :value="true">启用</option>
+                                    <option :value="false">禁用</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Query 重写</label>
+                                <select x-model="useRewrite">
+                                    <option :value="false">禁用</option>
+                                    <option :value="true">启用 (LLM优化)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="search-box">
+                        <input type="text" x-model="searchQuery" placeholder="请输入您的问题..." @keyup.enter="search()">
+                        <button class="btn-primary" @click="search()" :disabled="searchLoading">
+                            <span x-show="!searchLoading">搜索</span>
+                            <span x-show="searchLoading" class="loader"></span>
+                        </button>
+                    </div>
+
+                    <!-- Query Rewrite Visualization -->
+                    <div class="rewrite-display" x-show="rewrittenQuery">
+                        <div class="rewrite-label">✨ Query 已重写:</div>
+                        <div class="rewrite-content">
+                            <span class="rewrite-original" x-text="searchQuery"></span>
+                            <span class="rewrite-arrow">→</span>
+                            <span class="rewrite-result" x-text="rewrittenQuery"></span>
+                        </div>
+                    </div>
+
+                    <!-- Results -->
+                    <div class="search-results" x-show="searchResults.length > 0">
+                        <template x-for="(item, index) in searchResults" :key="index">
+                            <div class="result-item">
+                                <div class="result-header">
+                                    <span class="result-score" x-text="'Score: ' + item.score.toFixed(3)"></span>
+                                    <span class="badge" :class="{
+                                        success: item.search_type.includes('vector'),
+                                        primary: item.search_type.includes('hybrid')
+                                    }" x-text="formatSearchType(item.search_type)"></span>
+                                </div>
+                                <div class="result-content" x-text="item.content"></div>
+                                <div class="result-source">
+                                    <span x-text="'来源: ' + (item.source || '未知')"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit KB Config Modal -->
+            <div class="modal" :class="{ active: showEditModal }" @click.self="showEditModal = false">
+                <div class="modal-content" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h2>编辑检索配置</h2>
+                        <span class="modal-close" @click="showEditModal = false">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <!-- 基本信息 -->
+                        <h3 style="margin-bottom: 1rem; color: var(--text-primary);">📚 基本信息</h3>
+                        <div class="form-group">
+                            <label>名称</label>
+                            <input type="text" x-model="editForm.name" placeholder="知识库名称">
+                        </div>
+                        <div class="form-group">
+                            <label>描述</label>
+                            <textarea x-model="editForm.description" rows="2" placeholder="关于该数据集的描述..."></textarea>
+                        </div>
+
+                        <!-- 检索配置 -->
+                        <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">🔍 检索配置</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>搜索模式</label>
+                                <select x-model="editForm.search_mode">
+                                    <option value="hybrid">混合搜索 (Hybrid)</option>
+                                    <option value="vector">向量搜索 (Vector)</option>
+                                    <option value="keyword">关键词搜索 (Keyword)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>返回结果数 (Top-K)</label>
+                                <input type="number" x-model.number="editForm.top_k" min="1" max="50" step="1">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>分数阈值 (0-1)</label>
+                            <input type="number" x-model.number="editForm.score_threshold" min="0" max="1" step="0.1">
+                            <p class="form-hint">低于此分数的结果将被过滤，0 表示不过滤</p>
+                        </div>
+
+                        <!-- Reranker 配置 -->
+                        <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
+                            🎯 Reranker 配置
+                            <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
+                                <input type="checkbox" x-model="editForm.reranker.enabled"> 启用
+                            </label>
+                        </h3>
+                        <div x-show="editForm.reranker.enabled" x-transition>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Reranker 类型</label>
+                                    <select x-model="editForm.reranker.reranker_type">
+                                        <option value="">请选择...</option>
+                                        <option value="cohere">Cohere</option>
+                                        <option value="qwen">Qwen (通义千问)</option>
+                                        <option value="noop">NoOp (不重排)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>模型名称</label>
+                                    <input type="text" x-model="editForm.reranker.model" placeholder="例如：rerank-english-v3.0">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" x-model="editForm.reranker.api_key" placeholder="Reranker API Key">
+                                </div>
+                                <div class="form-group">
+                                    <label>Rerank Top-K</label>
+                                    <input type="number" x-model.number="editForm.reranker.top_k" min="1" max="50" placeholder="默认使用检索 Top-K">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rewriter 配置 -->
+                        <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
+                            ✏️ Query Rewriter 配置
+                            <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
+                                <input type="checkbox" x-model="editForm.rewriter.enabled"> 启用
+                            </label>
+                        </h3>
+                        <div x-show="editForm.rewriter.enabled" x-transition>
+                            <div class="form-group">
+                                <label>使用的 LLM</label>
+                                <select x-model="editForm.rewriter.llm_name">
+                                    <option value="">请选择 LLM...</option>
+                                    <template x-for="llm in llms" :key="llm.name">
+                                        <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'">
+                                        </option>
+                                    </template>
+                                </select>
+                                <p class="form-hint">Query Rewriter 会使用 LLM 重写用户查询以提高检索质量</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" @click="showEditModal = false">取消</button>
+                        <button class="btn-primary" @click="saveConfig()" :disabled="saving">
+                            <span x-show="!saving">保存</span>
+                            <span x-show="saving" class="loader"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>

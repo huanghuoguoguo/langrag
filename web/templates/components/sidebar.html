@@ -1,0 +1,26 @@
+<div class="sidebar">
+    <div class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+        LangRAG
+    </div>
+
+    <div class="nav-item" :class="{ active: nav.isActive('kb-list') }" @click="nav.goto('kb-list')">
+        <span>📚 知识库列表</span>
+    </div>
+    <div class="nav-item" :class="{ active: nav.isActive('kb-detail') }" x-show="nav.currentKB"
+        @click="nav.goto('kb-detail')">
+        <span>📄 知识库详情</span>
+    </div>
+    <div class="nav-item" :class="{ active: nav.isActive('chat') }" @click="nav.goto('chat')">
+        <span>💬 AI 对话</span>
+    </div>
+    <div class="nav-item" :class="{ active: nav.isActive('playground') }" @click="nav.goto('playground')">
+        <span>🧪 Playground</span>
+    </div>
+    <div class="nav-item" :class="{ active: nav.isActive('models') }" @click="nav.goto('models')">
+        <span>⚙️ 模型配置</span>
+    </div>
+</div>

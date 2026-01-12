@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     query: str
     history: list[Message] = []
     stream: bool = False
+    model_name: str | None = None
 
 
 class SourceItem(BaseModel):
@@ -85,7 +86,8 @@ async def chat(
             kb_ids=target_kb_ids,
             query=req.query,
             history=history_dicts,
-            stream=req.stream
+            stream=req.stream,
+            model_name=req.model_name
         )
 
         if req.stream:

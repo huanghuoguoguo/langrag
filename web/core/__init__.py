@@ -17,13 +17,12 @@ Example:
     kernel.set_llm(base_url="...", api_key="...", model="gpt-4")
 """
 
-from .chat_service import ChatService
+from .services.chat_service import ChatService
 from .database import get_session, init_db
-from .document_processor import DocumentProcessor
+from .services.document_processor import DocumentProcessor
 from .embedders import SeekDBEmbedder, WebOpenAIEmbedder
-from .llm_adapter import WebLLMAdapter
 from .rag_kernel import RAGKernel
-from .retrieval_service import RetrievalService
+from .services.retrieval_service import RetrievalService
 from .vdb_manager import WebVectorStoreManager
 
 __all__ = [
@@ -41,5 +40,4 @@ __all__ = [
     "ChatService",
     # Managers
     "WebVectorStoreManager",
-    "WebLLMAdapter",
 ]

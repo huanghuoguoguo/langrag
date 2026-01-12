@@ -57,9 +57,16 @@ function modelsPage() {
             if (this.llmForm.provider === 'kimi') {
                 this.llmForm.base_url = 'https://api.moonshot.cn/v1';
                 this.llmForm.model = 'moonshot-v1-8k';
-            } else {
+                this.llmForm.model_path = '';
+            } else if (this.llmForm.provider === 'local') {
+                this.llmForm.base_url = '';
+                this.llmForm.api_key = '';
+                this.llmForm.model = 'qwen2.5-7b-instruct';
+                this.llmForm.model_path = '';  // 留空，后端会使用默认路径
+            }  else {
                 this.llmForm.base_url = '';
                 this.llmForm.model = '';
+                this.llmForm.model_path = '';
             }
         },
 
@@ -92,7 +99,19 @@ function modelsPage() {
                 return;
             }
             this.llmSaving = true;
-            const success = await Alpine.store('models').saveLLM(this.llmForm);
+            const payload = { ...this.llmForm };
+
+            // Defaults for local model
+            if (payload.provider === 'local') {
+                // 总是使用默认路径和配置（优先使用小模型）
+                payload.model_path = "/home/yhh/models/qwen2-0_5b-instruct-q4_k_m.gguf";
+                payload.model = "qwen2-0_5b-instruct";
+                if (!payload.name) {
+                    payload.name = "qwen-local";
+                }
+            }
+
+            const success = await Alpine.store('models').saveLLM(payload);
             this.llmSaving = false;
             if (success) {
                 this.llmForm = {

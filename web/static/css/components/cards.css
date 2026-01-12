@@ -108,3 +108,32 @@
     border-radius: var(--radius);
     margin-bottom: 1rem;
 }
+
+/* Card Header Row */
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.card-header-row h2 {
+    margin-bottom: 0;
+}
+
+/* Badge variants */
+.badge.info {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+.badge.warning {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+/* Small button */
+.btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}

@@ -108,6 +108,10 @@ document.addEventListener('alpine:init', () => {
         activeEmbedder: null,
         activeLLM: null,
 
+        get list() {
+            return this.llms || [];
+        },
+
         async load() {
             try {
                 const embeddersRes = await api.listEmbedders();
@@ -197,7 +201,7 @@ document.addEventListener('alpine:init', () => {
             this.selectedKBs = [];
         },
 
-        async send(input) {
+        async send(input, modelName = null) {
             if (!input.trim()) return;
 
             const userMessage = { role: 'user', content: input, sources: [] };
@@ -212,7 +216,8 @@ document.addEventListener('alpine:init', () => {
                         role: m.role,
                         content: m.content
                     })),
-                    stream: false
+                    stream: false,
+                    model_name: modelName
                 });
 
                 this.messages.push({

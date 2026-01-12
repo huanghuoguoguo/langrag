@@ -11,6 +11,7 @@ class LLMService:
     """LLM Configuration Service"""
 
     @staticmethod
+    @staticmethod
     def save_config(
         session: Session,
         rag_kernel: RAGKernel,
@@ -19,7 +20,8 @@ class LLMService:
         api_key: str,
         model: str,
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = 2048,
+        model_path: str | None = None
     ) -> LLMConfig:
         """Save LLM configuration"""
         # Check if exists
@@ -33,6 +35,7 @@ class LLMService:
             config.model = model
             config.temperature = temperature
             config.max_tokens = max_tokens
+            config.model_path = model_path
         else:
             # Create new
             config = LLMConfig(
@@ -41,7 +44,8 @@ class LLMService:
                 api_key=api_key,
                 model=model,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                model_path=model_path
             )
 
         session.add(config)
@@ -85,14 +89,21 @@ class LLMService:
             session.commit()
             session.refresh(config)
 
-            # Inject into RAG kernel
-            rag_kernel.set_llm(
-                base_url=config.base_url,
-                api_key=config.api_key,
-                model=config.model,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens
-            )
+            # Inject into RAG kernel using generic add_llm logic
+            llm_conf = {
+                "temperature": config.temperature,
+                "max_tokens": config.max_tokens,
+            }
+            if config.model_path:
+                llm_conf["type"] = "local"
+                llm_conf["model_path"] = config.model_path
+            else:
+                llm_conf["type"] = "remote"
+                llm_conf["base_url"] = config.base_url
+                llm_conf["api_key"] = config.api_key
+                llm_conf["model"] = config.model
+            
+            rag_kernel.add_llm(name=config.name, config=llm_conf, set_as_default=True)
 
         return config
 
