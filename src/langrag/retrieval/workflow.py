@@ -52,16 +52,22 @@ class RetrievalWorkflow:
     def __init__(
         self,
         router=None,   # BaseRouter
+        embedder=None, # BaseEmbedder
         reranker=None, # BaseReranker
         rewriter=None, # BaseRewriter
         vector_store_cls=None,
+        vector_manager=None, # Injected manager
+        cache=None, # SemanticCache
         max_workers: int = DEFAULT_MAX_WORKERS,
         config: WorkflowConfig | None = None
     ):
         self.router = router
+        self.embedder = embedder
         self.reranker = reranker
         self.rewriter = rewriter
         self.vector_store_cls = vector_store_cls
+        self.vector_manager = vector_manager
+        self.cache = cache
         self.config = config or WorkflowConfig(max_workers=max_workers)
         self.max_workers = self.config.max_workers
         self.post_processor = PostProcessor()
@@ -76,6 +82,20 @@ class RetrievalWorkflow:
     def set_callback_manager(self, manager):
         """Set the callback manager for lifecycle events."""
         self.callback_manager = manager
+
+    def _embed_query(self, query: str) -> list[float] | None:
+        """
+        Generate embedding vector for the query.
+        """
+        if not self.embedder:
+            return None
+
+        try:
+            vectors = self.embedder.embed([query])
+            return vectors[0] if vectors else None
+        except Exception as e:
+            logger.error(f"Query embedding failed: {e}")
+            return None
 
     def retrieve(
         self,
@@ -124,10 +144,30 @@ class RetrievalWorkflow:
 
             try:
                 # Stage 1: Query Rewrite
-                query = self._stage_rewrite(query, request_id, tracer)
+                final_query = self._stage_rewrite(query, request_id, tracer)
+                
+                # Check cache if enabled
+                query_vector = None
+                if self.cache and self.embedder:
+                    query_vector = self._embed_query(final_query)
+                    if query_vector:
+                         context_key = ",".join(sorted([d.id for d in datasets])) if datasets else ""
+                         
+                         cache_hit = self.cache.get_by_similarity(query_vector, context_key=context_key)
+                         
+                         if cache_hit:
+                             logger.info(f"[{request_id}] Cache hit for query: '{final_query[:30]}...'")
+                             
+                             # Convert cached docs to RetrievalContext
+                             results = self._format_results(cache_hit.results, rerank_top_k or top_k)
+                             
+                             if self.callback_manager:
+                                self.callback_manager.on_retrieve_end(results, run_id=run_id)
+                                
+                             return results
 
                 # Stage 2: Routing
-                selected_datasets = self._stage_route(query, datasets, request_id, tracer)
+                selected_datasets = self._stage_route(final_query, datasets, request_id, tracer)
 
                 if not selected_datasets:
                     logger.warning(f"[{request_id}] No datasets selected, returning empty")
@@ -137,7 +177,7 @@ class RetrievalWorkflow:
 
                 # Stage 3: Retrieval
                 all_documents = self._stage_retrieve(
-                    query, selected_datasets, top_k, request_id, tracer
+                    final_query, selected_datasets, top_k, request_id, tracer
                 )
 
                 logger.info(
@@ -150,7 +190,7 @@ class RetrievalWorkflow:
                 # Stage 4: Reranking
                 if self.reranker and all_documents:
                     all_documents = self._stage_rerank(
-                        query, all_documents, rerank_top_k or top_k,
+                        final_query, all_documents, rerank_top_k or top_k,
                         request_id, run_id, tracer
                     )
 
@@ -158,6 +198,19 @@ class RetrievalWorkflow:
                 all_documents = self._stage_post_process(
                     all_documents, score_threshold, tracer
                 )
+                
+                # Update Cache if applicable
+                if self.cache and query_vector and all_documents:
+                    context_key = ",".join(sorted([d.id for d in datasets])) if datasets else ""
+                    self.cache.set_with_embedding(
+                        query=final_query,
+                        embedding=query_vector,
+                        results=all_documents,
+                        metadata={
+                            "top_k": top_k,
+                            "context_key": context_key
+                        }
+                    )
 
                 # Stage 6: Format Results
                 results = self._format_results(all_documents, rerank_top_k or top_k)
@@ -277,7 +330,7 @@ class RetrievalWorkflow:
                     span.set_attribute("selected_count", len(selected))
                     span.set_attribute("selected_datasets", [d.name for d in selected])
 
-                return selected if selected else datasets
+                return selected # Trust the router even if empty
 
             except Exception as e:
                 logger.warning(
@@ -309,7 +362,7 @@ class RetrievalWorkflow:
                 span.set_attribute("dataset_count", len(datasets))
 
             documents = self._executor.execute(
-                query, datasets, top_k, request_id, span
+                query, datasets, top_k, request_id, span, self.vector_manager
             )
 
             if is_tracing_enabled():

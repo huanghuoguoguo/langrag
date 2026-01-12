@@ -668,6 +668,15 @@ wheels = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.6.3"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19" },
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -1315,6 +1324,7 @@ all = [
     { name = "chardet" },
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "llama-cpp-python" },
     { name = "markdown" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
@@ -1333,6 +1343,9 @@ docs = [
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
+]
+local-llm = [
+    { name = "llama-cpp-python" },
 ]
 observability = [
     { name = "opentelemetry-api" },
@@ -1378,6 +1391,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'all'", specifier = ">=0.25.0" },
     { name = "httpx", marker = "extra == 'reranker'", specifier = ">=0.25.0" },
+    { name = "llama-cpp-python", marker = "extra == 'all'", specifier = ">=0.2.23" },
+    { name = "llama-cpp-python", marker = "extra == 'local-llm'", specifier = ">=0.2.23" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "lxml", specifier = ">=6.0.2" },
     { name = "markdown", specifier = ">=3.10" },
@@ -1412,7 +1427,7 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.30" },
     { name = "uvicorn", specifier = ">=0.40.0" },
 ]
-provides-extras = ["parsers", "reranker", "observability", "all", "dev", "docs"]
+provides-extras = ["parsers", "reranker", "local-llm", "observability", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1485,6 +1500,18 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5f/f1/62b136301796399d65dad73b580f4509bcbd347dff885a450bff08e80cb6/librt-0.7.5-cp314-cp314t-win_amd64.whl", hash = "sha256:3dd58f7ce20360c6ce0c04f7bd9081c7f9c19fc6129a3c705d0c5a35439f201d", size = 46764, upload-time = "2025-12-25T03:53:02.381Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/49/cb/940431d9410fda74f941f5cd7f0e5a22c63be7b0c10fa98b2b7022b48cb1/librt-0.7.5-cp314-cp314t-win_arm64.whl", hash = "sha256:08153ea537609d11f774d2bfe84af39d50d5c9ca3a4d061d946e0c9d8bce04a1", size = 39728, upload-time = "2025-12-25T03:53:03.306Z" },
 ]
+
+[[package]]
+name = "llama-cpp-python"
+version = "0.3.16"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+dependencies = [
+    { name = "diskcache" },
+    { name = "jinja2" },
+    { name = "numpy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/e4/b4/c8cd17629ced0b9644a71d399a91145aedef109c0333443bef015e45b704/llama_cpp_python-0.3.16.tar.gz", hash = "sha256:34ed0f9bd9431af045bb63d9324ae620ad0536653740e9bb163a2e1fcb973be6", size = 50688636, upload-time = "2025-08-15T04:58:29.212Z" }
 
 [[package]]
 name = "loguru"
