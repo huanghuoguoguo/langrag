@@ -1,0 +1,229 @@
+<div x-show="nav.isActive('models')" x-data="modelsPage()" class="content-section" x-cloak>
+    <div class="section-header">
+        <div>
+            <h1>⚙️ 模型配置</h1>
+            <p class="subtitle">配置 Embedding 和 LLM 模型</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Embedder Section -->
+        <div class="config-section">
+            <h2 class="config-section-title">
+                <span class="dot primary"></span>
+                Embedding 模型
+            </h2>
+
+            <div class="config-grid">
+                <!-- Embedder List -->
+                <div class="card">
+                    <h3>已配置列表</h3>
+                    <div class="config-list" x-show="embedders.length === 0">
+                        <p class="text-muted">暂无配置</p>
+                    </div>
+                    <div class="config-list" x-show="embedders.length > 0">
+                        <template x-for="emb in embedders" :key="emb.name">
+                            <div class="config-item">
+                                <div>
+                                    <div class="config-item-name" x-text="emb.name"></div>
+                                    <div class="text-muted text-sm" x-text="emb.model"></div>
+                                </div>
+                                <span class="badge primary" x-text="emb.embedder_type"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Embedder Form -->
+                <div class="card">
+                    <h3>添加新配置</h3>
+                    <div class="form-group">
+                        <label>配置名称 *</label>
+                        <input type="text" x-model="embForm.name" placeholder="例如：openai-default">
+                    </div>
+                    <div class="form-group">
+                        <label>类型 *</label>
+                        <select x-model="embForm.embedder_type" @change="onEmbTypeChange()">
+                            <option value="openai">OpenAI 兼容 API</option>
+                            <option value="seekdb">SeekDB 内置模型</option>
+                        </select>
+                    </div>
+
+                    <!-- SeekDB Info -->
+                    <div class="info-box" x-show="isSeekDB">
+                        <strong>SeekDB 内置模型</strong><br>
+                        <span class="text-muted">
+                            模型：all-MiniLM-L6-v2 (384维)<br>
+                            完全离线，无需 API Key
+                        </span>
+                    </div>
+
+                    <!-- OpenAI Fields -->
+                    <template x-if="!isSeekDB">
+                        <div>
+                            <div class="form-group">
+                                <label>Base URL *</label>
+                                <input type="text" x-model="embForm.base_url" placeholder="https://api.openai.com/v1">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key *</label>
+                                <input type="password" x-model="embForm.api_key" placeholder="sk-...">
+                            </div>
+                            <div class="form-group">
+                                <label>Model Name *</label>
+                                <input type="text" x-model="embForm.model" placeholder="text-embedding-3-small">
+                            </div>
+                        </div>
+                    </template>
+
+                    <button class="btn-primary" @click="saveEmbedder()" :disabled="embSaving">
+                        <span x-show="!embSaving">保存 Embedder</span>
+                        <span x-show="embSaving" class="loader"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLM Section -->
+        <div class="config-section">
+            <h2 class="config-section-title">
+                <span class="dot success"></span>
+                LLM (对话模型)
+            </h2>
+
+            <div class="config-grid">
+                <!-- LLM List -->
+                <div class="card">
+                    <h3>已配置列表</h3>
+                    <div class="config-list" x-show="llms.length === 0">
+                        <p class="text-muted">暂无配置</p>
+                    </div>
+                    <div class="config-list" x-show="llms.length > 0">
+                        <template x-for="llm in llms" :key="llm.name">
+                            <div class="config-item">
+                                <div>
+                                    <div class="config-item-name" x-text="llm.name"></div>
+                                    <div class="text-muted text-sm" x-text="llm.model"></div>
+                                </div>
+                                <span class="badge success" x-text="'可用'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- LLM Form -->
+                <div class="card">
+                    <h3>添加新配置</h3>
+                    <div class="form-group">
+                        <label>供应商</label>
+                        <select x-model="llmForm.provider" @change="onLLMProviderChange()">
+                            <option value="kimi">Moonshot AI (Kimi)</option>
+                            <option value="custom">Custom (OpenAI 兼容)</option>
+                            <option value="local">Local Model (GGUF)</option>
+                            <option value="mock">🧪 Mock 测试模型 (开发用)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>配置名称 *</label>
+                        <input type="text" x-model="llmForm.name" placeholder="例如：kimi-default">
+                    </div>
+
+                    <!-- Remote Provider Fields -->
+                    <template x-if="llmForm.provider !== 'local'">
+                        <div>
+                            <div class="form-group">
+                                <label>Base URL *</label>
+                                <input type="text" x-model="llmForm.base_url" placeholder="https://api.moonshot.cn/v1">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key *</label>
+                                <input type="password" x-model="llmForm.api_key" placeholder="sk-...">
+                            </div>
+                            <div class="form-group">
+                                <label>Model Name *</label>
+                                <input type="text" x-model="llmForm.model" placeholder="moonshot-v1-8k">
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Local Provider Fields -->
+                    <template x-if="llmForm.provider === 'local'">
+                        <div>
+                            <div class="info-box">
+                                <strong>使用内置本地模型</strong><br>
+                                <span class="text-muted">
+                                    优先路径：/home/yhh/models/qwen2-0_5b-instruct-q4_k_m.gguf<br>
+                                    备选路径：/home/yhh/models/qwen2.5-7b-instruct-q4_k_m.gguf<br>
+                                    模型：Qwen2 0.5B Instruct (推荐用于测试)
+                                </span>
+                            </div>
+                            <p class="form-hint" style="font-size: 0.8em; color: #666; margin-top: 8px;">
+                                <em>注意：确保模型文件已下载到指定路径</em>
+                            </p>
+                        </div>
+                    </template>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Temperature</label>
+                            <input type="number" x-model.number="llmForm.temperature" step="0.1" min="0" max="2">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Tokens</label>
+                            <input type="number" x-model.number="llmForm.max_tokens" step="128">
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" @click="saveLLM()" :disabled="llmSaving">
+                        <span x-show="!llmSaving">保存 LLM</span>
+                        <span x-show="llmSaving" class="loader"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage Configuration Section -->
+        <div class="config-section">
+            <h2 class="config-section-title">
+                <span class="dot success"></span>
+                阶段配置 (Stage Configuration)
+            </h2>
+            <p class="section-description">
+                为不同的RAG处理阶段配置使用的LLM模型。可以为每个阶段选择不同的模型，实现精细化控制。
+            </p>
+
+            <div class="stage-config-grid">
+                <template x-for="stage in availableStages" :key="stage">
+                    <div class="stage-config-card">
+                        <div class="stage-header">
+                            <h4 x-text="getStageDisplayName(stage)"></h4>
+                            <span class="stage-description" x-text="getStageDescription(stage)"></span>
+                        </div>
+
+                        <div class="stage-selector">
+                            <select :value="getStageModel(stage)" @change="setStageModel(stage, $event.target.value)">
+                                <option value="">未配置 (使用默认)</option>
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="stage-status">
+                            <span class="status-indicator" :class="getStageStatusClass(stage)">
+                                <span x-text="getStageStatusText(stage)"></span>
+                            </span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="stage-info-box" x-show="stageConfigChanged">
+                <div class="info-icon">ℹ️</div>
+                <div class="info-content">
+                    <strong>配置已更改</strong>
+                    <p>阶段配置将在下次查询时生效。某些组件可能需要重启服务才能完全生效。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

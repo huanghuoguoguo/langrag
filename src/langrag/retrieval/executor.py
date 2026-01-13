@@ -52,7 +52,8 @@ class RetrievalExecutor:
         datasets: list[Dataset],
         top_k: int,
         request_id: str,
-        tracer_span: Any
+        tracer_span: Any,
+        vector_manager: Any = None
     ) -> list:
         """
         Execute retrieval from datasets.
@@ -63,16 +64,17 @@ class RetrievalExecutor:
             top_k: Number of results per dataset
             request_id: Request ID for logging
             tracer_span: OpenTelemetry span for tracing
+            vector_manager: Optional Vector Manager injection
 
         Returns:
             List of retrieved documents
         """
         if len(datasets) > 1:
             return self._retrieve_parallel(
-                query, datasets, top_k, request_id, tracer_span
+                query, datasets, top_k, request_id, tracer_span, vector_manager
             )
         return self._retrieve_single(
-            query, datasets[0], top_k, request_id, tracer_span
+            query, datasets[0], top_k, request_id, tracer_span, vector_manager
         )
 
     def _get_retrieval_method(self, dataset: Dataset) -> str:
@@ -95,7 +97,8 @@ class RetrievalExecutor:
         dataset: Dataset,
         top_k: int,
         request_id: str,
-        tracer_span: Any
+        tracer_span: Any,
+        vector_manager: Any = None
     ) -> list:
         """
         Retrieve documents from a single dataset.
@@ -106,6 +109,7 @@ class RetrievalExecutor:
             top_k: Number of results
             request_id: Request ID for logging
             tracer_span: OpenTelemetry span
+            vector_manager: Optional Vector Manager injection
 
         Returns:
             List of documents (empty on failure)
@@ -127,7 +131,7 @@ class RetrievalExecutor:
                     query=query,
                     retrieval_method=method,
                     top_k=top_k,
-                    vector_store_cls=self.vector_store_cls,
+                    vector_manager=vector_manager,
                     config=retry_config
                 )
             else:
@@ -136,7 +140,7 @@ class RetrievalExecutor:
                     query=query,
                     retrieval_method=method,
                     top_k=top_k,
-                    vector_store_cls=self.vector_store_cls
+                    vector_manager=vector_manager
                 )
 
             elapsed = time.time() - start_time
@@ -165,7 +169,8 @@ class RetrievalExecutor:
         datasets: list[Dataset],
         top_k: int,
         request_id: str,
-        tracer_span: Any
+        tracer_span: Any,
+        vector_manager: Any = None
     ) -> list:
         """
         Retrieve documents from multiple datasets in parallel.
@@ -179,6 +184,7 @@ class RetrievalExecutor:
             top_k: Number of results per dataset
             request_id: Request ID for logging
             tracer_span: OpenTelemetry span
+            vector_manager: Optional Vector Manager injection
 
         Returns:
             Combined list of documents from all successful retrievals
@@ -207,7 +213,7 @@ class RetrievalExecutor:
                         query=query,
                         retrieval_method=method,
                         top_k=top_k,
-                        vector_store_cls=self.vector_store_cls,
+                        vector_manager=vector_manager,
                         config=retry_config
                     )
                 else:
@@ -216,7 +222,7 @@ class RetrievalExecutor:
                         query=query,
                         retrieval_method=method,
                         top_k=top_k,
-                        vector_store_cls=self.vector_store_cls
+                        vector_manager=vector_manager
                     )
 
                 return (dataset, docs, None)

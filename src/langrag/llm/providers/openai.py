@@ -35,9 +35,12 @@ from langrag.utils.retry import RetryConfig, retry_with_backoff
 logger = logging.getLogger(__name__)
 
 
-class WebLLMAdapter(BaseLLM):
+class OpenAILLM(BaseLLM):
     """
-    Adapter that wraps Web App's LLM client to match LangRAG's BaseLLM interface.
+    OpenAI-compatible LLM Provider.
+    
+    Wraps standard OpenAI-compatible APIs (OpenAI, Moonshot, DeepSeek, etc.)
+    matching LangRAG's BaseLLM interface.
 
     This allows LangRAG core components (Router, Rewriter) to use the LLM managed
     by the Web Application.

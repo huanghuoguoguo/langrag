@@ -61,11 +61,13 @@ The `web/` directory contains a **demo application** showcasing how a sophistica
 | **Observability** | OpenTelemetry | Distributed tracing for retrieval and indexing pipelines |
 | **Generation** | Streaming | Server-Sent Events for real-time responses |
 | | LLM Abstraction | OpenAI-compatible interface with injection |
-| **Testing** | Full Suite | Unit, Integration, E2E, Smoke tests (541 tests) |
+| | Multi-Stage LLM | Stage-based model configuration (chat, router, rewriter, reranker) |
+| **Testing** | Full Suite | Unit, Integration tests (500+ tests) |
 
 ### 🔧 Architecture Highlights
 
 - **Dependency Injection**: LLM, Embedder, and VectorStore are injected, not managed internally.
+- **Multi-Stage LLM**: Configure different models for different tasks (chat, router, rewriter, reranker).
 - **Factory Pattern**: Easily register and create custom components.
 - **Async-First**: Core APIs support async/await for high concurrency.
 - **Type-Safe**: Pydantic models for all configurations and entities.
@@ -89,7 +91,9 @@ src/langrag/
 │   ├── processor/     # Index strategies (Paragraph, ParentChild, QA)
 │   └── cleaner/       # Text normalization
 ├── llm/               # LLM abstractions
-│   └── embedder/      # Embedding providers
+│   ├── embedder/      # Embedding providers
+│   ├── providers/     # LLM providers (OpenAI-compatible, local)
+│   └── stages.py      # Multi-stage LLM configuration (chat, router, rewriter, reranker)
 ├── retrieval/         # Retrieval pipeline
 │   ├── router/        # Knowledge base routing
 │   ├── rewriter/      # Query rewriting
@@ -226,6 +230,7 @@ Visit: [http://localhost:8000](http://localhost:8000) for local docs.
 | **QA Indexing** | ✅ Built-in | ⚠️ Chains | ✅ Supported | ⚠️ Nodes |
 | **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Pipelines |
 | **Hybrid Search** | ✅ DuckDB, SeekDB | ✅ Ensemble | ✅ External | ✅ External |
+| **Multi-Stage LLM** | ✅ Built-in | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
 | **Semantic Cache** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
 | **LLM Judge Evaluation** | ✅ Built-in | ⚠️ Integration | ✅ Built-in | ⚠️ Integration |
 | **OpenTelemetry** | ✅ Native | ⚠️ Partial | ⚠️ Partial | ✅ Native |
@@ -241,7 +246,7 @@ Visit: [http://localhost:8000](http://localhost:8000) for local docs.
 3. **Advanced Indexing**: Built-in Parent-Child and QA indexing strategies out of the box.
 4. **Built-in Evaluation**: LLM Judge framework for retrieval quality assessment.
 5. **Production-Ready**: Semantic caching, batch processing, and OpenTelemetry tracing.
-6. **Comprehensive Testing**: 357 tests with thorough edge case coverage.
+6. **Comprehensive Testing**: 500+ tests with thorough edge case coverage.
 7. **Minimal Dependencies**: Core library has minimal external dependencies.
 
 ---
@@ -249,11 +254,14 @@ Visit: [http://localhost:8000](http://localhost:8000) for local docs.
 ## Development
 
 ```bash
-# Run all tests
+# Run core tests (LangRAG library)
 uv run pytest tests/
 
-# Run smoke tests (fast sanity check)
-uv run pytest tests/smoke/
+# Run web demo tests
+uv run pytest web/tests/ -m "not local_llm"
+
+# Run integration tests
+uv run pytest tests/integration/
 
 # Run with coverage
 ./run_tests.sh
@@ -261,6 +269,18 @@ uv run pytest tests/smoke/
 # Lint and format
 uv run ruff check src/ tests/
 uv run ruff format src/ tests/
+```
+
+### Test Structure
+
+```
+tests/              # LangRAG core tests
+├── unit/           # Unit tests (464 tests)
+└── integration/    # Integration tests (DuckDB, SeekDB verification)
+
+web/tests/          # Web Demo tests
+├── unit/           # Unit tests for web components
+└── test_api.py     # API integration tests
 ```
 
 ### Optional Dependencies

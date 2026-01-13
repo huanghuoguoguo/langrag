@@ -37,10 +37,24 @@ window.api = {
         return res.json();
     },
 
+    async put(url, data) {
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed: ${res.status}`);
+        }
+        return res.json();
+    },
+
     // Knowledge Base
     listKBs: () => window.api.get('/api/kb'),
     getKB: (id) => window.api.get(`/api/kb/${id}`),
     createKB: (data) => window.api.post('/api/kb', data),
+    updateKB: (id, data) => window.api.put(`/api/kb/${id}`, data),
     deleteKB: (id) => window.api.delete(`/api/kb/${id}`),
 
     // Documents
@@ -69,4 +83,7 @@ window.api = {
     getCacheStats: () => window.api.get('/api/playground/cache-stats'),
     testCache: (data) => window.api.post('/api/playground/cache-test', data),
     clearCache: () => window.api.post('/api/playground/cache-clear', {}),
+
+    // Utilities
+    checkModelPath: (path) => window.api.post('/api/utils/check-model-path', { path }),
 };

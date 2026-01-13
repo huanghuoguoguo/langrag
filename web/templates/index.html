@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangRAG 控制台</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- JS Modules (load before Alpine.js) -->
+    <script src="/static/js/core/api.js"></script>
+    <script src="/static/js/core/utils.js"></script>
+    <script src="/static/js/core/stores.js"></script>
+    <script src="/static/js/pages/kb-list.js"></script>
+    <script src="/static/js/pages/kb-detail.js"></script>
+    <script src="/static/js/pages/chat.js"></script>
+    <script src="/static/js/pages/models.js"></script>
+    <script src="/static/js/pages/playground.js"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body x-data="{ nav: $store.nav }">
+
+    <!-- Sidebar -->
+    {% include "components/sidebar.html" %}
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- Pages -->
+        {% include "pages/kb_list.html" %}
+        {% include "pages/kb_detail.html" %}
+        {% include "pages/chat.html" %}
+        {% include "pages/playground.html" %}
+        {% include "pages/models.html" %}
+
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+</body>
+
+</html>

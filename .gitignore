@@ -18,3 +18,5 @@ storage/
 coverage.xml
 site
 TODO.md
+ollama
+.agent

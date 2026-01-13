@@ -81,12 +81,14 @@ from langrag.cache import SemanticCache
 from langrag.datasource.kv.sqlite import SQLiteKV
 from langrag.retrieval.rerank.base import BaseReranker
 from langrag.retrieval.rerank.factory import RerankerFactory
+from langrag.retrieval.rewriter.base import BaseRewriter
 from web.config import DATA_DIR, settings
-from web.core.chat_service import ChatService
-from web.core.document_processor import DocumentProcessor
+from web.core.services.chat_service import ChatService
+from web.core.services.document_processor import DocumentProcessor
 from web.core.embedders import SeekDBEmbedder, WebOpenAIEmbedder
-from web.core.retrieval_service import RetrievalService
+from web.core.services.retrieval_service import RetrievalService
 from web.core.vdb_manager import WebVectorStoreManager
+from web.core.kb_retrieval_config import KBRetrievalConfig, RerankerConfig, RewriterConfig
 
 logger = logging.getLogger(__name__)
 
@@ -125,21 +127,42 @@ class RAGKernel:
         - Semantic cache for query deduplication (if enabled)
         - Empty service references (configured lazily)
         - Custom embedder registration
+        - KB-level retrieval configuration support
         """
         # Core state
         self.embedder: BaseEmbedder | None = None
-        self.reranker: BaseReranker | None = None
+        self.reranker: BaseReranker | None = None  # 全局默认 reranker（向后兼容）
         self.vector_stores: dict[str, BaseVector] = {}
         self.kb_names: dict[str, str] = {}
 
-        # LLM configuration
-        self.llm_client = None
-        self.llm_config: dict[str, Any] = {}
-        self.llm_adapter = None
+        # ========== KB 级别配置 ==========
+        # 每个知识库的检索配置
+        self.kb_configs: dict[str, KBRetrievalConfig] = {}
+        # Reranker 实例缓存（按配置缓存，避免重复创建）
+        self._reranker_cache: dict[str, BaseReranker] = {}
+        # Rewriter 实例缓存
+        self._rewriter_cache: dict[str, BaseRewriter] = {}
+        # Embedder 实例缓存（按名称缓存）
+        self._embedder_cache: dict[str, BaseEmbedder] = {}
 
-        # Agentic components (Router, Rewriter)
+        # LLM configuration (Delegated to ModelManager)
+        
+        # Agentic components (Router, Rewriter) - 全局默认
         self.router = None
         self.rewriter = None
+        
+        # Model Management
+        from web.core.model_manager import WebModelManager
+        self.model_manager = WebModelManager()
+        
+        # Stage configuration (mapped to model names)
+        self.stage_config = {
+            "chat": None,        # 对话生成
+            "router": None,      # 知识库路由
+            "rewriter": None,    # 查询重写
+            "reranker": None,    # LLM 模板重排序
+            "qa_indexing": None  # QA 索引生成
+        }
 
         # Initialize managers and stores
         self.vdb_manager = WebVectorStoreManager()
@@ -179,67 +202,143 @@ class RAGKernel:
     # Configuration Methods
     # =========================================================================
 
-    def set_llm(
-        self,
-        base_url: str,
-        api_key: str,
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: int = 2048
-    ) -> None:
+    # =========================================================================
+    # Model Management Methods
+    # =========================================================================
+
+    def add_llm(self, name: str, config: dict, set_as_default: bool = False) -> None:
         """
-        Configure the LLM for chat and agentic components.
-
-        This method sets up:
-        1. AsyncOpenAI client for chat API calls
-        2. WebLLMAdapter for LangRAG core compatibility
-        3. LLMRouter for intelligent KB selection
-        4. LLMRewriter for query optimization
-
-        Args:
-            base_url: API endpoint (e.g., "https://api.openai.com/v1")
-            api_key: API authentication key
-            model: Model identifier (e.g., "gpt-4", "gpt-3.5-turbo")
-            temperature: Sampling temperature (0.0-2.0, default: 0.7)
-            max_tokens: Maximum response tokens (default: 2048)
-
-        Note:
-            After calling this method, the ChatService will be available
-            and Agentic RAG features (routing, rewriting) will be enabled.
+        Add a new LLM to the kernel's model pool.
+        
+        Delegates creation to LLMFactory.
         """
         try:
-            from openai import AsyncOpenAI
+            from web.core.factories import LLMFactory
+            
+            # Create instance using factory
+            llm_instance = LLMFactory.create(config)
 
-            from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
-            from langrag.retrieval.router.llm_router import LLMRouter
-            from web.core.llm_adapter import WebLLMAdapter
+            # Register with manager
+            self.model_manager.register_model(name, llm_instance, set_as_default)
+            
+            # If this is the first model or default, update stages that are unset
+            if set_as_default or list(self.model_manager.list_models()) == [name]:
+                for stage in self.stage_config:
+                    if self.stage_config[stage] is None:
+                        self.set_stage_model(stage, name)
+            
+            logger.info(f"Added LLM '{name}' to pool.")
 
-            # Configure LLM client
-            self.llm_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-            self.llm_config = {
-                "model": model,
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
-            logger.info(f"LLM configured: {model} (base_url={base_url})")
-
-            # Create adapter for LangRAG core components
-            self.llm_adapter = WebLLMAdapter(self.llm_client, model=model)
-
-            # Initialize Agentic RAG components
-            self.router = LLMRouter(llm=self.llm_adapter)
-            self.rewriter = LLMRewriter(llm=self.llm_adapter)
-            logger.info("Agentic components initialized (Router, Rewriter)")
-
-            # Rebuild services with new configuration
-            self._rebuild_services()
-
-        except ImportError:
-            logger.error("openai package not installed. Cannot configure LLM.")
         except Exception as e:
-            logger.error(f"Failed to configure LLM: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to add LLM '{name}': {e}")
+            raise
+
+    def set_stage_model(self, stage: str, model_name: str) -> None:
+        """
+        Assign a specific model to a pipeline stage.
+
+        Args:
+            stage: "chat", "router", "rewriter", "reranker", or "qa_indexing"
+            model_name: Name of a registered model
+        """
+        if stage not in self.stage_config:
+            raise ValueError(f"Unknown stage: {stage}")
+
+        model = self.model_manager.get_model(model_name)
+        if not model:
+            raise ValueError(f"Model '{model_name}' not found in manager.")
+
+        self.stage_config[stage] = model_name
+
+        # Re-initialize components based on stage changes
+        if stage == "router":
+            from langrag.retrieval.router.llm_router import LLMRouter
+            self.router = LLMRouter(llm=model)
+            logger.info(f"Router switched to use model: {model_name}")
+
+        elif stage == "rewriter":
+            from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
+            self.rewriter = LLMRewriter(llm=model)
+            logger.info(f"Rewriter switched to use model: {model_name}")
+
+        elif stage == "chat":
+            logger.info(f"Chat stage configured to use model: {model_name}")
+
+        elif stage == "reranker":
+            logger.info(f"Reranker stage configured to use model: {model_name}")
+
+        elif stage == "qa_indexing":
+            logger.info(f"QA indexing stage configured to use model: {model_name}")
+
+        self._rebuild_services()
+
+    def get_stage_model_name(self, stage: str) -> str | None:
+        return self.stage_config.get(stage)
+
+    def get_stage_config(self) -> dict[str, str | None]:
+        """
+        获取所有阶段的配置。
+
+        Returns:
+            Dict mapping stage names to model names (or None if not configured).
+        """
+        return self.stage_config.copy()
+
+    def get_available_stages(self) -> list[str]:
+        """
+        获取所有可用阶段。
+
+        Returns:
+            List of stage names.
+        """
+        return self.model_manager.list_stages()
+
+    def get_available_models(self) -> list[str]:
+        """
+        获取所有可用模型名称。
+
+        Returns:
+            List of model names.
+        """
+        return self.model_manager.list_models()
+
+    def configure_stage(self, stage: str, model_name: str) -> None:
+        """
+        为指定阶段配置模型（代理到 set_stage_model）。
+        """
+        self.set_stage_model(stage, model_name)
+
+    # Legacy compatibility wrapper (DEPRECATED but kept for existing calls)
+    def set_llm(
+        self,
+        base_url: str = "",
+        api_key: str = "",
+        model: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        model_path: str | None = None 
+    ) -> None:
+        """
+        Legacy method to set the default LLM.
+        Directs to add_llm with name 'default'.
+        """
+        config = {
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        if model_path:
+            config["type"] = "local"
+            config["model_path"] = model_path
+            name = "default-local"
+        else:
+            config["type"] = "remote"
+            config["base_url"] = base_url
+            config["api_key"] = api_key
+            config["model"] = model
+            name = "default-remote"
+            
+        self.add_llm(name, config, set_as_default=True)
 
     def set_embedder(
         self,
@@ -250,32 +349,20 @@ class RAGKernel:
     ) -> None:
         """
         Configure the embedding model.
-
-        Supported embedder types:
-        - "openai": OpenAI-compatible API (requires base_url, api_key, model)
-        - "seekdb": Local all-MiniLM-L6-v2 via pyseekdb (no config needed)
-
-        Args:
-            embedder_type: Type of embedder ("openai" or "seekdb")
-            model: Model name for API-based embedders
-            base_url: API endpoint for API-based embedders
-            api_key: API key for API-based embedders
-
-        Raises:
-            ValueError: If embedder_type is unsupported or required args missing
+        Delegates to EmbedderFactory.
         """
-        if embedder_type == "openai":
-            if not base_url or not api_key or not model:
-                raise ValueError("OpenAI embedder requires base_url, api_key and model")
-            self.embedder = WebOpenAIEmbedder(base_url, api_key, model)
-            logger.info(f"OpenAI-compatible embedder configured: {model}")
-
-        elif embedder_type == "seekdb":
-            self.embedder = SeekDBEmbedder()
-            logger.info("SeekDB embedder configured (all-MiniLM-L6-v2)")
-
-        else:
-            raise ValueError(f"Unsupported embedder type: {embedder_type}")
+        config = {
+            "model": model,
+            "base_url": base_url,
+            "api_key": api_key
+        }
+        
+        try:
+            from web.core.factories import EmbedderFactory
+            self.embedder = EmbedderFactory.create(embedder_type, config)
+        except Exception as e:
+            logger.error(f"Failed to set embedder: {e}")
+            raise
 
         # Rebuild services with new embedder
         self._rebuild_services()
@@ -365,17 +452,261 @@ class RAGKernel:
             self.cache.clear()
             logger.info("[RAGKernel] Cache cleared")
 
+    # =========================================================================
+    # KB-Level Retrieval Configuration
+    # =========================================================================
+
+    def set_kb_retrieval_config(self, config: KBRetrievalConfig) -> None:
+        """
+        设置知识库的检索配置。
+        
+        Args:
+            config: 知识库检索配置对象
+        """
+        self.kb_configs[config.kb_id] = config
+        logger.info(f"[RAGKernel] KB retrieval config set for: {config.kb_id}")
+        
+        # 预创建 reranker 和 rewriter 实例（如果配置了）
+        if config.reranker.enabled:
+            self._get_or_create_reranker(config.reranker)
+        if config.rewriter.enabled:
+            self._get_or_create_rewriter(config.rewriter)
+
+    def get_kb_retrieval_config(self, kb_id: str) -> KBRetrievalConfig | None:
+        """
+        获取知识库的检索配置。
+        
+        Args:
+            kb_id: 知识库 ID
+            
+        Returns:
+            检索配置对象，如果未配置则返回 None
+        """
+        return self.kb_configs.get(kb_id)
+
+    def update_kb_retrieval_config(
+        self,
+        kb_id: str,
+        search_mode: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        reranker_config: RerankerConfig | None = None,
+        rewriter_config: RewriterConfig | None = None
+    ) -> KBRetrievalConfig:
+        """
+        更新知识库的检索配置。
+        
+        Args:
+            kb_id: 知识库 ID
+            search_mode: 搜索模式
+            top_k: 返回结果数量
+            score_threshold: 分数阈值
+            reranker_config: Reranker 配置
+            rewriter_config: Rewriter 配置
+            
+        Returns:
+            更新后的配置对象
+        """
+        config = self.kb_configs.get(kb_id)
+        if not config:
+            config = KBRetrievalConfig(kb_id=kb_id)
+        
+        if search_mode is not None:
+            config.search_mode = search_mode
+        if top_k is not None:
+            config.top_k = top_k
+        if score_threshold is not None:
+            config.score_threshold = score_threshold
+        if reranker_config is not None:
+            config.reranker = reranker_config
+        if rewriter_config is not None:
+            config.rewriter = rewriter_config
+            
+        self.kb_configs[kb_id] = config
+        logger.info(f"[RAGKernel] KB retrieval config updated for: {kb_id}")
+        return config
+
+    def _get_or_create_reranker(self, config: RerankerConfig) -> BaseReranker | None:
+        """
+        获取或创建 Reranker 实例（带缓存）。
+        
+        Args:
+            config: Reranker 配置
+            
+        Returns:
+            Reranker 实例，如果未启用则返回 None
+        """
+        if not config.enabled or not config.reranker_type:
+            return None
+            
+        # 生成缓存键
+        cache_key = f"{config.reranker_type}:{config.model or 'default'}:{config.api_key or 'none'}"
+        
+        if cache_key in self._reranker_cache:
+            return self._reranker_cache[cache_key]
+        
+        try:
+            params = {}
+            if config.model:
+                params["model"] = config.model
+            if config.api_key:
+                params["api_key"] = config.api_key
+                
+            reranker = RerankerFactory.create(config.reranker_type, **params)
+            self._reranker_cache[cache_key] = reranker
+            logger.info(f"[RAGKernel] Created reranker: {config.reranker_type}")
+            return reranker
+        except Exception as e:
+            logger.error(f"[RAGKernel] Failed to create reranker: {e}")
+            return None
+
+    def _get_or_create_rewriter(self, config: RewriterConfig) -> BaseRewriter | None:
+        """
+        获取或创建 Rewriter 实例（带缓存）。
+        
+        Args:
+            config: Rewriter 配置
+            
+        Returns:
+            Rewriter 实例，如果未启用则返回 None
+        """
+        if not config.enabled or not config.llm_name:
+            return None
+            
+        cache_key = config.llm_name
+        
+        if cache_key in self._rewriter_cache:
+            return self._rewriter_cache[cache_key]
+        
+        try:
+            llm = self.model_manager.get_model(config.llm_name)
+            if not llm:
+                logger.warning(f"[RAGKernel] LLM not found for rewriter: {config.llm_name}")
+                return None
+                
+            from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
+            rewriter = LLMRewriter(llm=llm)
+            self._rewriter_cache[cache_key] = rewriter
+            logger.info(f"[RAGKernel] Created rewriter with LLM: {config.llm_name}")
+            return rewriter
+        except Exception as e:
+            logger.error(f"[RAGKernel] Failed to create rewriter: {e}")
+            return None
+
+    def get_reranker_for_kb(self, kb_id: str) -> BaseReranker | None:
+        """
+        获取指定知识库的 Reranker。
+        
+        优先使用 KB 级别配置，如果未配置则使用全局 Reranker。
+        
+        Args:
+            kb_id: 知识库 ID
+            
+        Returns:
+            Reranker 实例
+        """
+        config = self.kb_configs.get(kb_id)
+        if config and config.reranker.enabled:
+            return self._get_or_create_reranker(config.reranker)
+        return self.reranker  # 回退到全局 reranker
+
+    def get_rewriter_for_kb(self, kb_id: str) -> BaseRewriter | None:
+        """
+        获取指定知识库的 Rewriter。
+        
+        优先使用 KB 级别配置，如果未配置则使用全局 Rewriter。
+        
+        Args:
+            kb_id: 知识库 ID
+            
+        Returns:
+            Rewriter 实例
+        """
+        config = self.kb_configs.get(kb_id)
+        if config and config.rewriter.enabled:
+            return self._get_or_create_rewriter(config.rewriter)
+        return self.rewriter  # 回退到全局 rewriter
+
+    def get_embedder_for_kb(self, kb_id: str) -> BaseEmbedder | None:
+        """
+        获取指定知识库的 Embedder。
+        
+        优先使用 KB 级别配置的 embedder_name，如果未配置则使用全局 Embedder。
+        
+        Args:
+            kb_id: 知识库 ID
+            
+        Returns:
+            Embedder 实例
+        """
+        config = self.kb_configs.get(kb_id)
+        if config and config.embedder_name:
+            return self._get_or_create_embedder(config.embedder_name)
+        return self.embedder  # 回退到全局 embedder
+
+    def _get_or_create_embedder(self, embedder_name: str) -> BaseEmbedder | None:
+        """
+        获取或创建 Embedder 实例（带缓存）。
+        
+        从数据库加载 Embedder 配置并创建实例。
+        
+        Args:
+            embedder_name: Embedder 配置名称
+            
+        Returns:
+            Embedder 实例
+        """
+        if embedder_name in self._embedder_cache:
+            return self._embedder_cache[embedder_name]
+        
+        try:
+            # 从数据库加载配置
+            from web.core.database import get_session
+            from web.models.database import EmbedderConfig
+            from sqlmodel import select
+            
+            session_gen = get_session()
+            session = next(session_gen)
+            try:
+                statement = select(EmbedderConfig).where(EmbedderConfig.name == embedder_name)
+                config = session.exec(statement).first()
+                
+                if not config:
+                    logger.warning(f"[RAGKernel] Embedder config not found: {embedder_name}")
+                    return self.embedder  # 回退到全局
+                
+                # 创建 Embedder 实例
+                from web.core.factories import EmbedderFactory
+                embedder = EmbedderFactory.create(
+                    config.embedder_type,
+                    {
+                        "model": config.model,
+                        "base_url": config.base_url,
+                        "api_key": config.api_key
+                    }
+                )
+                
+                self._embedder_cache[embedder_name] = embedder
+                logger.info(f"[RAGKernel] Created embedder: {embedder_name} ({config.embedder_type})")
+                return embedder
+                
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.error(f"[RAGKernel] Failed to create embedder '{embedder_name}': {e}")
+            return self.embedder  # 回退到全局
+
     def _rebuild_services(self) -> None:
         """
         Rebuild services when dependencies change.
-
-        This ensures services always have the latest configuration.
-        Called automatically by set_llm, set_embedder, and set_reranker.
         """
-        # Rebuild document processor
+        # Get default models
+        chat_model = self.model_manager.get_model(self.stage_config.get("chat"))
+        
         self._document_processor = DocumentProcessor(
             embedder=self.embedder,
-            llm_adapter=self.llm_adapter,
+            llm_adapter=chat_model,
             kv_store=self.kv_store
         )
 
@@ -385,14 +716,15 @@ class RAGKernel:
             reranker=self.reranker,
             rewriter=self.rewriter,
             kv_store=self.kv_store,
-            cache=self.cache
+            cache=self.cache,
+            vector_manager=self.vdb_manager
         )
 
-        # Rebuild chat service (only if LLM is configured)
-        if self.llm_client:
+        # Rebuild chat service using the CHAT stage model
+        if chat_model:
             self._chat_service = ChatService(
-                llm_client=self.llm_client,
-                llm_config=self.llm_config,
+                llm=chat_model,
+                llm_config={}, 
                 retrieval_service=self._retrieval_service,
                 router=self.router,
                 kb_names=self.kb_names
@@ -476,47 +808,31 @@ class RAGKernel:
     ) -> int:
         """
         Process a document into the knowledge base.
-
-        This method handles the complete indexing pipeline:
-        1. Parse the document based on file type
-        2. Chunk the content using the specified technique
-        3. Generate embeddings (if embedder configured)
-        4. Store in the vector database
-
-        Args:
-            file_path: Path to the document file
-            kb_id: Target knowledge base ID
-            chunk_size: Maximum characters per chunk (default: 500)
-            chunk_overlap: Character overlap between chunks (default: 50)
-            indexing_technique: Indexing strategy:
-                - "high_quality": Standard chunking (default)
-                - "qa": QA-pair generation
-                - "parent_child": Hierarchical chunks
-
-        Returns:
-            Number of chunks/items created
-
-        Raises:
-            ValueError: If the KB doesn't exist or required deps missing
+        
+        使用该知识库配置的 Embedder 进行向量化。
         """
-        logger.info(
-            f"[RAGKernel] process_document: kb_id={kb_id}, "
-            f"file={file_path}, technique={indexing_technique}"
-        )
-
         store = self.get_vector_store(kb_id)
         if not store:
             raise ValueError(f"Vector store not found for kb_id: {kb_id}")
 
-        # Ensure document processor exists
-        if not self._document_processor:
-            self._document_processor = DocumentProcessor(
-                embedder=self.embedder,
-                llm_adapter=self.llm_adapter,
-                kv_store=self.kv_store
-            )
+        # 获取 KB 专属的 Embedder
+        kb_embedder = self.get_embedder_for_kb(kb_id)
+        
+        logger.info(
+            f"[RAGKernel] process_document: kb_id={kb_id}, "
+            f"file={file_path}, technique={indexing_technique}, "
+            f"embedder={kb_embedder.__class__.__name__ if kb_embedder else 'None'}"
+        )
 
-        return self._document_processor.process(
+        # 为每个 KB 创建独立的 DocumentProcessor（使用该 KB 的 Embedder）
+        chat_model = self.model_manager.get_model(self.stage_config.get("chat"))
+        document_processor = DocumentProcessor(
+            embedder=kb_embedder,
+            llm_adapter=chat_model,
+            kv_store=self.kv_store
+        )
+
+        return document_processor.process(
             file_path=file_path,
             vector_store=store,
             chunk_size=chunk_size,
@@ -532,21 +848,23 @@ class RAGKernel:
         self,
         kb_id: str,
         query: str,
-        top_k: int = 5,
+        top_k: int | None = None,
         search_mode: str | None = None,
         use_rerank: bool | None = None,
-        use_rewrite: bool = True
+        use_rewrite: bool | None = None
     ) -> tuple[list[LangRAGDocument], str, str | None]:
         """
         Search a single knowledge base.
 
+        优先使用 KB 级别的检索配置，参数可覆盖配置。
+
         Args:
             kb_id: The knowledge base to search
             query: The search query
-            top_k: Number of results to return (default: 5)
-            search_mode: Force search mode ("hybrid", "vector", "keyword") or None for auto
-            use_rerank: Force reranking on/off, or None for default (use if configured)
-            use_rewrite: Whether to apply query rewriting (default: True)
+            top_k: Number of results to return (None = use KB config or default 5)
+            search_mode: Force search mode ("hybrid", "vector", "keyword") or None for KB config
+            use_rerank: Force reranking on/off, or None for KB config
+            use_rewrite: Whether to apply query rewriting, or None for KB config
 
         Returns:
             Tuple of (results list, search type string, rewritten query or None)
@@ -554,32 +872,69 @@ class RAGKernel:
         Raises:
             ValueError: If the KB doesn't exist
         """
-        logger.info(
-            f"[RAGKernel] Search: kb_id={kb_id}, "
-            f"query='{query[:50]}...', top_k={top_k}, mode={search_mode}"
-        )
-
         store = self.get_vector_store(kb_id)
         if not store:
             raise ValueError(f"Vector store not found for kb_id: {kb_id}")
 
-        # Ensure retrieval service exists
-        if not self._retrieval_service:
-            self._retrieval_service = RetrievalService(
-                embedder=self.embedder,
-                reranker=self.reranker,
-                rewriter=self.rewriter,
-                kv_store=self.kv_store,
-                cache=self.cache
-            )
+        # 获取 KB 级别配置
+        kb_config = self.kb_configs.get(kb_id)
+        
+        # 合并配置：参数优先，否则使用 KB 配置，最后使用默认值
+        effective_top_k = top_k if top_k is not None else (kb_config.top_k if kb_config else 5)
+        effective_search_mode = search_mode if search_mode is not None else (kb_config.search_mode if kb_config else "hybrid")
+        effective_score_threshold = kb_config.score_threshold if kb_config else 0.0
+        
+        # 确定是否使用 rerank
+        if use_rerank is not None:
+            effective_use_rerank = use_rerank
+        elif kb_config and kb_config.reranker.enabled:
+            effective_use_rerank = True
+        else:
+            effective_use_rerank = self.reranker is not None
+            
+        # 确定是否使用 rewrite
+        if use_rewrite is not None:
+            effective_use_rewrite = use_rewrite
+        elif kb_config and kb_config.rewriter.enabled:
+            effective_use_rewrite = True
+        else:
+            effective_use_rewrite = self.rewriter is not None
 
-        return self._retrieval_service.search(
+        logger.info(
+            f"[RAGKernel] Search: kb_id={kb_id}, "
+            f"query='{query[:50]}...', top_k={effective_top_k}, "
+            f"mode={effective_search_mode}, rerank={effective_use_rerank}, rewrite={effective_use_rewrite}"
+        )
+
+        # 获取 KB 专属的组件
+        kb_embedder = self.get_embedder_for_kb(kb_id)
+        kb_reranker = self.get_reranker_for_kb(kb_id) if effective_use_rerank else None
+        kb_rewriter = self.get_rewriter_for_kb(kb_id) if effective_use_rewrite else None
+
+        # 创建临时的 RetrievalService（使用 KB 专属组件）
+        retrieval_service = RetrievalService(
+            embedder=kb_embedder,
+            reranker=kb_reranker,
+            rewriter=kb_rewriter,
+            kv_store=self.kv_store,
+            cache=self.cache,
+            vector_manager=self.vdb_manager
+        )
+
+        # 获取 rerank_top_k
+        rerank_top_k = None
+        if kb_config and kb_config.reranker.top_k:
+            rerank_top_k = kb_config.reranker.top_k
+
+        return retrieval_service.search(
             store=store,
             query=query,
-            top_k=top_k,
-            rewrite=use_rewrite and self.rewriter is not None,
-            search_mode=search_mode,
-            use_rerank=use_rerank
+            top_k=effective_top_k,
+            rewrite=effective_use_rewrite and kb_rewriter is not None,
+            search_mode=effective_search_mode,
+            use_rerank=effective_use_rerank,
+            score_threshold=effective_score_threshold,
+            rerank_top_k=rerank_top_k
         )
 
     def multi_search(
@@ -637,26 +992,50 @@ class RAGKernel:
         kb_ids: list[str],
         query: str,
         history: list[dict] | None = None,
-        stream: bool = False
+        stream: bool = False,
+        # Optional override: Use a specific model for THIS chat turn
+        model_name: str | None = None
     ) -> dict | Any:
-        """
-        Execute RAG-powered chat.
+        # If model override provided, temporarily rebuild chat service or use ephemeral one
+        service = self._chat_service
+        
+        if model_name:
+            override_model = self.model_manager.get_model(model_name)
+            if override_model:
+                # Create ephemeral service for this request
+                service = ChatService(
+                    llm=override_model,
+                    llm_config={},
+                    retrieval_service=self._retrieval_service,
+                    router=self.router,
+                    kb_names=self.kb_names
+                )
+        
+        if not service:
+             # Try lazily init
+             if not self._retrieval_service:
+                self._retrieval_service = RetrievalService(
+                    embedder=self.embedder,
+                    reranker=self.reranker,
+                    rewriter=self.rewriter,
+                    kv_store=self.kv_store,
+                    cache=self.cache,
+                    vector_manager=self.vdb_manager
+                )
+                
+             model = self.model_manager.get_model(self.stage_config.get("chat"))
+             if model:
+                self._chat_service = ChatService(
+                    llm=model,
+                    llm_config={},
+                    retrieval_service=self._retrieval_service,
+                    router=self.router,
+                    kb_names=self.kb_names
+                )
+                service = self._chat_service
 
-        Args:
-            kb_ids: Knowledge bases to use for context (empty for no RAG)
-            query: The user's question
-            history: Previous conversation messages
-            stream: Whether to stream the response
-
-        Returns:
-            If stream=False: {"answer": "...", "sources": [...]}
-            If stream=True: AsyncGenerator yielding JSONL chunks
-
-        Raises:
-            ValueError: If LLM is not configured
-        """
-        if not self.llm_client:
-            raise ValueError("LLM is not configured")
+        if not service:
+            raise ValueError("Chat service not initialized (no default chat model configured)")
 
         # Build stores dict from KB IDs
         kb_stores = {}
@@ -665,26 +1044,7 @@ class RAGKernel:
             if store:
                 kb_stores[kb_id] = store
 
-        # Ensure chat service exists
-        if not self._chat_service:
-            if not self._retrieval_service:
-                self._retrieval_service = RetrievalService(
-                    embedder=self.embedder,
-                    reranker=self.reranker,
-                    rewriter=self.rewriter,
-                    kv_store=self.kv_store,
-                    cache=self.cache
-                )
-
-            self._chat_service = ChatService(
-                llm_client=self.llm_client,
-                llm_config=self.llm_config,
-                retrieval_service=self._retrieval_service,
-                router=self.router,
-                kb_names=self.kb_names
-            )
-
-        return await self._chat_service.chat(
+        return await service.chat(
             kb_stores=kb_stores,
             query=query,
             history=history,

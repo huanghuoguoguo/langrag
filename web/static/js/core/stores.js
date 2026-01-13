@@ -105,8 +105,12 @@ document.addEventListener('alpine:init', () => {
     Alpine.store('models', {
         embedders: [],
         llms: [],
-        activeEmbedder: null,
-        activeLLM: null,
+        activeEmbedder: null,  // Keep for backward compatibility, but not enforced
+        activeLLM: null,       // Keep for backward compatibility, but not enforced
+
+        get list() {
+            return this.llms || [];
+        },
 
         async load() {
             try {
@@ -116,8 +120,9 @@ document.addEventListener('alpine:init', () => {
                 const llmsRes = await api.listLLMs();
                 this.llms = llmsRes.llms || [];
 
-                this.activeEmbedder = this.embedders.find(e => e.is_active) || null;
-                this.activeLLM = this.llms.find(l => l.is_active) || null;
+                // Still set active for backward compatibility, but don't enforce single active
+                this.activeEmbedder = this.embedders.find(e => e.is_active) || this.embedders[0] || null;
+                this.activeLLM = this.llms.find(l => l.is_active) || this.llms[0] || null;
             } catch (e) {
                 showToast(e.message, 'error');
             }
@@ -135,15 +140,6 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        async activateEmbedder(name) {
-            try {
-                await api.activateEmbedder(name);
-                showToast('Embedder 已激活', 'success');
-                await this.load();
-            } catch (e) {
-                showToast(e.message, 'error');
-            }
-        },
 
         async saveLLM(data) {
             try {
@@ -157,15 +153,6 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        async activateLLM(name) {
-            try {
-                await api.activateLLM(name);
-                showToast('LLM 已激活', 'success');
-                await this.load();
-            } catch (e) {
-                showToast(e.message, 'error');
-            }
-        }
     });
 
     // Chat Store
@@ -197,7 +184,7 @@ document.addEventListener('alpine:init', () => {
             this.selectedKBs = [];
         },
 
-        async send(input) {
+        async send(input, modelName = null, retrievalConfig = {}) {
             if (!input.trim()) return;
 
             const userMessage = { role: 'user', content: input, sources: [] };
@@ -212,14 +199,31 @@ document.addEventListener('alpine:init', () => {
                         role: m.role,
                         content: m.content
                     })),
-                    stream: false
+                    stream: false,
+                    model_name: modelName,
+                    // 检索配置参数
+                    use_rerank: retrievalConfig.use_rerank || false,
+                    reranker_type: retrievalConfig.reranker_type || null,
+                    reranker_model: retrievalConfig.reranker_model || null,
+                    use_router: retrievalConfig.use_router || false,
+                    router_model: retrievalConfig.router_model || null,
+                    use_rewriter: retrievalConfig.use_rewriter || false,
+                    rewriter_model: retrievalConfig.rewriter_model || null
                 });
+
+                // 优先显示 LLM 生成的答案，否则显示检索信息
+                let content = result.answer || result.message || `检索完成，找到 ${result.sources?.length || 0} 个相关文档`;
+                if (result.rewritten_query) {
+                    content += `\n\n(查询已重写为: "${result.rewritten_query}")`;
+                }
 
                 this.messages.push({
                     role: 'assistant',
-                    content: result.answer,
+                    content: content,
                     sources: result.sources || [],
-                    question: input
+                    question: input,
+                    retrieval_stats: result.retrieval_stats,
+                    rewritten_query: result.rewritten_query
                 });
             } catch (e) {
                 showToast(e.message, 'error');

@@ -11,6 +11,7 @@ class LLMService:
     """LLM Configuration Service"""
 
     @staticmethod
+    @staticmethod
     def save_config(
         session: Session,
         rag_kernel: RAGKernel,
@@ -19,7 +20,8 @@ class LLMService:
         api_key: str,
         model: str,
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = 2048,
+        model_path: str | None = None
     ) -> LLMConfig:
         """Save LLM configuration"""
         # Check if exists
@@ -33,6 +35,7 @@ class LLMService:
             config.model = model
             config.temperature = temperature
             config.max_tokens = max_tokens
+            config.model_path = model_path
         else:
             # Create new
             config = LLMConfig(
@@ -41,18 +44,15 @@ class LLMService:
                 api_key=api_key,
                 model=model,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                model_path=model_path
             )
 
         session.add(config)
         session.commit()
         session.refresh(config)
 
-        # If it was active or it's the only one, activate it
-        statement = select(LLMConfig)
-        all_configs = session.exec(statement).all()
-        if len(all_configs) == 1 or config.is_active:
-            LLMService.activate_config(session, rag_kernel, config.name)
+        # No longer auto-activate, all models are available by default
 
         return config
 
@@ -68,33 +68,15 @@ class LLMService:
         rag_kernel: RAGKernel,
         name: str
     ) -> LLMConfig | None:
-        """Activate the specified configuration"""
-        # Deactivate all
-        statement = select(LLMConfig)
-        configs = session.exec(statement).all()
-        for cfg in configs:
-            cfg.is_active = False
-            session.add(cfg)
-
-        # Activate target
+        """Set as default configuration (for backward compatibility)"""
+        # Find target config
         statement = select(LLMConfig).where(LLMConfig.name == name)
         config = session.exec(statement).first()
         if config:
-            config.is_active = True
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-
-            # Inject into RAG kernel
-            rag_kernel.set_llm(
-                base_url=config.base_url,
-                api_key=config.api_key,
-                model=config.model,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens
-            )
-
-        return config
+            # No longer enforce single active, just return the config
+            # This method is kept for backward compatibility
+            return config
+        return None
 
     @staticmethod
     def list_all(session: Session) -> list[LLMConfig]:

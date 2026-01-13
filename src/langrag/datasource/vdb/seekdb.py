@@ -31,7 +31,7 @@ class SeekDBVector(BaseVector):
         self,
         dataset: Dataset,
         mode: str = "embedded",
-        db_path: str = "./seekdb_data",
+        db_path: str | None = None,
         host: str | None = None,
         port: int | None = None,
         user: str | None = None,
@@ -43,7 +43,7 @@ class SeekDBVector(BaseVector):
         Args:
             dataset: Dataset configuration
             mode: "embedded" or "server"
-            db_path: Path for embedded database
+            db_path: Path for embedded database (required for embedded mode)
             host: Server host (required for server mode)
             port: Server port (required for server mode)
             user: Username for server mode (defaults to SEEKDB_USER env var)
@@ -54,6 +54,10 @@ class SeekDBVector(BaseVector):
             raise ImportError("pyseekdb is required. Install with: pip install pyseekdb")
 
         self.mode = mode
+
+        # Validate db_path for embedded mode
+        if mode == "embedded" and not db_path:
+            raise ValueError("db_path is required for embedded mode")
 
         # Initialize Client
         self.db_path = db_path

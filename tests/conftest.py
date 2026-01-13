@@ -108,6 +108,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "integration: Integration tests")
     config.addinivalue_line("markers", "e2e: End-to-end tests")
     config.addinivalue_line("markers", "smoke: Smoke tests")
+    config.addinivalue_line("markers", "local_llm: Tests that require a local LLM model")
 
 def pytest_collection_modifyitems(config, items):
     for item in items:

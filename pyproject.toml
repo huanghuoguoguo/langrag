@@ -47,6 +47,11 @@ reranker = [
     "httpx>=0.25.0",          # Qwen Reranker API 调用
 ]
 
+# 本地 LLM 支持
+local_llm = [
+    "llama-cpp-python>=0.2.23", # Local LLM execution
+]
+
 # Observability 扩展
 observability = [
     "opentelemetry-api>=1.20.0",
@@ -66,6 +71,7 @@ all = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp>=1.20.0",
+    "llama-cpp-python>=0.2.23",
 ]
 
 # 开发依赖（供 pip 使用）

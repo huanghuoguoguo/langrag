@@ -92,10 +92,13 @@ class TestRetrievalWorkflow:
     @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_retrieval_multiple_datasets(self, mock_service):
         """Test that multiple datasets are retrieved in parallel."""
-        workflow = RetrievalWorkflow(max_workers=3)
+        from langrag.retrieval.config import WorkflowConfig
+        # Disable retry for simpler testing
+        config = WorkflowConfig(max_workers=3, enable_retrieval_retry=False)
+        workflow = RetrievalWorkflow(config=config)
 
         # Create mock documents for each dataset
-        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_store_cls=None):
+        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_manager=None):
             return [
                 Document(
                     page_content=f"content from {dataset.name}",
@@ -122,11 +125,13 @@ class TestRetrievalWorkflow:
     @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_retrieval_partial_failure(self, mock_service):
         """Test that partial failures don't prevent successful results."""
-        workflow = RetrievalWorkflow(max_workers=3)
+        from langrag.retrieval.config import WorkflowConfig
+        config = WorkflowConfig(max_workers=3, enable_retrieval_retry=False)
+        workflow = RetrievalWorkflow(config=config)
 
         call_count = [0]
 
-        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_store_cls=None):
+        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_manager=None):
             call_count[0] += 1
             if dataset.name == "ds2":
                 raise Exception("Dataset 2 failed")
@@ -174,13 +179,15 @@ class TestRetrievalWorkflow:
     @patch("langrag.retrieval.executor.RetrievalService")
     def test_parallel_respects_max_workers(self, mock_service):
         """Test that parallel retrieval respects max_workers limit."""
-        # Use a very small max_workers
-        workflow = RetrievalWorkflow(max_workers=2)
+        from langrag.retrieval.config import WorkflowConfig
+        # Use a very small max_workers and disable retry
+        config = WorkflowConfig(max_workers=2, enable_retrieval_retry=False)
+        workflow = RetrievalWorkflow(config=config)
 
         # Create unique documents for each dataset to avoid deduplication
         call_counter = [0]
 
-        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_store_cls=None):
+        def mock_retrieve(dataset, query, retrieval_method, top_k, vector_manager=None):
             call_counter[0] += 1
             return [
                 Document(

@@ -6,6 +6,7 @@ from loguru import logger
 
 from .base import BaseReranker
 from .providers.cohere import CohereReranker
+from .providers.llm_template import LLMTemplateReranker
 from .providers.noop import NoOpReranker
 from .providers.qwen import QwenReranker
 
@@ -21,6 +22,7 @@ class RerankerFactory:
         "noop": NoOpReranker,
         "qwen": QwenReranker,
         "cohere": CohereReranker,
+        "llm_template": LLMTemplateReranker,
     }
 
     @classmethod

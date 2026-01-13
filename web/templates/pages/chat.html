@@ -1,0 +1,221 @@
+<div x-show="nav.isActive('chat')" x-data="chatPage()" class="content-section" x-cloak>
+    <div class="chat-layout">
+        <!-- Left: Settings -->
+        <div class="chat-sidebar">
+            <div class="card">
+                <h2>⚙️ 配置</h2>
+
+                <div class="form-group">
+                    <label>对话模型</label>
+                    <select class="form-select" x-model="selectedLLM">
+                        <template x-for="llm in availableLLMs" :key="llm.name">
+                            <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- 检索配置 -->
+                <div class="form-group">
+                    <label>检索配置</label>
+                    <div class="retrieval-config">
+                        <!-- Rerank配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRerank">
+                                <span>重排序 (Rerank)</span>
+                            </label>
+                            <select x-model="selectedReranker" :disabled="!useRerank" class="form-select-mini">
+                                <option value="">选择类型...</option>
+                                <option value="llm_template">LLM模板</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="qwen">Qwen</option>
+                                <option value="noop">NoOp</option>
+                            </select>
+                        </div>
+
+                        <!-- Reranker LLM选择 (仅在选择llm_template时显示) -->
+                        <div class="config-row" x-show="useRerank && selectedReranker === 'llm_template'">
+                            <label class="config-label-small">重排序模型:</label>
+                            <select x-model="selectedRerankerLLM" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- Router配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRouter">
+                                <span>智能路由 (Router)</span>
+                            </label>
+                            <select x-model="selectedRouter" :disabled="!useRouter" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- Rewriter配置 -->
+                        <div class="config-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="useRewriter">
+                                <span>查询重写 (Rewriter)</span>
+                            </label>
+                            <select x-model="selectedRewriter" :disabled="!useRewriter" class="form-select-mini">
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="flex:1; display:flex; flex-direction:column;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label>选择知识库</label>
+                        <button class="btn-sm" @click="toggleAll()" x-text="isAllSelected ? '取消全选' : '全选'"></button>
+                    </div>
+                    <div class="kb-selector">
+                        <template x-if="isNoneSelected">
+                            <div class="kb-selector-item" style="opacity:0.7; border-style:dashed;">
+                                <div class="kb-selector-check">
+                                    <span>🤖</span>
+                                </div>
+                                <div>
+                                    <div>智能路由模式</div>
+                                    <div class="text-muted text-sm">LLM 将自动选择合适的知识库</div>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-for="kb in kbs" :key="kb.id">
+                            <div class="kb-selector-item" @click="toggleKB(kb.id)"
+                                :class="{ selected: isSelected(kb.id) }">
+                                <div class="kb-selector-check">
+                                    <span x-show="isSelected(kb.id)">✓</span>
+                                </div>
+                                <div>
+                                    <div x-text="kb.name"></div>
+                                    <div class="text-muted text-sm" x-text="kb.vdb_type"></div>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="kbs.length === 0" class="text-muted">暂无可用知识库</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Chat Area -->
+        <div class="card chat-main">
+            <div class="chat-header">
+                <h2>💬 多知识库问答</h2>
+            </div>
+
+            <div id="chat-messages" class="chat-messages">
+                <template x-for="(msg, index) in messages" :key="index">
+                    <div class="message" :class="msg.role">
+                        <div class="avatar" x-text="msg.role === 'user' ? 'U' : 'AI'"></div>
+                        <div class="message-content">
+                            <div x-html="msg.content.replace(/\n/g, '<br>')"></div>
+
+                            <!-- Sources -->
+                            <template x-if="msg.sources && msg.sources.length > 0">
+                                <div class="message-sources">
+                                    <strong>参考来源:</strong>
+                                    <template x-for="(s, si) in msg.sources" :key="si">
+                                        <div class="source-item">
+                                            <span class="source-icon"
+                                                x-text="s.type === 'web_search' ? '🌐' : '📄'"></span>
+                                            <div>
+                                                <div x-text="s.source || s.title || '来源 ' + (si + 1)"></div>
+                                                <div class="text-muted text-sm" x-text="'Score: ' + s.score.toFixed(2)">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <!-- Retrieval Stats -->
+                            <template x-if="msg.retrieval_stats">
+                                <div class="retrieval-stats">
+                                    <strong>检索统计:</strong>
+                                    <div class="stats-grid">
+                                        <div class="stat-item">
+                                            <span>知识库数量:</span>
+                                            <span x-text="msg.retrieval_stats.knowledge_bases || 0"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>检索文档数:</span>
+                                            <span x-text="msg.retrieval_stats.total_sources || 0"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Router:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.router ? '启用' : '未启用'"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Rewriter:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.rewriter ? '启用' : '未启用'"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Reranker:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.reranker ? '启用' : '未启用'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Evaluation -->
+                            <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
+                                <div class="eval-section">
+                                    <button class="btn-sm" @click="evaluate(index)" x-show="!msg.evaluation"
+                                        :disabled="msg.evaluating">
+                                        <span x-show="!msg.evaluating">📊 评估回答质量</span>
+                                        <span x-show="msg.evaluating">⏳ 正在评估...</span>
+                                    </button>
+                                    <template x-if="msg.evaluation">
+                                        <div class="eval-results">
+                                            <template x-for="(metric, key) in msg.evaluation" :key="key">
+                                                <div class="eval-metric">
+                                                    <div class="eval-metric-header">
+                                                        <span
+                                                            x-text="key === 'faithfulness' ? '忠实度' : (key === 'answer_relevancy' ? '回答相关性' : '上下文相关性')"></span>
+                                                        <span x-text="metric.score.toFixed(2)"></span>
+                                                    </div>
+                                                    <div class="eval-bar">
+                                                        <div class="eval-bar-fill"
+                                                            :style="'width:' + (metric.score * 100) + '%'">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loading indicator -->
+                <div class="message assistant" x-show="loading">
+                    <div class="avatar">AI</div>
+                    <div class="message-content">
+                        <div class="typing-indicator">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <input type="text" x-model="input" placeholder="输入问题..." @keyup.enter="send()">
+                <button class="btn-primary" @click="send()" :disabled="loading">
+                    <span x-show="!loading">发送</span>
+                    <span x-show="loading" class="loader"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

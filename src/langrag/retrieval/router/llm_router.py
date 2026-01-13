@@ -16,7 +16,7 @@ The user's query is: "{query}"
 
 Which datasets should be queried to answer this question?
 Respond with a JSON object: {{"dataset_names": ["name1", "name2"]}}
-If no dataset is relevant to the question, return an empty list: [].
+If no dataset is relevant to the question, return an empty list in the JSON: {{"dataset_names": []}}.
 Do NOT select datasets unless they are clearly relevant.
 """
 
@@ -110,7 +110,16 @@ class LLMRouter(BaseRouter):
                 )
                 return datasets
 
-            names = data.get("dataset_names", [])
+            names = []
+            if isinstance(data, list):
+                names = data
+            elif isinstance(data, dict):
+                names = data.get("dataset_names", [])
+            else:
+                logger.warning(
+                    f"[LLMRouter] Unexpected JSON type: {type(data)}"
+                )
+                return datasets
 
             if not isinstance(names, list):
                 logger.warning(

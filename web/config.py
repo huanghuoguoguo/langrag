@@ -196,6 +196,20 @@ class WebSettings(BaseSettings):
     )
 
     # ==========================================================================
+    # Local LLM Configuration (Edge Brain)
+    # ==========================================================================
+
+    LOCAL_LLM_ENABLED: bool = Field(
+        default=False,
+        description="Enable local small language model for auxiliary tasks (rewriting, routing)."
+    )
+
+    LOCAL_LLM_PATH: Path | None = Field(
+        default=None,
+        description="Path to the .gguf model file for local execution."
+    )
+
+    # ==========================================================================
     # Validators
     # ==========================================================================
 

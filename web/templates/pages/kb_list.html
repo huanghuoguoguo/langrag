@@ -1,0 +1,185 @@
+<div x-show="nav.isActive('kb-list')" x-data="kbListPage()" class="content-section" x-cloak>
+    <div class="section-header">
+        <div>
+            <h1>知识库列表</h1>
+            <p class="subtitle">管理您的所有知识库</p>
+        </div>
+        <button class="btn-primary" @click="openModal()">+ 创建知识库</button>
+    </div>
+
+    <div class="container">
+        <!-- Loading State -->
+        <div x-show="loading" class="loading-state">
+            <div class="loader"></div>
+            <p>加载中...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="!loading && kbs.length === 0" class="empty-state">
+            <p>📚 还没有知识库</p>
+            <p style="font-size:0.9rem; margin-top:0.5rem; color:var(--text-muted);">点击"创建知识库"开始</p>
+        </div>
+
+        <!-- KB Cards -->
+        <div class="kb-grid" x-show="!loading && kbs.length > 0">
+            <template x-for="kb in kbs" :key="kb.id">
+                <div class="card kb-card" @click="selectKB(kb)">
+                    <div class="kb-card-header">
+                        <div class="kb-card-title" x-text="kb.name"></div>
+                        <p class="kb-card-desc" x-text="kb.description || '无描述'"></p>
+                    </div>
+                    <div class="kb-card-meta">
+                        <span class="badge primary" x-text="kb.vdb_type"></span>
+                        <span class="badge success" x-show="kb.embedder_name" x-text="kb.embedder_name"></span>
+                        <span class="badge" x-show="!kb.embedder_name">无 Embedder</span>
+                        <span class="badge" x-text="'Chunk: ' + kb.chunk_size"></span>
+                        <!-- 检索配置标签 -->
+                        <span class="badge info" x-text="kb.search_mode || 'hybrid'"></span>
+                        <span class="badge warning" x-show="kb.reranker && kb.reranker.enabled">Rerank</span>
+                        <span class="badge warning" x-show="kb.rewriter && kb.rewriter.enabled">Rewrite</span>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Create KB Modal -->
+    <div class="modal" :class="{ active: showModal }" @click.self="showModal = false">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>创建知识库</h2>
+                <span class="modal-close" @click="showModal = false">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- 基本信息 -->
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">📚 基本信息</h3>
+                <div class="form-group">
+                    <label>名称 *</label>
+                    <input type="text" x-model="form.name" placeholder="例如：2024财务文档">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea x-model="form.description" rows="2" placeholder="关于该数据集的描述..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>向量数据库 *</label>
+                    <select x-model="form.vdb_type">
+                        <option value="chroma">ChromaDB</option>
+                        <option value="duckdb">DuckDB</option>
+                        <option value="seekdb">SeekDB（支持混合检索）</option>
+                        <option value="web_search">🌐 互联网搜索（实时联网）</option>
+                    </select>
+                    <p class="form-hint">
+                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文）<br>
+                        🌐 <strong>互联网搜索</strong> 使用 DuckDuckGo 实时搜索
+                    </p>
+                </div>
+                <div class="form-group" x-show="!isWebSearch">
+                    <label>Embedding 模型 *</label>
+                    <select x-model="form.embedder_name">
+                        <option value="">请选择 Embedder...</option>
+                        <template x-for="emb in embedders" :key="emb.name">
+                            <option :value="emb.name" x-text="emb.name + ' (' + emb.embedder_type + ')'">
+                            </option>
+                        </template>
+                    </select>
+                </div>
+                <div class="form-row" x-show="!isWebSearch">
+                    <div class="form-group">
+                        <label>分块大小</label>
+                        <input type="number" x-model.number="form.chunk_size" min="100" max="4000" step="100">
+                    </div>
+                    <div class="form-group">
+                        <label>分块重叠</label>
+                        <input type="number" x-model.number="form.chunk_overlap" min="0" max="500" step="50">
+                    </div>
+                </div>
+
+                <!-- 检索配置 -->
+                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">🔍 检索配置</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>搜索模式</label>
+                        <select x-model="form.search_mode">
+                            <option value="hybrid">混合搜索 (Hybrid)</option>
+                            <option value="vector">向量搜索 (Vector)</option>
+                            <option value="keyword">关键词搜索 (Keyword)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>返回结果数 (Top-K)</label>
+                        <input type="number" x-model.number="form.top_k" min="1" max="50" step="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>分数阈值 (0-1)</label>
+                    <input type="number" x-model.number="form.score_threshold" min="0" max="1" step="0.1">
+                    <p class="form-hint">低于此分数的结果将被过滤，0 表示不过滤</p>
+                </div>
+
+                <!-- Reranker 配置 -->
+                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
+                    🎯 Reranker 配置
+                    <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
+                        <input type="checkbox" x-model="form.reranker.enabled"> 启用
+                    </label>
+                </h3>
+                <div x-show="form.reranker.enabled" x-transition>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Reranker 类型</label>
+                            <select x-model="form.reranker.reranker_type">
+                                <option value="">请选择...</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="qwen">Qwen (通义千问)</option>
+                                <option value="noop">NoOp (不重排)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>模型名称</label>
+                            <input type="text" x-model="form.reranker.model" placeholder="例如：rerank-english-v3.0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" x-model="form.reranker.api_key" placeholder="Reranker API Key">
+                        </div>
+                        <div class="form-group">
+                            <label>Rerank Top-K</label>
+                            <input type="number" x-model.number="form.reranker.top_k" min="1" max="50" placeholder="默认使用检索 Top-K">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rewriter 配置 -->
+                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
+                    ✏️ Query Rewriter 配置
+                    <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
+                        <input type="checkbox" x-model="form.rewriter.enabled"> 启用
+                    </label>
+                </h3>
+                <div x-show="form.rewriter.enabled" x-transition>
+                    <div class="form-group">
+                        <label>使用的 LLM</label>
+                        <select x-model="form.rewriter.llm_name">
+                            <option value="">请选择 LLM...</option>
+                            <template x-for="llm in llms" :key="llm.name">
+                                <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'">
+                                </option>
+                            </template>
+                        </select>
+                        <p class="form-hint">Query Rewriter 会使用 LLM 重写用户查询以提高检索质量</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="showModal = false">取消</button>
+                <button class="btn-primary" @click="createKB()" :disabled="creating">
+                    <span x-show="!creating">创建</span>
+                    <span x-show="creating" class="loader"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
