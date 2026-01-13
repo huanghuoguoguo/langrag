@@ -89,6 +89,7 @@ class ChatPipeline(BasePipeline):
         # 2. Retrieve
         retrieval_results = []
         if datasets:
+            logger.info(f"[ChatPipeline] Starting retrieval: {len(datasets)} datasets, top_k={top_k}")
             # We use asyncio.to_thread because workflow is sync currently
             # but usually called in async context in web
             import asyncio
@@ -98,6 +99,9 @@ class ChatPipeline(BasePipeline):
                 datasets=datasets,
                 top_k=top_k
             )
+            logger.info(f"[ChatPipeline] Retrieval completed: {len(retrieval_results)} results")
+        else:
+            logger.info("[ChatPipeline] Retrieval skipped: no datasets available")
         
         # 3. Build Prompt
         messages = self._build_messages(query, retrieval_results, history)
@@ -108,7 +112,18 @@ class ChatPipeline(BasePipeline):
         if self.debug:
             logger.info(f"Chat Pipeline: {len(retrieval_results)} docs retrieved.")
 
-        # 5. Generate
+        # 5. Generate (with graceful degradation)
+        if not self.llm:
+            # No LLM configured - return retrieval-only results
+            logger.info("No LLM configured, returning retrieval-only results")
+            return {
+                "answer": None,
+                "sources": sources_list,
+                "mode": "retrieval_only",
+                "message": "No LLM configured, returning retrieval results only"
+            }
+
+        # LLM available - proceed with generation
         if stream:
             return self._stream_response(messages, sources_list)
         else:
@@ -171,13 +186,16 @@ class ChatPipeline(BasePipeline):
         )
         return {
             "answer": answer,
-            "sources": sources
+            "sources": sources,
+            "mode": "full_rag"
         }
 
     async def _stream_response(self, messages, sources):
-        # Protocol: 
-        # 1. Yield sources
-        # 2. Yield content chunks
+        # Protocol:
+        # 1. Yield mode info
+        # 2. Yield sources
+        # 3. Yield content chunks
+        yield json.dumps({"type": "mode", "data": "full_rag"}) + "\n"
         yield json.dumps({"type": "sources", "data": sources}) + "\n"
         
         try:

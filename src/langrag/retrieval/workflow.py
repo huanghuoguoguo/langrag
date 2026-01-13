@@ -130,6 +130,28 @@ class RetrievalWorkflow:
             f"query_length={len(query)}, datasets={len(datasets)}, top_k={top_k}"
         )
 
+        # Log component status
+        component_status = []
+        if self.rewriter:
+            component_status.append("rewriter:enabled")
+        else:
+            component_status.append("rewriter:not_configured")
+
+        if self.router:
+            if len(datasets) > 1:
+                component_status.append("router:enabled")
+            else:
+                component_status.append("router:skipped(single_dataset)")
+        else:
+            component_status.append("router:not_configured")
+
+        if self.reranker:
+            component_status.append("reranker:enabled")
+        else:
+            component_status.append("reranker:not_configured")
+
+        logger.info(f"[{request_id}] Component status: {', '.join(component_status)}")
+
         with tracer.start_as_current_span("retrieval_workflow") as workflow_span:
             if is_tracing_enabled():
                 workflow_span.set_attribute("request_id", request_id)
@@ -189,10 +211,15 @@ class RetrievalWorkflow:
 
                 # Stage 4: Reranking
                 if self.reranker and all_documents:
+                    logger.info(f"[{request_id}] Document reranking: enabled, processing {len(all_documents)} documents")
                     all_documents = self._stage_rerank(
                         final_query, all_documents, rerank_top_k or top_k,
                         request_id, run_id, tracer
                     )
+                elif self.reranker:
+                    logger.info(f"[{request_id}] Document reranking: skipped (no documents to rerank)")
+                else:
+                    logger.debug(f"[{request_id}] Document reranking: not configured")
 
                 # Stage 5: Post Processing
                 all_documents = self._stage_post_process(
@@ -257,7 +284,10 @@ class RetrievalWorkflow:
         Falls back to original query on failure.
         """
         if not self.rewriter:
+            logger.debug(f"[{request_id}] Query rewrite: skipped (no rewriter configured)")
             return query
+
+        logger.info(f"[{request_id}] Query rewrite: enabled, processing query")
 
         original_query = query
 
@@ -302,7 +332,13 @@ class RetrievalWorkflow:
         Falls back to all datasets on routing failure.
         """
         if not self.router or len(datasets) <= 1:
+            if len(datasets) <= 1:
+                logger.info(f"[{request_id}] Dataset routing: skipped (only {len(datasets)} dataset(s) available)")
+            else:
+                logger.info(f"[{request_id}] Dataset routing: not configured")
             return datasets
+
+        logger.info(f"[{request_id}] Dataset routing: enabled, routing across {len(datasets)} datasets")
 
         with tracer.start_as_current_span("routing") as span:
             try:
@@ -384,6 +420,8 @@ class RetrievalWorkflow:
 
         Falls back to original order on reranker failure.
         """
+        logger.info(f"[{request_id}] Document reranking: enabled, processing {len(documents)} documents")
+
         with tracer.start_as_current_span("reranking") as span:
             if is_tracing_enabled():
                 span.set_attribute("input_count", len(documents))

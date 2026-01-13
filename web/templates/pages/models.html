@@ -180,5 +180,50 @@
                 </div>
             </div>
         </div>
+
+        <!-- Stage Configuration Section -->
+        <div class="config-section">
+            <h2 class="config-section-title">
+                <span class="dot success"></span>
+                阶段配置 (Stage Configuration)
+            </h2>
+            <p class="section-description">
+                为不同的RAG处理阶段配置使用的LLM模型。可以为每个阶段选择不同的模型，实现精细化控制。
+            </p>
+
+            <div class="stage-config-grid">
+                <template x-for="stage in availableStages" :key="stage">
+                    <div class="stage-config-card">
+                        <div class="stage-header">
+                            <h4 x-text="getStageDisplayName(stage)"></h4>
+                            <span class="stage-description" x-text="getStageDescription(stage)"></span>
+                        </div>
+
+                        <div class="stage-selector">
+                            <select :value="getStageModel(stage)" @change="setStageModel(stage, $event.target.value)">
+                                <option value="">未配置 (使用默认)</option>
+                                <template x-for="llm in availableLLMs" :key="llm.name">
+                                    <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="stage-status">
+                            <span class="status-indicator" :class="getStageStatusClass(stage)">
+                                <span x-text="getStageStatusText(stage)"></span>
+                            </span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="stage-info-box" x-show="stageConfigChanged">
+                <div class="info-icon">ℹ️</div>
+                <div class="info-content">
+                    <strong>配置已更改</strong>
+                    <p>阶段配置将在下次查询时生效。某些组件可能需要重启服务才能完全生效。</p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

@@ -6,7 +6,7 @@ into a web application:
 
 - RAGKernel: Central coordinator for all RAG operations
 - Embedders: WebOpenAIEmbedder, SeekDBEmbedder
-- Services: DocumentProcessor, RetrievalService, ChatService
+- Services: DocumentProcessor, RetrievalService
 - Managers: WebVectorStoreManager, WebLLMAdapter
 
 Example:
@@ -17,7 +17,6 @@ Example:
     kernel.set_llm(base_url="...", api_key="...", model="gpt-4")
 """
 
-from .services.chat_service import ChatService
 from .database import get_session, init_db
 from .services.document_processor import DocumentProcessor
 from .embedders import SeekDBEmbedder, WebOpenAIEmbedder
@@ -37,7 +36,6 @@ __all__ = [
     # Services
     "DocumentProcessor",
     "RetrievalService",
-    "ChatService",
     # Managers
     "WebVectorStoreManager",
 ]

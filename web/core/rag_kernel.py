@@ -81,7 +81,6 @@ from langrag.cache import SemanticCache
 from langrag.datasource.kv.sqlite import SQLiteKV
 from langrag.retrieval.rerank.base import BaseReranker
 from langrag.retrieval.rerank.factory import RerankerFactory
-from langrag.retrieval.rerank.providers.llm_template import LLMTemplateReranker
 from langrag.retrieval.rewriter.base import BaseRewriter
 from web.config import DATA_DIR, settings
 from web.core.services.chat_service import ChatService
@@ -147,21 +146,22 @@ class RAGKernel:
         self._embedder_cache: dict[str, BaseEmbedder] = {}
 
         # LLM configuration (Delegated to ModelManager)
-        # All models are now available on-demand, no default required
-
-        # Agentic components (Router, Rewriter) - can be set per KB or globally
+        
+        # Agentic components (Router, Rewriter) - 全局默认
         self.router = None
         self.rewriter = None
-
+        
         # Model Management
         from web.core.model_manager import WebModelManager
         self.model_manager = WebModelManager()
-
-        # Stage configuration (mapped to model names) - optional now
+        
+        # Stage configuration (mapped to model names)
         self.stage_config = {
-            "chat": None,     # Default chat model (optional)
-            "router": None,   # Routing model (optional)
-            "rewriter": None  # Query rewriting model (optional)
+            "chat": None,        # 对话生成
+            "router": None,      # 知识库路由
+            "rewriter": None,    # 查询重写
+            "reranker": None,    # LLM 模板重排序
+            "qa_indexing": None  # QA 索引生成
         }
 
         # Initialize managers and stores
@@ -221,8 +221,8 @@ class RAGKernel:
             # Register with manager
             self.model_manager.register_model(name, llm_instance, set_as_default)
             
-            # Only set as default if explicitly requested
-            if set_as_default:
+            # If this is the first model or default, update stages that are unset
+            if set_as_default or list(self.model_manager.list_models()) == [name]:
                 for stage in self.stage_config:
                     if self.stage_config[stage] is None:
                         self.set_stage_model(stage, name)
@@ -236,39 +236,77 @@ class RAGKernel:
     def set_stage_model(self, stage: str, model_name: str) -> None:
         """
         Assign a specific model to a pipeline stage.
-        
+
         Args:
-            stage: "chat", "router", or "rewriter"
+            stage: "chat", "router", "rewriter", "reranker", or "qa_indexing"
             model_name: Name of a registered model
         """
         if stage not in self.stage_config:
             raise ValueError(f"Unknown stage: {stage}")
-            
+
         model = self.model_manager.get_model(model_name)
         if not model:
             raise ValueError(f"Model '{model_name}' not found in manager.")
-            
+
         self.stage_config[stage] = model_name
-        
+
         # Re-initialize components based on stage changes
         if stage == "router":
             from langrag.retrieval.router.llm_router import LLMRouter
             self.router = LLMRouter(llm=model)
             logger.info(f"Router switched to use model: {model_name}")
-            
+
         elif stage == "rewriter":
             from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
             self.rewriter = LLMRewriter(llm=model)
             logger.info(f"Rewriter switched to use model: {model_name}")
-            
+
         elif stage == "chat":
-            # Chat service is rebuilt lazily or via rebuild_services
-            pass
-            
+            logger.info(f"Chat stage configured to use model: {model_name}")
+
+        elif stage == "reranker":
+            logger.info(f"Reranker stage configured to use model: {model_name}")
+
+        elif stage == "qa_indexing":
+            logger.info(f"QA indexing stage configured to use model: {model_name}")
+
         self._rebuild_services()
 
     def get_stage_model_name(self, stage: str) -> str | None:
         return self.stage_config.get(stage)
+
+    def get_stage_config(self) -> dict[str, str | None]:
+        """
+        获取所有阶段的配置。
+
+        Returns:
+            Dict mapping stage names to model names (or None if not configured).
+        """
+        return self.stage_config.copy()
+
+    def get_available_stages(self) -> list[str]:
+        """
+        获取所有可用阶段。
+
+        Returns:
+            List of stage names.
+        """
+        return self.model_manager.list_stages()
+
+    def get_available_models(self) -> list[str]:
+        """
+        获取所有可用模型名称。
+
+        Returns:
+            List of model names.
+        """
+        return self.model_manager.list_models()
+
+    def configure_stage(self, stage: str, model_name: str) -> None:
+        """
+        为指定阶段配置模型（代理到 set_stage_model）。
+        """
+        self.set_stage_model(stage, model_name)
 
     # Legacy compatibility wrapper (DEPRECATED but kept for existing calls)
     def set_llm(
@@ -956,91 +994,48 @@ class RAGKernel:
         history: list[dict] | None = None,
         stream: bool = False,
         # Optional override: Use a specific model for THIS chat turn
-        model_name: str | None = None,
-        # Retrieval configuration overrides
-        use_rerank: bool | None = None,
-        reranker_type: str | None = None,
-        reranker_model: str | None = None,  # For llm_template reranker
-        use_router: bool | None = None,
-        router_model: str | None = None,
-        use_rewriter: bool | None = None,
-        rewriter_model: str | None = None
+        model_name: str | None = None
     ) -> dict | Any:
-        # Determine models and components for this request
-        chat_model = None
-        router = None
-        rewriter = None
-        reranker = None
-
-        # Get chat model
+        # If model override provided, temporarily rebuild chat service or use ephemeral one
+        service = self._chat_service
+        
         if model_name:
-            chat_model = self.model_manager.get_model(model_name)
-            if not chat_model:
-                raise ValueError(f"Chat model '{model_name}' not found or not configured")
-
-        # Get router if enabled
-        if use_router and router_model:
-            router_llm = self.model_manager.get_model(router_model)
-            if router_llm:
-                from langrag.retrieval.router.llm_router import LLMRouter
-                router = LLMRouter(llm=router_llm)
-
-        # Get rewriter if enabled
-        if use_rewriter and rewriter_model:
-            rewriter_llm = self.model_manager.get_model(rewriter_model)
-            if rewriter_llm:
-                from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
-                rewriter = LLMRewriter(llm=rewriter_llm)
-
-        # Get reranker if enabled
-        if use_rerank and reranker_type:
-            try:
-                if reranker_type == "llm_template":
-                    # Special handling for LLM template reranker
-                    reranker_llm = chat_model  # Default to chat model
-                    if reranker_model:
-                        reranker_llm = self.model_manager.get_model(reranker_model)
-                        if not reranker_llm:
-                            logger.warning(f"Reranker model '{reranker_model}' not found, using chat model")
-                            reranker_llm = chat_model
-
-                    if reranker_llm:
-                        reranker = LLMTemplateReranker(llm_model=reranker_llm)
-                    else:
-                        logger.warning("No LLM available for LLM template reranker")
-                else:
-                    reranker = RerankerFactory.create(reranker_type)
-            except Exception as e:
-                logger.warning(f"Failed to create reranker '{reranker_type}': {e}")
-
-        # Create retrieval service with dynamic components
-        retrieval_service = RetrievalService(
-            embedder=self.embedder,
-            reranker=reranker,
-            rewriter=rewriter,
-            kv_store=self.kv_store,
-            cache=self.cache,
-            vector_manager=self.vdb_manager
-        )
-
-        # Create chat service
-        if chat_model:
-            service = ChatService(
-                llm=chat_model,
-                llm_config={},
-                retrieval_service=retrieval_service,
-                router=router,
-                kb_names=self.kb_names
-            )
-        else:
-            # Fallback to default service if available
-            service = self._chat_service
+            override_model = self.model_manager.get_model(model_name)
+            if override_model:
+                # Create ephemeral service for this request
+                service = ChatService(
+                    llm=override_model,
+                    llm_config={},
+                    retrieval_service=self._retrieval_service,
+                    router=self.router,
+                    kb_names=self.kb_names
+                )
+        
+        if not service:
+             # Try lazily init
+             if not self._retrieval_service:
+                self._retrieval_service = RetrievalService(
+                    embedder=self.embedder,
+                    reranker=self.reranker,
+                    rewriter=self.rewriter,
+                    kv_store=self.kv_store,
+                    cache=self.cache,
+                    vector_manager=self.vdb_manager
+                )
+                
+             model = self.model_manager.get_model(self.stage_config.get("chat"))
+             if model:
+                self._chat_service = ChatService(
+                    llm=model,
+                    llm_config={},
+                    retrieval_service=self._retrieval_service,
+                    router=self.router,
+                    kb_names=self.kb_names
+                )
+                service = self._chat_service
 
         if not service:
-            if model_name:
-                raise ValueError(f"Model '{model_name}' not found or not configured")
-            else:
-                raise ValueError("No chat model specified. Please select a model from the dropdown or configure a default model")
+            raise ValueError("Chat service not initialized (no default chat model configured)")
 
         # Build stores dict from KB IDs
         kb_stores = {}

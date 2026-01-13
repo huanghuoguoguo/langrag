@@ -47,7 +47,19 @@ Please provide the reranked indices (0-based) as a comma-separated list:
         self.template = template or self.DEFAULT_TEMPLATE
         self.timeout = timeout
 
-        logger.info(f"Initialized LLMTemplateReranker with model: {getattr(llm_model, 'model_name', 'unknown')}")
+        # Try to get model identifier from various attributes
+        model_info = (
+            getattr(llm_model, 'model', None) or
+            getattr(llm_model, 'model_path', None) or
+            getattr(llm_model, 'model_name', None)
+        )
+
+        if model_info:
+            logger.info(f"Initialized LLMTemplateReranker with model: {model_info}")
+        else:
+            # Fallback to class name
+            class_name = type(llm_model).__name__
+            logger.info(f"Initialized LLMTemplateReranker with model type: {class_name}")
 
     def rerank(
         self, query: str, results: list[SearchResult], top_k: int | None = None

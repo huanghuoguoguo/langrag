@@ -137,6 +137,35 @@
                                 </div>
                             </template>
 
+                            <!-- Retrieval Stats -->
+                            <template x-if="msg.retrieval_stats">
+                                <div class="retrieval-stats">
+                                    <strong>检索统计:</strong>
+                                    <div class="stats-grid">
+                                        <div class="stat-item">
+                                            <span>知识库数量:</span>
+                                            <span x-text="msg.retrieval_stats.knowledge_bases || 0"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>检索文档数:</span>
+                                            <span x-text="msg.retrieval_stats.total_sources || 0"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Router:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.router ? '启用' : '未启用'"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Rewriter:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.rewriter ? '启用' : '未启用'"></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span>Reranker:</span>
+                                            <span x-text="msg.retrieval_stats.components_used?.reranker ? '启用' : '未启用'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
                             <!-- Evaluation -->
                             <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
                                 <div class="eval-section">
