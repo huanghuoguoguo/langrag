@@ -65,6 +65,7 @@ from .index_processor.processor.base import BaseIndexProcessor
 from .index_processor.processor.paragraph import ParagraphIndexProcessor
 from .index_processor.processor.parent_child import ParentChildIndexProcessor
 from .index_processor.processor.qa import QAIndexProcessor
+from .index_processor.processor.raptor import RaptorConfig, RaptorIndexProcessor
 from .index_processor.splitter.base import BaseChunker
 from .index_processor.splitter.providers.recursive_character import RecursiveCharacterChunker
 
@@ -138,6 +139,8 @@ __all__ = [
     "ParagraphIndexProcessor",
     "QAIndexProcessor",
     "ParentChildIndexProcessor",
+    "RaptorIndexProcessor",
+    "RaptorConfig",
 
     # Retrieval
     "RetrievalWorkflow",
