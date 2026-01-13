@@ -212,11 +212,7 @@ document.addEventListener('alpine:init', () => {
                 });
 
                 // 优先显示 LLM 生成的答案，否则显示检索信息
-                console.log('[Chat] API response:', result);
-                console.log('[Chat] answer:', result.answer);
-                console.log('[Chat] message:', result.message);
                 let content = result.answer || result.message || `检索完成，找到 ${result.sources?.length || 0} 个相关文档`;
-                console.log('[Chat] Final content:', content);
                 if (result.rewritten_query) {
                     content += `\n\n(查询已重写为: "${result.rewritten_query}")`;
                 }

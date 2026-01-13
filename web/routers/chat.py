@@ -227,9 +227,9 @@ def evaluate(
 ):
     """Evaluate a RAG response using LLM Judge"""
     from web.services.evaluation_service import EvaluationService
-    
-    # Check if LLM is ready
-    if not rag_kernel.llm_client:
+
+    # Check if LLM is ready - use model_manager instead of llm_client
+    if not rag_kernel.model_manager.list_models():
         raise HTTPException(status_code=400, detail="LLM is not configured")
 
     try:

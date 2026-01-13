@@ -27,24 +27,28 @@ class LLMFactory:
             if llm_type == "mock":
                 # Mock LLM for testing - returns predefined responses
                 from langrag.llm.base import BaseLLM
-                from langrag.entities.query import Query
-                import asyncio
 
                 class MockLLM(BaseLLM):
-                    def __init__(self):
-                        pass
+                    """Mock LLM for testing purposes."""
 
-                    async def generate(self, query: str | Query, **kwargs) -> str:
-                        query_text = query.text if isinstance(query, Query) else query
-                        # Return a simple mock response
-                        return f"这是对问题 '{query_text}' 的模拟回答。在实际部署中，这里会返回真实的LLM生成的结果。"
+                    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                        """Return mock embeddings."""
+                        return [[0.1] * 384 for _ in texts]
 
-                    async def generate_stream(self, query: str | Query, **kwargs):
-                        query_text = query.text if isinstance(query, Query) else query
-                        response = f"这是对问题 '{query_text}' 的模拟回答。在实际部署中，这里会返回真实的LLM生成的结果。"
+                    def embed_query(self, text: str) -> list[float]:
+                        """Return mock query embedding."""
+                        return [0.1] * 384
+
+                    def chat(self, messages: list[dict], **kwargs) -> str:
+                        """Return mock chat response."""
+                        last_content = messages[-1].get("content", "") if messages else ""
+                        return f"这是对问题 '{last_content}' 的模拟回答。"
+
+                    def stream_chat(self, messages: list[dict], **kwargs):
+                        """Yield mock chat response tokens."""
+                        response = self.chat(messages, **kwargs)
                         for word in response.split():
                             yield word + " "
-                            await asyncio.sleep(0.1)
 
                 return MockLLM()
 
