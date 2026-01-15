@@ -28,7 +28,14 @@
                                     <div class="config-item-name" x-text="emb.name"></div>
                                     <div class="text-muted text-sm" x-text="emb.model"></div>
                                 </div>
-                                <span class="badge primary" x-text="emb.embedder_type"></span>
+                                <div class="config-actions" style="display:flex; gap:8px; align-items:center;">
+                                    <span class="badge primary" x-text="emb.embedder_type"></span>
+                                    <button class="btn-icon danger"
+                                        @click="if(confirm('确定删除?')) Alpine.store('models').deleteEmbedder(emb.name)"
+                                        title="删除">
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
                         </template>
                     </div>
@@ -105,7 +112,14 @@
                                     <div class="config-item-name" x-text="llm.name"></div>
                                     <div class="text-muted text-sm" x-text="llm.model"></div>
                                 </div>
-                                <span class="badge success" x-text="'可用'"></span>
+                                <div class="config-actions" style="display:flex; gap:8px; align-items:center;">
+                                    <span class="badge success" x-text="'可用'"></span>
+                                    <button class="btn-icon danger"
+                                        @click="if(confirm('确定删除?')) Alpine.store('models').deleteLLM(llm.name)"
+                                        title="删除">
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
                         </template>
                     </div>
@@ -120,7 +134,6 @@
                             <option value="kimi">Moonshot AI (Kimi)</option>
                             <option value="custom">Custom (OpenAI 兼容)</option>
                             <option value="local">Local Model (GGUF)</option>
-                            <option value="mock">🧪 Mock 测试模型 (开发用)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -152,8 +165,8 @@
                             <div class="info-box">
                                 <strong>使用内置本地模型</strong><br>
                                 <span class="text-muted">
-                                    优先路径：/home/yhh/models/qwen2-0_5b-instruct-q4_k_m.gguf<br>
-                                    备选路径：/home/yhh/models/qwen2.5-7b-instruct-q4_k_m.gguf<br>
+                                    优先路径：~/models/qwen2-0_5b-instruct-q4_k_m.gguf<br>
+                                    备选路径：~/models/qwen2.5-7b-instruct-q4_k_m.gguf<br>
                                     模型：Qwen2 0.5B Instruct (推荐用于测试)
                                 </span>
                             </div>
@@ -181,49 +194,6 @@
             </div>
         </div>
 
-        <!-- Stage Configuration Section -->
-        <div class="config-section">
-            <h2 class="config-section-title">
-                <span class="dot success"></span>
-                阶段配置 (Stage Configuration)
-            </h2>
-            <p class="section-description">
-                为不同的RAG处理阶段配置使用的LLM模型。可以为每个阶段选择不同的模型，实现精细化控制。
-            </p>
 
-            <div class="stage-config-grid">
-                <template x-for="stage in availableStages" :key="stage">
-                    <div class="stage-config-card">
-                        <div class="stage-header">
-                            <h4 x-text="getStageDisplayName(stage)"></h4>
-                            <span class="stage-description" x-text="getStageDescription(stage)"></span>
-                        </div>
-
-                        <div class="stage-selector">
-                            <select :value="getStageModel(stage)" @change="setStageModel(stage, $event.target.value)">
-                                <option value="">未配置 (使用默认)</option>
-                                <template x-for="llm in availableLLMs" :key="llm.name">
-                                    <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'"></option>
-                                </template>
-                            </select>
-                        </div>
-
-                        <div class="stage-status">
-                            <span class="status-indicator" :class="getStageStatusClass(stage)">
-                                <span x-text="getStageStatusText(stage)"></span>
-                            </span>
-                        </div>
-                    </div>
-                </template>
-            </div>
-
-            <div class="stage-info-box" x-show="stageConfigChanged">
-                <div class="info-icon">ℹ️</div>
-                <div class="info-content">
-                    <strong>配置已更改</strong>
-                    <p>阶段配置将在下次查询时生效。某些组件可能需要重启服务才能完全生效。</p>
-                </div>
-            </div>
-        </div>
     </div>
 </div>

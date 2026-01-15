@@ -75,6 +75,8 @@ window.api = {
     listLLMs: () => window.api.get('/api/config/llms'),
     saveLLM: (data) => window.api.post('/api/config/llm', data),
     activateLLM: (name) => window.api.post('/api/config/llm/activate', { name }),
+    deleteEmbedder: (name) => window.api.delete(`/api/config/embedder/${name}`),
+    deleteLLM: (name) => window.api.delete(`/api/config/llm/${name}`),
 
     // Playground
     compareSearchModes: (data) => window.api.post('/api/playground/search-compare', data),

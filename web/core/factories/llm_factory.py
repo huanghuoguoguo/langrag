@@ -56,8 +56,8 @@ class LLMFactory:
                 from langrag.llm.providers.local import LocalLLM
                 # Default to smaller model for testing, fallback to larger model
                 DEFAULT_MODEL_PATHS = [
-                    "/home/yhh/models/qwen2-0_5b-instruct-q4_k_m.gguf",  # ~300MB test model
-                    "/home/yhh/models/qwen2.5-7b-instruct-q4_k_m.gguf"  # ~4GB full model
+                    "~/models/qwen2-0_5b-instruct-q4_k_m.gguf",  # ~300MB test model
+                    "~/models/qwen2.5-7b-instruct-q4_k_m.gguf"  # ~4GB full model
                 ]
 
                 model_path = config.get("model_path")

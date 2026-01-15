@@ -94,11 +94,11 @@ async def chat(
         # 确定目标知识库
         target_kb_ids = req.kb_ids
 
-        # 如果没有选择知识库且没有启用 router，默认选择所有知识库
-        if not target_kb_ids and not req.use_router:
+        # 如果没有选择知识库，默认选择所有知识库（作为全部候选，或路由候选池）
+        if not target_kb_ids:
             all_kbs = KBService.list_kbs(session)
             target_kb_ids = [kb.kb_id for kb in all_kbs]
-            logger.info(f"[Chat] No KB selected, using all {len(target_kb_ids)} KBs")
+            logger.info(f"[Chat] No KB selected, using all {len(target_kb_ids)} KBs (Router={'Enabled' if req.use_router else 'Disabled'})")
 
         # 获取 LLM
         llm = None

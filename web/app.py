@@ -29,6 +29,14 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
 
+    # Initialize Observability (Tracer)
+    # This enables logging traces to a file without needing an external service
+    from langrag.observability.tracer import init_tracer
+    init_tracer(
+        service_name="langrag-web",
+        log_file="logs/trace.log"
+    )
+
     # Inject Web VDB Manager into LangRAG Core
     logger.info("Injecting WebVectorStoreManager into LangRAG Factory...")
     from langrag.datasource.vdb.global_manager import set_vector_manager

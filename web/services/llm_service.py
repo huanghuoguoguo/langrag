@@ -68,13 +68,31 @@ class LLMService:
         rag_kernel: RAGKernel,
         name: str
     ) -> LLMConfig | None:
-        """Set as default configuration (for backward compatibility)"""
+        """Set as default active configuration"""
         # Find target config
         statement = select(LLMConfig).where(LLMConfig.name == name)
         config = session.exec(statement).first()
+        
         if config:
-            # No longer enforce single active, just return the config
-            # This method is kept for backward compatibility
+            # Deactivate all others
+            session.exec(select(LLMConfig)).all() # Ensure loaded?
+            # Bulk update or loop is safer with ORM objects
+            all_configs = session.exec(select(LLMConfig)).all()
+            for c in all_configs:
+                c.is_active = False
+                session.add(c)
+            
+            # Activate target
+            config.is_active = True
+            session.add(config)
+            session.commit()
+            session.refresh(config)
+            
+            # Update kernel runtime (if applicable, ensuring immediate effect)
+            # The app usually restores from DB, but runtime dynamic switching handles most.
+            # We can notify kernel if needed. Validating via factory might be good practice.
+            # For now, DB persistence is primary goal for UI.
+            
             return config
         return None
 
@@ -83,3 +101,14 @@ class LLMService:
         """List all LLM configurations"""
         statement = select(LLMConfig)
         return list(session.exec(statement).all())
+
+    @staticmethod
+    def delete_config(session: Session, rag_kernel: RAGKernel, name: str) -> bool:
+        """Delete configuration"""
+        statement = select(LLMConfig).where(LLMConfig.name == name)
+        config = session.exec(statement).first()
+        if config:
+            session.delete(config)
+            session.commit()
+            return True
+        return False

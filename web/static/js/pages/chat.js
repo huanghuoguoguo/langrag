@@ -30,6 +30,13 @@ function chatPage() {
                 if (!this.selectedRerankerLLM && this.availableLLMs.length > 0) {
                     this.selectedRerankerLLM = this.availableLLMs[0].name;
                 }
+                // Auto-select first available LLM for router and rewriter if none selected
+                if (!this.selectedRouter && this.availableLLMs.length > 0) {
+                    this.selectedRouter = this.availableLLMs[0].name;
+                }
+                if (!this.selectedRewriter && this.availableLLMs.length > 0) {
+                    this.selectedRewriter = this.availableLLMs[0].name;
+                }
             });
         },
 

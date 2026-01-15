@@ -33,6 +33,7 @@ dependencies = [
     "sqlmodel>=0.0.30",
     "umap-learn>=0.5.7",
     "uvicorn>=0.40.0",
+    "jinja2>=3.1.6",
 ]
 
 [project.optional-dependencies]

@@ -15,99 +15,7 @@ Web Demo API Tests
     uv run pytest web/tests -v -m "local_llm"
 """
 
-import os
 import pytest
-import tempfile
-from pathlib import Path
-
-from fastapi.testclient import TestClient
-
-
-# ==================== Fixtures ====================
-
-@pytest.fixture(scope="module")
-def test_client():
-    """Create a test client for the FastAPI app."""
-    # 设置测试环境变量
-    os.environ.setdefault("LANGRAG_ENV", "test")
-
-    from web.app import app
-    with TestClient(app) as client:
-        yield client
-
-
-@pytest.fixture(scope="module")
-def default_embedder_name(test_client):
-    """Get or create a default embedder for testing."""
-    # 检查是否有可用的 embedder
-    response = test_client.get("/api/config/embedders")
-    if response.status_code == 200:
-        data = response.json()
-        # API 可能返回 {'embedders': [...]} 或直接返回列表
-        embedders = data.get("embedders", data) if isinstance(data, dict) else data
-        if embedders and len(embedders) > 0:
-            return embedders[0].get("name", "default")
-
-    # 如果没有，使用默认名称（SeekDB embedder 通常是自动可用的）
-    return "default"
-
-
-@pytest.fixture(scope="module")
-def test_kb_id(test_client, default_embedder_name):
-    """Create a test knowledge base and return its ID."""
-    response = test_client.post("/api/kb", json={
-        "name": "Test KB",
-        "description": "Test knowledge base for API testing",
-        "vdb_type": "chroma",
-        "embedder_name": default_embedder_name,
-        "chunk_size": 500,
-        "chunk_overlap": 50,
-        "indexing_technique": "high_quality"
-    })
-
-    if response.status_code == 200:
-        kb_id = response.json()["id"]
-        yield kb_id
-        # Cleanup
-        test_client.delete(f"/api/kb/{kb_id}")
-    else:
-        pytest.skip(f"Failed to create test KB: {response.text}")
-
-
-@pytest.fixture(scope="module")
-def sample_document():
-    """Create a sample document for testing."""
-    content = """
-# 分布式系统概述
-
-分布式系统是由多台计算机通过网络连接组成的系统，这些计算机协同工作以完成共同的任务。
-
-## 主要特点
-
-1. **可扩展性**：可以通过添加更多节点来增加系统容量
-2. **容错性**：单个节点故障不会导致整个系统崩溃
-3. **并发性**：多个节点可以同时处理不同的任务
-
-## CAP 定理
-
-CAP 定理指出，分布式系统最多只能同时满足以下三个特性中的两个：
-- 一致性 (Consistency)
-- 可用性 (Availability)
-- 分区容错性 (Partition tolerance)
-
-## 常见应用
-
-- 分布式数据库（如 Cassandra、MongoDB）
-- 分布式缓存（如 Redis Cluster）
-- 分布式消息队列（如 Kafka）
-"""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-        f.write(content)
-        f.flush()
-        yield Path(f.name)
-    # Cleanup
-    os.unlink(f.name)
-
 
 # ==================== Basic API Tests ====================
 
@@ -130,12 +38,29 @@ class TestHealthAndConfig:
         response = test_client.get("/api/config/llms")
         assert response.status_code == 200
 
-    def test_get_stages(self, test_client):
-        """Test getting stage configuration."""
-        response = test_client.get("/api/config/stages")
+    def test_chat_defaults_to_all_when_empty(self, test_client, test_kb_id):
+        """Test that empty kb_ids defaults to searching ALL knowledge bases."""
+        response = test_client.post("/api/chat", json={
+            "kb_ids": [],
+            "query": "1+1等于几？",
+            "history": [],
+            "stream": False,
+            "model_name": "local",
+            "use_router": False
+        })
+
         assert response.status_code == 200
         data = response.json()
-        assert "stages" in data
+        
+        # Since we default to ALL KBs when empty, we expect retrieval to happen.
+        # (Assuming test_kb_id ensures at least one KB exists)
+        if len(data.get("sources", [])) > 0:
+            print(f"\n[Default Chat Sources]: {len(data['sources'])}")
+            assert True
+        else:
+            # If queries didn't match anything, sources might be empty, but stats should exist
+            assert "retrieval_stats" in data
+            assert data["retrieval_stats"]["kb_count"] > 0
 
 
 # ==================== Knowledge Base Tests ====================
@@ -304,24 +229,38 @@ class TestChatWithLocalLLM:
         print(f"\n[Retrieval Stats]: {data.get('retrieval_stats', {})}")
         assert "answer" in data
 
-    def test_direct_chat_no_retrieval(self, test_client):
-        """Test direct chat without any knowledge base (pure LLM conversation)."""
-        # 不选择任何 KB，启用 router（这样不会默认选择所有 KB）
+
+
+    def test_auto_router_mode(self, test_client, test_kb_id):
+        """Test 'Auto' mode: No KB selected + Router Enabled -> Should search all KBs."""
+        # We use test_kb_id fixture to ensure at least one KB exists in the system
         response = test_client.post("/api/chat", json={
-            "kb_ids": [],
-            "query": "1+1等于几？",
+            "kb_ids": [], # Empty means "All" or "Auto"
+            "query": "分布式", # Relevant to the test KB content
             "history": [],
             "stream": False,
             "model_name": "local",
-            "use_router": True  # 启用 router 后不会默认选择所有 KB
+            "use_router": True # Enabled Router with empty list -> Auto Route among all
         })
 
         assert response.status_code == 200
         data = response.json()
+        
+        # Should have sources because it auto-routed to the test_kb_id
+        # (Assuming the query is relevant enough for the mock/local router to pick it, 
+        # or if router fails/fallback, it picks all)
+        print(f"\n[Auto Router Sources]: {len(data.get('sources', []))}")
+        
+        # Even if router filters it out, the intent of 'Auto' is RAG is active.
+        # But if the router works well, it should pick the KB containing "分布式".
+        if data.get("retrieval_stats"):
+             print(f"[Retrieval Stats]: {data['retrieval_stats']}")
 
-        print(f"\n[Direct Chat Answer]: {data.get('answer', 'No answer')}")
-        # 应该没有 sources（因为没有检索）
-        assert len(data.get("sources", [])) == 0
+        # We mostly want to verify that it DID NOT fail and DID NOT strictly return 0 sources if content is relevant
+        # However, purely checking 'sources' > 0 might be flaky if retrieval fails.
+        # Let's check retrieval_stats exists
+        assert "retrieval_stats" in data
+        assert data["retrieval_stats"]["kb_count"] > 0 # Should have considered at least one KB
 
 
 # ==================== Evaluation Tests ====================

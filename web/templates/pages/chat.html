@@ -119,81 +119,212 @@
                         <div class="message-content">
                             <div x-html="msg.content.replace(/\n/g, '<br>')"></div>
 
-                            <!-- Sources -->
-                            <template x-if="msg.sources && msg.sources.length > 0">
-                                <div class="message-sources">
-                                    <strong>参考来源:</strong>
-                                    <template x-for="(s, si) in msg.sources" :key="si">
-                                        <div class="source-item">
-                                            <span class="source-icon"
-                                                x-text="s.type === 'web_search' ? '🌐' : '📄'"></span>
-                                            <div>
-                                                <div x-text="s.source || s.title || '来源 ' + (si + 1)"></div>
-                                                <div class="text-muted text-sm" x-text="'Score: ' + s.score.toFixed(2)">
+                            <!-- Message Footer: Actions & Details -->
+                            <!-- Message Footer: Actions & Details -->
+                            <div class="message-footer" x-data="{ activeDetail: null }">
+
+                                <!-- 1. Retrieval Toggle Button (Sources) -->
+                                <template x-if="msg.retrieval_stats">
+                                    <button class="btn-sm btn-outline btn-status"
+                                        :class="{ 'active': activeDetail === 'sources' }"
+                                        @click="activeDetail = activeDetail === 'sources' ? null : 'sources'">
+                                        <span>📄</span>
+                                        <span x-text="(msg.sources ? msg.sources.length : 0) + ' 来源'"></span>
+                                        <span class="text-xs" x-show="activeDetail !== 'sources'">▼</span>
+                                        <span class="text-xs" x-show="activeDetail === 'sources'">▲</span>
+                                    </button>
+                                </template>
+
+                                <!-- 2. Rewriter Button -->
+                                <template x-if="msg.retrieval_stats?.pipeline?.rewriter?.enabled">
+                                    <button class="btn-sm btn-outline btn-status"
+                                        :class="{ 'active': activeDetail === 'rewriter' }"
+                                        @click="activeDetail = activeDetail === 'rewriter' ? null : 'rewriter'">
+                                        <span>✍️</span>
+                                        <span>已重写</span>
+                                        <span class="text-xs" x-show="activeDetail !== 'rewriter'">▼</span>
+                                        <span class="text-xs" x-show="activeDetail === 'rewriter'">▲</span>
+                                    </button>
+                                </template>
+
+                                <!-- 3. Router Button -->
+                                <template x-if="msg.retrieval_stats?.pipeline?.router?.enabled">
+                                    <button class="btn-sm btn-outline btn-status"
+                                        :class="{ 'active': activeDetail === 'router' }"
+                                        @click="activeDetail = activeDetail === 'router' ? null : 'router'">
+                                        <span>🤖</span>
+                                        <span>已路由</span>
+                                        <span class="text-xs" x-show="activeDetail !== 'router'">▼</span>
+                                        <span class="text-xs" x-show="activeDetail === 'router'">▲</span>
+                                    </button>
+                                </template>
+
+                                <!-- 4. Reranker Button -->
+                                <template x-if="msg.retrieval_stats?.pipeline?.reranker?.enabled">
+                                    <button class="btn-sm btn-outline btn-status"
+                                        :class="{ 'active': activeDetail === 'reranker' }"
+                                        @click="activeDetail = activeDetail === 'reranker' ? null : 'reranker'">
+                                        <span>📚</span>
+                                        <span>已重排</span>
+                                        <span class="text-xs" x-show="activeDetail !== 'reranker'">▼</span>
+                                        <span class="text-xs" x-show="activeDetail === 'reranker'">▲</span>
+                                    </button>
+                                </template>
+
+                                <!-- 5. Evaluation Button -->
+                                <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
+                                    <button class="btn-sm btn-outline btn-status" @click="evaluate(index)"
+                                        :disabled="msg.evaluating" style="margin-left:auto;">
+                                        <span x-show="!msg.evaluating">📊 评估质量</span>
+                                        <span x-show="msg.evaluating">⏳ 评估中...</span>
+                                    </button>
+                                </template>
+
+                                <!-- 6. UNIFIED DETAIL PANEL -->
+                                <template x-if="activeDetail">
+                                    <div class="detail-panel" x-show="activeDetail" x-transition.opacity.duration.200ms>
+
+                                        <!-- CONTENT: Sources -->
+                                        <div x-show="activeDetail === 'sources'">
+                                            <div class="detail-panel-header">
+                                                <span>参考来源详情</span>
+                                                <button class="btn-icon text-muted"
+                                                    @click="activeDetail = null">✕</button>
+                                            </div>
+                                            <div class="drawer-sources-grid">
+                                                <template x-for="(s, si) in msg.sources" :key="si">
+                                                    <div class="drawer-source-card" x-data="{ showPreview: false }"
+                                                        @mouseenter="showPreview=true" @mouseleave="showPreview=false">
+                                                        <div class="source-card-top" style="margin-bottom:4px;">
+                                                            <div class="source-index" x-text="si + 1"></div>
+                                                            <div class="source-title"
+                                                                x-text="s.source || s.title || 'Source ' + (si+1)">
+                                                            </div>
+                                                        </div>
+                                                        <div class="source-snippet"
+                                                            x-text="s.content ? s.content.substring(0, 50) + '...' : ''">
+                                                        </div>
+                                                        <div class="source-score-bar"
+                                                            :style="'width: ' + (s.score * 100) + '%'"></div>
+                                                        <!-- Hover Preview for Source Card still makes sense as it is sub-detail -->
+                                                        <div class="source-full-preview" x-show="showPreview"
+                                                            x-transition
+                                                            style="bottom: 105%; left:0; width: 280px; max-height: 400px;">
+                                                            <div x-text="s.content"></div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <div x-show="!msg.sources || msg.sources.length === 0"
+                                                    class="text-muted text-sm">
+                                                    未找到相关文档
                                                 </div>
                                             </div>
                                         </div>
-                                    </template>
-                                </div>
-                            </template>
 
-                            <!-- Retrieval Stats -->
-                            <template x-if="msg.retrieval_stats">
-                                <div class="retrieval-stats">
-                                    <strong>检索统计:</strong>
-                                    <div class="stats-grid">
-                                        <div class="stat-item">
-                                            <span>知识库数量:</span>
-                                            <span x-text="msg.retrieval_stats.knowledge_bases || 0"></span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span>检索文档数:</span>
-                                            <span x-text="msg.retrieval_stats.total_sources || 0"></span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span>Router:</span>
-                                            <span x-text="msg.retrieval_stats.components_used?.router ? '启用' : '未启用'"></span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span>Rewriter:</span>
-                                            <span x-text="msg.retrieval_stats.components_used?.rewriter ? '启用' : '未启用'"></span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span>Reranker:</span>
-                                            <span x-text="msg.retrieval_stats.components_used?.reranker ? '启用' : '未启用'"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
-
-                            <!-- Evaluation -->
-                            <template x-if="msg.role === 'assistant' && msg.sources?.length > 0">
-                                <div class="eval-section">
-                                    <button class="btn-sm" @click="evaluate(index)" x-show="!msg.evaluation"
-                                        :disabled="msg.evaluating">
-                                        <span x-show="!msg.evaluating">📊 评估回答质量</span>
-                                        <span x-show="msg.evaluating">⏳ 正在评估...</span>
-                                    </button>
-                                    <template x-if="msg.evaluation">
-                                        <div class="eval-results">
-                                            <template x-for="(metric, key) in msg.evaluation" :key="key">
-                                                <div class="eval-metric">
-                                                    <div class="eval-metric-header">
-                                                        <span
-                                                            x-text="key === 'faithfulness' ? '忠实度' : (key === 'answer_relevancy' ? '回答相关性' : '上下文相关性')"></span>
-                                                        <span x-text="metric.score.toFixed(2)"></span>
-                                                    </div>
-                                                    <div class="eval-bar">
-                                                        <div class="eval-bar-fill"
-                                                            :style="'width:' + (metric.score * 100) + '%'">
-                                                        </div>
+                                        <!-- CONTENT: Rewriter -->
+                                        <div x-show="activeDetail === 'rewriter'">
+                                            <div class="detail-panel-header">
+                                                <span>查询重写详情</span>
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span class="text-xs text-muted"
+                                                        x-text="msg.retrieval_stats?.pipeline?.rewriter?.model"></span>
+                                                    <button class="btn-icon text-muted"
+                                                        @click="activeDetail = null">✕</button>
+                                                </div>
+                                            </div>
+                                            <div class="detail-content-row"
+                                                style="flex-direction:column; align-items:flex-start; gap:12px;">
+                                                <div>
+                                                    <div class="text-xs text-muted uppercase">Original Query</div>
+                                                    <div style="opacity:0.7; text-decoration:line-through; font-size: 1em;"
+                                                        x-text="msg.retrieval_stats?.pipeline?.rewriter?.original">
                                                     </div>
                                                 </div>
-                                            </template>
+                                                <div style="align-self:center; color: var(--success-color);">⬇ Rewrite ⬇
+                                                </div>
+                                                <div>
+                                                    <div class="text-xs text-muted uppercase">Rewritten Query</div>
+                                                    <div style="font-weight:600; font-size: 1.1em; color: var(--text-primary);"
+                                                        x-text="msg.retrieval_stats?.pipeline?.rewriter?.output"></div>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </template>
-                                </div>
-                            </template>
+
+                                        <!-- CONTENT: Router -->
+                                        <div x-show="activeDetail === 'router'">
+                                            <div class="detail-panel-header">
+                                                <span>知识库路由结果</span>
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span class="text-xs text-muted"
+                                                        x-text="msg.retrieval_stats?.pipeline?.router?.model"></span>
+                                                    <button class="btn-icon text-muted"
+                                                        @click="activeDetail = null">✕</button>
+                                                </div>
+                                            </div>
+                                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                                <template
+                                                    x-for="kb in msg.retrieval_stats?.pipeline?.router?.selected_kbs">
+                                                    <span
+                                                        style="background:var(--bg-primary); border:1px solid var(--border-color); padding:6px 12px; border-radius:16px; font-size:0.9em; display:flex; align-items:center; gap:6px;">
+                                                        <span>📁</span>
+                                                        <span x-text="kb.name"></span>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <!-- CONTENT: Reranker -->
+                                        <div x-show="activeDetail === 'reranker'">
+                                            <div class="detail-panel-header">
+                                                <span>重排优化 (Re-ranking)</span>
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span class="text-xs text-muted"
+                                                        x-text="msg.retrieval_stats?.pipeline?.reranker?.model"></span>
+                                                    <button class="btn-icon text-muted"
+                                                        @click="activeDetail = null">✕</button>
+                                                </div>
+                                            </div>
+                                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                                                <div
+                                                    style="background:var(--bg-primary); padding:12px; border-radius:8px; text-align:center;">
+                                                    <div class="text-xs text-muted uppercase">Input Documents</div>
+                                                    <div style="font-size:1.5em; font-weight:600;"
+                                                        x-text="msg.retrieval_stats?.pipeline?.reranker?.input_count">
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    style="background:var(--bg-primary); padding:12px; border-radius:8px; text-align:center;">
+                                                    <div class="text-xs text-muted uppercase">Output Documents</div>
+                                                    <div style="font-size:1.5em; font-weight:600; color:var(--primary-color);"
+                                                        x-text="msg.retrieval_stats?.pipeline?.reranker?.output_count">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </template>
+
+                                <!-- 7. Evaluation Results -->
+                                <template x-if="msg.evaluation">
+                                    <div class="eval-results" style="width: 100%; margin-top: 8px;">
+                                        <template x-for="(metric, key) in msg.evaluation" :key="key">
+                                            <div class="eval-metric">
+                                                <div class="eval-metric-header">
+                                                    <span
+                                                        x-text="key === 'faithfulness' ? '忠实度' : (key === 'answer_relevancy' ? '回答相关性' : '上下文相关性')"></span>
+                                                    <span x-text="metric.score.toFixed(2)"></span>
+                                                </div>
+                                                <div class="eval-bar">
+                                                    <div class="eval-bar-fill"
+                                                        :style="'width:' + (metric.score * 100) + '%'"></div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                            </div>
                         </div>
                     </div>
                 </template>

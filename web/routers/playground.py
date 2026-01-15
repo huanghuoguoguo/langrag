@@ -123,7 +123,7 @@ def compare_search_modes(
     for mode in modes:
         try:
             start = time.time()
-            results, search_type = rag_kernel.search(
+            results, search_type, *_ = rag_kernel.search(
                 kb_id=req.kb_id,
                 query=req.query,
                 top_k=req.top_k,
@@ -197,7 +197,7 @@ def compare_reranking(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     # Get results without reranking
-    results_no_rerank, _ = rag_kernel.search(
+    results_no_rerank, *_ = rag_kernel.search(
         kb_id=req.kb_id,
         query=req.query,
         top_k=req.top_k,
@@ -221,7 +221,7 @@ def compare_reranking(
 
     if reranker_active:
         reranker_name = rag_kernel.reranker.__class__.__name__
-        results_reranked, _ = rag_kernel.search(
+        results_reranked, *_ = rag_kernel.search(
             kb_id=req.kb_id,
             query=req.query,
             top_k=req.top_k,
@@ -306,7 +306,7 @@ def test_cache(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     # First search (may populate cache)
-    results1, search_type1 = rag_kernel.search(
+    results1, search_type1, *_ = rag_kernel.search(
         kb_id=req.kb_id,
         query=req.query,
         top_k=5,

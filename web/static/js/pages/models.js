@@ -27,76 +27,7 @@ function modelsPage() {
         llmSaving: false,
 
         init() {
-            Alpine.store('models').load().then(() => {
-                this.loadStageConfig();
-            });
-        },
-
-        async loadStageConfig() {
-            try {
-                const response = await window.api.get('/api/config/stages');
-                this.currentStageConfig = response.data || {};
-                this.stageConfigChanged = false;
-            } catch (error) {
-                console.error('Failed to load stage config:', error);
-                this.currentStageConfig = {};
-            }
-        },
-
-        getStageModel(stage) {
-            return this.currentStageConfig[stage] || '';
-        },
-
-        setStageModel(stage, modelName) {
-            this.currentStageConfig[stage] = modelName || null;
-            this.stageConfigChanged = true;
-
-            // Save immediately or debounce?
-            this.saveStageConfig();
-        },
-
-        async saveStageConfig() {
-            try {
-                await window.api.put('/api/config/stages', this.currentStageConfig);
-                this.stageConfigChanged = false;
-                // Show success message
-                this.showToast('阶段配置已保存', 'success');
-            } catch (error) {
-                console.error('Failed to save stage config:', error);
-                this.showToast('保存失败，请重试', 'error');
-            }
-        },
-
-        getStageDisplayName(stage) {
-            const names = {
-                'chat': '对话生成',
-                'router': '知识库路由',
-                'rewriter': '查询重写',
-                'qa_indexing': 'QA索引生成',
-                'reranker': '重排序'
-            };
-            return names[stage] || stage;
-        },
-
-        getStageDescription(stage) {
-            const descriptions = {
-                'chat': '生成最终的对话回答',
-                'router': '决定查询应路由到哪些知识库',
-                'rewriter': '优化和重写用户查询',
-                'qa_indexing': '为文档生成问答对用于索引',
-                'reranker': '对检索结果进行重排序'
-            };
-            return descriptions[stage] || '';
-        },
-
-        getStageStatusClass(stage) {
-            const model = this.getStageModel(stage);
-            return model ? 'configured' : 'unconfigured';
-        },
-
-        getStageStatusText(stage) {
-            const model = this.getStageModel(stage);
-            return model ? '已配置' : '未配置';
+            Alpine.store('models').load();
         },
 
         showToast(message, type = 'info') {
@@ -117,13 +48,8 @@ function modelsPage() {
             return this.embForm.embedder_type === 'seekdb';
         },
 
-        // Stage configuration
-        stageConfigChanged: false,
-        currentStageConfig: {},
+        // Stage configuration removed
 
-        get availableStages() {
-            return ['chat', 'router', 'rewriter', 'qa_indexing', 'reranker'];
-        },
 
         get availableLLMs() {
             return Alpine.store('models').llms;
@@ -150,7 +76,7 @@ function modelsPage() {
                 this.llmForm.api_key = '';
                 this.llmForm.model = 'qwen2.5-7b-instruct';
                 this.llmForm.model_path = '';  // 留空，后端会使用默认路径
-            }  else {
+            } else {
                 this.llmForm.base_url = '';
                 this.llmForm.model = '';
                 this.llmForm.model_path = '';
@@ -188,7 +114,7 @@ function modelsPage() {
             // Defaults for local model
             if (payload.provider === 'local') {
                 // 总是使用默认路径和配置（优先使用小模型）
-                payload.model_path = "/home/yhh/models/qwen2-0_5b-instruct-q4_k_m.gguf";
+                payload.model_path = "~/models/qwen2-0_5b-instruct-q4_k_m.gguf";
                 payload.model = "qwen2-0_5b-instruct";
                 if (!payload.name) {
                     payload.name = "qwen-local";

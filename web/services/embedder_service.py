@@ -62,13 +62,32 @@ class EmbedderService:
         rag_kernel: RAGKernel,
         name: str
     ) -> EmbedderConfig | None:
-        """Set as default configuration (for backward compatibility)"""
+        """Set as default active configuration"""
         # Find target config
         statement = select(EmbedderConfig).where(EmbedderConfig.name == name)
         config = session.exec(statement).first()
+        
         if config:
-            # No longer enforce single active, just return the config
-            # This method is kept for backward compatibility
+            # Deactivate all others
+            all_configs = session.exec(select(EmbedderConfig)).all()
+            for c in all_configs:
+                c.is_active = False
+                session.add(c)
+            
+            # Activate target
+            config.is_active = True
+            session.add(config)
+            session.commit()
+            session.refresh(config)
+            
+            # Update kernel
+            rag_kernel.set_embedder(
+                config.embedder_type, 
+                config.model, 
+                config.base_url, 
+                config.api_key
+            )
+            
             return config
         return None
 
@@ -77,3 +96,14 @@ class EmbedderService:
         """List all Embedder configurations"""
         statement = select(EmbedderConfig)
         return list(session.exec(statement).all())
+
+    @staticmethod
+    def delete_config(session: Session, rag_kernel: RAGKernel, name: str) -> bool:
+        """Delete configuration"""
+        statement = select(EmbedderConfig).where(EmbedderConfig.name == name)
+        config = session.exec(statement).first()
+        if config:
+            session.delete(config)
+            session.commit()
+            return True
+        return False

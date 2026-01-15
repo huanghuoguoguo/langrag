@@ -121,7 +121,13 @@ Please provide the reranked indices (0-based) as a comma-separated list:
         """Format documents for the template."""
         formatted = []
         for i, result in enumerate(results):
-            content = result.chunk.content[:500]  # Limit content length
+            content = getattr(result, 'content', None)
+            if content is None and hasattr(result, 'chunk'):
+                content = getattr(result.chunk, 'content', '')
+            if content is None:
+                content = str(result)
+            
+            content = content[:500]  # Limit content length
             formatted.append(f"[{i}] {content}")
 
         return "\n".join(formatted)

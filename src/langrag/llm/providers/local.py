@@ -36,6 +36,12 @@ class LocalLLM(BaseLLM):
             logger.error(f"Failed to load LocalLLM: {e}")
             raise
 
+    @property
+    def model(self) -> str:
+        """Return the model name (filename)."""
+        import os
+        return os.path.basename(self.model_path)
+
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Not implemented for chat-optimized local models."""
         return []

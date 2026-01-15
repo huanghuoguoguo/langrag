@@ -7,3 +7,139 @@
 @import url('components/chat.css');
 @import url('components/config.css');
 @import url('components/playground.css');
+
+/* Message Footer & Actions */
+.message-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+}
+
+.relative-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Button Status Styles */
+.btn-status {
+    border-radius: 16px;
+    padding: 2px 10px;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background: transparent;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.btn-status:hover {
+    background: var(--bg-secondary);
+    color: var(--primary-color);
+    border-color: var(--primary-color-subtle);
+}
+
+.btn-status.active {
+    background: var(--primary-color-subtle);
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    font-weight: 500;
+}
+
+/* Unified Detail Panel (replaces retrieval-drawer for more generic use) */
+.detail-panel {
+    margin-top: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    width: 100%;
+    /* Ensure it takes full width of the container */
+    flex-basis: 100%;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.detail-panel-header {
+    font-weight: 600;
+    font-size: 0.9em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-primary);
+}
+
+.detail-content-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 0.9em;
+}
+
+/* Reuse drawer-sources-grid styles, ensuring they work within detail-panel */
+color: var(--text-secondary);
+line-height: 1.5;
+max-height: 200px;
+overflow-y: auto;
+}
+
+.chevron,
+.source-expand-icon {
+    font-size: 0.8em;
+    transition: transform 0.2s;
+    color: var(--text-muted);
+}
+
+.chevron.rotated,
+.source-expand-icon.rotated {
+    transform: rotate(180deg);
+}
+
+/* Add simple danger button style inline here for now */
+color: #ef4444;
+}
+
+.relative-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Ensure message footer items wrap nicely */
+.message-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+}
+
+/* Override btn-outline for status buttons to look like pills/buttons */
+.btn-status {
+    border-radius: 16px;
+    padding: 2px 10px;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}

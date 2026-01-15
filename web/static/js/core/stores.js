@@ -153,6 +153,30 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        async deleteEmbedder(name) {
+            try {
+                await api.deleteEmbedder(name);
+                showToast('Embedder 删除成功', 'success');
+                await this.load();
+                return true;
+            } catch (e) {
+                showToast(e.message, 'error');
+                return false;
+            }
+        },
+
+        async deleteLLM(name) {
+            try {
+                await api.deleteLLM(name);
+                showToast('LLM 删除成功', 'success');
+                await this.load();
+                return true;
+            } catch (e) {
+                showToast(e.message, 'error');
+                return false;
+            }
+        },
+
     });
 
     // Chat Store
@@ -213,9 +237,7 @@ document.addEventListener('alpine:init', () => {
 
                 // 优先显示 LLM 生成的答案，否则显示检索信息
                 let content = result.answer || result.message || `检索完成，找到 ${result.sources?.length || 0} 个相关文档`;
-                if (result.rewritten_query) {
-                    content += `\n\n(查询已重写为: "${result.rewritten_query}")`;
-                }
+
 
                 this.messages.push({
                     role: 'assistant',

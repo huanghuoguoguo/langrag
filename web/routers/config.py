@@ -201,126 +201,33 @@ def activate_embedder_config(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# ================= Stage Config =================
-
-@router.get("/stages")
-def get_stage_config(rag_kernel: RAGKernel = Depends(get_rag_kernel)):
-    """Get current stage configuration"""
-    try:
-        stage_config = rag_kernel.get_stage_config()
-        available_models = rag_kernel.get_available_models()
-
-        return {
-            "status": "ok",
-            "stages": stage_config,
-            "available_models": available_models,
-            "available_stages": rag_kernel.get_available_stages()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get stage config: {str(e)}")
-
-
-@router.put("/stages")
-def update_stage_config(
-    stage_updates: dict[str, str | None],
+@router.delete("/embedder/{name}")
+def delete_embedder_config(
+    name: str,
+    session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """Update stage configuration"""
+    """Delete an Embedder configuration"""
     try:
-        # Validate stages
-        available_stages = rag_kernel.get_available_stages()
-        invalid_stages = [stage for stage in stage_updates.keys() if stage not in available_stages]
-        if invalid_stages:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid stages: {invalid_stages}. Available: {available_stages}"
-            )
-
-        # Validate models (allow None for unconfigured)
-        available_models = rag_kernel.get_available_models()
-        for stage, model_name in stage_updates.items():
-            if model_name and model_name not in available_models:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Model '{model_name}' not available for stage '{stage}'. Available: {available_models}"
-                )
-
-        # Apply configuration
-        for stage, model_name in stage_updates.items():
-            rag_kernel.configure_stage(stage, model_name)
-
-        return {
-            "status": "ok",
-            "message": "Stage configuration updated successfully",
-            "updated_stages": list(stage_updates.keys())
-        }
-    except HTTPException:
-        raise
+        EmbedderService.delete_config(session, rag_kernel, name)
+        return {"status": "ok", "message": f"Deleted Embedder: {name}"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update stage config: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-
-@router.put("/stages/{stage}")
-def update_single_stage(
-    stage: str,
-    model_name: str | None = None,
+@router.delete("/llm/{name}")
+def delete_llm_config(
+    name: str,
+    session: Session = Depends(get_session),
     rag_kernel: RAGKernel = Depends(get_rag_kernel)
 ):
-    """Update a single stage configuration"""
+    """Delete an LLM configuration"""
     try:
-        # Validate stage
-        available_stages = rag_kernel.get_available_stages()
-        if stage not in available_stages:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid stage: {stage}. Available: {available_stages}"
-            )
-
-        # Validate model (allow None for unconfigured)
-        if model_name:
-            available_models = rag_kernel.get_available_models()
-            if model_name not in available_models:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Model '{model_name}' not available. Available: {available_models}"
-                )
-
-        # Apply configuration
-        rag_kernel.configure_stage(stage, model_name)
-
-        return {
-            "status": "ok",
-            "message": f"Stage '{stage}' configured successfully",
-            "stage": stage,
-            "model": model_name
-        }
-    except HTTPException:
-        raise
+        from web.services.llm_service import LLMService
+        LLMService.delete_config(session, rag_kernel, name)
+        return {"status": "ok", "message": f"Deleted LLM: {name}"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update stage '{stage}': {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/stages/info")
-def get_stage_info(rag_kernel: RAGKernel = Depends(get_rag_kernel)):
-    """Get detailed stage information"""
-    try:
-        from langrag.llm.stages import LLMStage
 
-        stages_info = {}
-        for stage in LLMStage.ALL_STAGES:
-            model_name = rag_kernel.model_manager.get_stage_model_name(stage)
-            stages_info[stage] = {
-                "display_name": LLMStage.STAGE_DESCRIPTIONS.get(stage, stage),
-                "description": LLMStage.STAGE_DESCRIPTIONS.get(stage, ""),
-                "model_name": model_name,
-                "is_configured": model_name is not None,
-                "is_required": stage in LLMStage.get_required_stages()
-            }
 
-        return {
-            "status": "ok",
-            "stages": stages_info,
-            "available_models": rag_kernel.get_available_models()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get stage info: {str(e)}")
