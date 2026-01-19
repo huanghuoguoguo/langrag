@@ -7,6 +7,10 @@ function chatPage() {
         input: '',
         selectedLLM: null,
 
+        // Agent 模式
+        useAgent: false,
+        agentMaxSteps: 5,
+
         // 检索配置
         useRerank: false,
         selectedReranker: '',
@@ -96,7 +100,10 @@ function chatPage() {
                 use_router: this.useRouter,
                 router_model: this.selectedRouter,
                 use_rewriter: this.useRewriter,
-                rewriter_model: this.selectedRewriter
+                rewriter_model: this.selectedRewriter,
+                // Agent 模式参数
+                use_agent: this.useAgent,
+                agent_max_steps: this.agentMaxSteps
             };
 
             await Alpine.store('chat').send(msg, this.selectedLLM, retrievalConfig);

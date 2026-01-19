@@ -232,7 +232,10 @@ document.addEventListener('alpine:init', () => {
                     use_router: retrievalConfig.use_router || false,
                     router_model: retrievalConfig.router_model || null,
                     use_rewriter: retrievalConfig.use_rewriter || false,
-                    rewriter_model: retrievalConfig.rewriter_model || null
+                    rewriter_model: retrievalConfig.rewriter_model || null,
+                    // Agent 模式参数
+                    use_agent: retrievalConfig.use_agent || false,
+                    agent_max_steps: retrievalConfig.agent_max_steps || 5
                 });
 
                 // 优先显示 LLM 生成的答案，否则显示检索信息
@@ -245,7 +248,10 @@ document.addEventListener('alpine:init', () => {
                     sources: result.sources || [],
                     question: input,
                     retrieval_stats: result.retrieval_stats,
-                    rewritten_query: result.rewritten_query
+                    rewritten_query: result.rewritten_query,
+                    // Agent 模式相关
+                    agent_trace: result.agent_trace || null,
+                    pipeline: result.pipeline || null
                 });
             } catch (e) {
                 showToast(e.message, 'error');

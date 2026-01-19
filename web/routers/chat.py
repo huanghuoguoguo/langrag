@@ -2,17 +2,17 @@
 
 import logging
 
-import langrag
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session
 
+import langrag
+from langrag.agent import create_retrieval_tool, run_agent
 from langrag.entities.dataset import Dataset
 from langrag.retrieval.rerank.factory import RerankerFactory
 from langrag.retrieval.rerank.providers.llm_template import LLMTemplateReranker
 from langrag.retrieval.rewriter.llm_rewriter import LLMRewriter
 from langrag.retrieval.router.llm_router import LLMRouter
-
 from web.core.database import get_session
 from web.core.rag_kernel import RAGKernel
 from web.services.kb_service import KBService
@@ -43,6 +43,11 @@ class ChatRequest(BaseModel):
     use_rewriter: bool = False
     rewriter_model: str | None = None
     top_k: int = 5
+
+    # Agent mode (Agentic RAG)
+    use_agent: bool = False
+    agent_max_steps: int = 5
+    agent_system_prompt: str | None = None
 
 
 class SourceItem(BaseModel):
@@ -138,6 +143,93 @@ async def chat(
                 except Exception as e:
                     logger.warning(f"[Chat] Failed to create reranker: {e}")
 
+        # Resolve LLM for generation
+        llm = None
+        if req.model_name:
+            llm = rag_kernel.model_manager.get_model(req.model_name)
+        if not llm:
+            chat_model = rag_kernel.stage_config.get("chat")
+            if chat_model:
+                llm = rag_kernel.model_manager.get_model(chat_model)
+
+        # =====================================================================
+        # AGENT MODE: LLM decides when/how to search
+        # =====================================================================
+        if req.use_agent and llm:
+            logger.info("[Chat] Using Agent mode (Agentic RAG)")
+
+            # Create retrieval tool with all pipeline components
+            tools = []
+            if stores:
+                retrieval_tool = create_retrieval_tool(
+                    vector_stores=stores,
+                    top_k=req.top_k,
+                    embedder=rag_kernel.embedder,
+                    reranker=reranker,
+                    rewriter=rewriter,
+                    router=kb_router,
+                    datasets=datasets,
+                )
+                tools.append(retrieval_tool)
+
+            # Build messages for agent
+            agent_messages = [
+                {"role": m.role, "content": m.content} for m in req.history
+            ]
+            agent_messages.append({"role": "user", "content": req.query})
+
+            # Run agent with trace
+            agent_result = await run_agent(
+                llm=llm,
+                tools=tools,
+                messages=agent_messages,
+                max_steps=req.agent_max_steps,
+                system_prompt=req.agent_system_prompt,
+                return_trace=True,  # Get full execution trace
+            )
+
+            # Convert trace to serializable format
+            trace_steps = []
+            for step in agent_result.steps:
+                step_data = {
+                    "step": step.step,
+                    "thought": step.thought,
+                    "elapsed_ms": round(step.elapsed_ms, 2),
+                    "tool_calls": [
+                        {
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                            "result": tc.result[:500] + "..." if len(tc.result) > 500 else tc.result,
+                            "error": tc.error,
+                            "elapsed_ms": round(tc.elapsed_ms, 2),
+                        }
+                        for tc in step.tool_calls
+                    ]
+                }
+                trace_steps.append(step_data)
+
+            return {
+                "query": req.query,
+                "rewritten_query": None,
+                "sources": [],
+                "pipeline": {
+                    "agent": {
+                        "enabled": True,
+                        "max_steps": req.agent_max_steps,
+                        "total_steps": agent_result.total_steps,
+                        "total_tool_calls": agent_result.total_tool_calls,
+                        "elapsed_ms": round(agent_result.total_elapsed_ms, 2),
+                        "finished_reason": agent_result.finished_reason,
+                    }
+                },
+                "agent_trace": trace_steps,
+                "answer": agent_result.answer,
+                "message": f"Agent mode - {agent_result.total_tool_calls} tool calls in {agent_result.total_steps} steps"
+            }
+
+        # =====================================================================
+        # STATIC RAG MODE: Fixed pipeline (search -> generate)
+        # =====================================================================
         # 4. Execute search via langrag API (if stores available)
         result_rewritten_query = None
         result_pipeline = {}
@@ -175,16 +267,8 @@ async def chat(
         else:
             logger.info("[Chat] No KB stores available, skipping retrieval")
 
-        # 6. Generate answer (if LLM available)
+        # 6. Generate answer (LLM already resolved above)
         answer = None
-        llm = None
-        if req.model_name:
-            llm = rag_kernel.model_manager.get_model(req.model_name)
-        if not llm:
-            chat_model = rag_kernel.stage_config.get("chat")
-            if chat_model:
-                llm = rag_kernel.model_manager.get_model(chat_model)
-
         if llm:
             if sources:
                 context_str = "\n\n".join([
@@ -203,7 +287,7 @@ async def chat(
                     *[{"role": m.role, "content": m.content} for m in req.history],
                     {"role": "user", "content": req.query}
                 ]
-            
+
             answer = llm.chat(messages=messages)
 
         return {
