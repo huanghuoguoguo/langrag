@@ -1,5 +1,7 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Awaitable
+from typing import Any
+
 
 @dataclass
 class Tool:
