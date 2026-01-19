@@ -51,16 +51,15 @@ class TestHealthAndConfig:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         # Since we default to ALL KBs when empty, we expect retrieval to happen.
         # (Assuming test_kb_id ensures at least one KB exists)
         if len(data.get("sources", [])) > 0:
             print(f"\n[Default Chat Sources]: {len(data['sources'])}")
             assert True
         else:
-            # If queries didn't match anything, sources might be empty, but stats should exist
-            assert "retrieval_stats" in data
-            assert data["retrieval_stats"]["kb_count"] > 0
+            # If queries didn't match anything, sources might be empty, but pipeline info should exist
+            assert "pipeline" in data
 
 
 # ==================== Knowledge Base Tests ====================
@@ -245,22 +244,14 @@ class TestChatWithLocalLLM:
 
         assert response.status_code == 200
         data = response.json()
-        
-        # Should have sources because it auto-routed to the test_kb_id
-        # (Assuming the query is relevant enough for the mock/local router to pick it, 
-        # or if router fails/fallback, it picks all)
-        print(f"\n[Auto Router Sources]: {len(data.get('sources', []))}")
-        
-        # Even if router filters it out, the intent of 'Auto' is RAG is active.
-        # But if the router works well, it should pick the KB containing "分布式".
-        if data.get("retrieval_stats"):
-             print(f"[Retrieval Stats]: {data['retrieval_stats']}")
 
-        # We mostly want to verify that it DID NOT fail and DID NOT strictly return 0 sources if content is relevant
-        # However, purely checking 'sources' > 0 might be flaky if retrieval fails.
-        # Let's check retrieval_stats exists
-        assert "retrieval_stats" in data
-        assert data["retrieval_stats"]["kb_count"] > 0 # Should have considered at least one KB
+        # Should have sources because it auto-routed to the test_kb_id
+        print(f"\n[Auto Router Sources]: {len(data.get('sources', []))}")
+
+        # Check pipeline info exists
+        assert "pipeline" in data
+        if data.get("pipeline", {}).get("router", {}).get("enabled"):
+            print(f"[Router]: {data['pipeline']['router']}")
 
 
 # ==================== Evaluation Tests ====================

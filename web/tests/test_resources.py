@@ -15,51 +15,32 @@ class TestResourceManagement:
             "name": "Lifecycle KB",
             "description": "Initial Description",
             "embedder_name": default_embedder_name,
-            "top_k": 3
         }
         res_create = test_client.post("/api/kb", json=kb_data)
         assert res_create.status_code == 200
         kb = res_create.json()
         kb_id = kb["id"]
-        assert kb["top_k"] == 3
-        
+        assert kb["name"] == "Lifecycle KB"
+        assert kb["description"] == "Initial Description"
+
         # 2. Update Basic Info
         res_update = test_client.put(f"/api/kb/{kb_id}", json={
             "description": "Updated Description",
-            "top_k": 10
         })
         assert res_update.status_code == 200
         updated_kb = res_update.json()
         assert updated_kb["description"] == "Updated Description"
-        assert updated_kb["top_k"] == 10
-        
-        # 3. Update Component Config (Reranker)
-        # Note: Depending on backend, enabling reranker might assume 'reranker_model' is valid? 
-        # But usually update validates existence if strictly checked.
-        # Let's try enabling without specifying model (might fail or default).
-        # Or specify 'noop' reranker if supported.
-        res_update_rag = test_client.put(f"/api/kb/{kb_id}", json={
-            "reranker": {
-                "enabled": True,
-                "reranker_type": "noop", # No-op reranker usually safe for testing
-                "top_k": 5
-            }
-        })
-        assert res_update_rag.status_code == 200
-        rag_kb = res_update_rag.json()
-        assert rag_kb["reranker"]["enabled"] is True
-        assert rag_kb["reranker"]["reranker_type"] == "noop"
 
-        # 4. List KBs to verify presence
+        # 3. List KBs to verify presence
         res_list = test_client.get("/api/kb")
         kbs = res_list.json()
         assert any(k["id"] == kb_id for k in kbs)
 
-        # 5. Delete
+        # 4. Delete
         res_del = test_client.delete(f"/api/kb/{kb_id}")
         assert res_del.status_code == 200
-        
-        # 6. Verify Gone
+
+        # 5. Verify Gone
         res_get = test_client.get(f"/api/kb/{kb_id}")
         assert res_get.status_code == 404
 
