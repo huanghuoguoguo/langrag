@@ -106,6 +106,10 @@ from .index_processor.splitter.providers.recursive_character import RecursiveCha
 from .llm.embedder.base import BaseEmbedder
 from .llm.embedder.factory import EmbedderFactory
 
+# Agent
+from . import agent
+
+
 # Retrieval Components
 from .retrieval.workflow import RetrievalWorkflow
 
@@ -193,6 +197,9 @@ __all__ = [
     # LLM
     "BaseEmbedder",
     "EmbedderFactory",
+
+    # Agent
+    "agent",
 
     # Data Source
     "BaseVector",

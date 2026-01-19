@@ -26,6 +26,14 @@ class BaseLLM(ABC):
         """
         pass
 
+    def chat_dict(self, messages: list[dict], **kwargs) -> dict:
+        """
+        Chat completion returning full message dict (for tool calls).
+        Default implementation wraps chat() result.
+        """
+        content = self.chat(messages, **kwargs)
+        return {"role": "assistant", "content": content}
+
     @abstractmethod
     def stream_chat(self, messages: list[dict], **kwargs):
         """
