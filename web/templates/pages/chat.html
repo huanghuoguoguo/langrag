@@ -14,6 +14,25 @@
                     </select>
                 </div>
 
+                <!-- Agent 模式 -->
+                <div class="form-group">
+                    <label class="checkbox-label" style="font-weight: 600;">
+                        <input type="checkbox" x-model="useAgent">
+                        <span>🤖 Agent 模式 (Agentic RAG)</span>
+                    </label>
+                    <div x-show="useAgent" class="config-hint" style="margin-top: 4px; padding: 8px; background: var(--bg-primary); border-radius: 6px; font-size: 0.85em;">
+                        <div style="color: var(--text-secondary); margin-bottom: 4px;">LLM 自主决定是否需要检索</div>
+                        <div class="config-row" style="margin-top: 8px;">
+                            <label class="config-label-small">最大步数:</label>
+                            <select x-model="agentMaxSteps" class="form-select-mini">
+                                <option value="3">3</option>
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 检索配置 -->
                 <div class="form-group">
                     <label>检索配置</label>
@@ -123,6 +142,19 @@
                             <!-- Message Footer: Actions & Details -->
                             <div class="message-footer" x-data="{ activeDetail: null }">
 
+                                <!-- 0. Agent Trace Button -->
+                                <template x-if="msg.agent_trace && msg.agent_trace.length > 0">
+                                    <button class="btn-sm btn-outline btn-status"
+                                        :class="{ 'active': activeDetail === 'agent' }"
+                                        @click="activeDetail = activeDetail === 'agent' ? null : 'agent'"
+                                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                                        <span>🤖</span>
+                                        <span x-text="msg.pipeline?.agent?.total_tool_calls + ' 次工具调用'"></span>
+                                        <span class="text-xs" x-show="activeDetail !== 'agent'">▼</span>
+                                        <span class="text-xs" x-show="activeDetail === 'agent'">▲</span>
+                                    </button>
+                                </template>
+
                                 <!-- 1. Retrieval Toggle Button (Sources) -->
                                 <template x-if="msg.retrieval_stats">
                                     <button class="btn-sm btn-outline btn-status"
@@ -183,6 +215,69 @@
                                 <!-- 6. UNIFIED DETAIL PANEL -->
                                 <template x-if="activeDetail">
                                     <div class="detail-panel" x-show="activeDetail" x-transition.opacity.duration.200ms>
+
+                                        <!-- CONTENT: Agent Trace -->
+                                        <div x-show="activeDetail === 'agent'">
+                                            <div class="detail-panel-header">
+                                                <span>🤖 Agent 执行轨迹</span>
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span class="text-xs text-muted" x-text="msg.pipeline?.agent?.elapsed_ms + 'ms'"></span>
+                                                    <button class="btn-icon text-muted" @click="activeDetail = null">✕</button>
+                                                </div>
+                                            </div>
+                                            <div style="display:flex; flex-direction:column; gap:12px;">
+                                                <template x-for="(step, stepIdx) in msg.agent_trace" :key="stepIdx">
+                                                    <div style="background:var(--bg-primary); border-radius:8px; padding:12px; border-left:3px solid var(--primary-color);">
+                                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                                            <span style="font-weight:600;">Step <span x-text="step.step"></span></span>
+                                                            <span class="text-xs text-muted" x-text="step.elapsed_ms + 'ms'"></span>
+                                                        </div>
+                                                        <!-- Thought -->
+                                                        <template x-if="step.thought">
+                                                            <div style="margin-bottom:8px; padding:8px; background:var(--bg-secondary); border-radius:6px; font-size:0.9em;">
+                                                                <div class="text-xs text-muted" style="margin-bottom:4px;">💭 思考</div>
+                                                                <div x-text="step.thought.substring(0, 200) + (step.thought.length > 200 ? '...' : '')"></div>
+                                                            </div>
+                                                        </template>
+                                                        <!-- Tool Calls -->
+                                                        <template x-for="(tc, tcIdx) in step.tool_calls" :key="tcIdx">
+                                                            <div style="margin-top:8px; padding:8px; background:linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); border-radius:6px;">
+                                                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                                                    <span style="font-weight:500; color:var(--primary-color);">
+                                                                        🔧 <span x-text="tc.name"></span>
+                                                                    </span>
+                                                                    <span class="text-xs text-muted" x-text="tc.elapsed_ms + 'ms'"></span>
+                                                                </div>
+                                                                <div class="text-xs" style="margin-top:4px; font-family:monospace; color:var(--text-secondary);">
+                                                                    参数: <span x-text="JSON.stringify(tc.arguments)"></span>
+                                                                </div>
+                                                                <template x-if="tc.error">
+                                                                    <div style="margin-top:4px; color:var(--error-color); font-size:0.85em;">
+                                                                        ❌ <span x-text="tc.error"></span>
+                                                                    </div>
+                                                                </template>
+                                                                <template x-if="!tc.error && tc.result">
+                                                                    <div x-data="{ showResult: false }" style="margin-top:4px;">
+                                                                        <button class="btn-sm btn-outline" @click="showResult = !showResult" style="font-size:0.75em; padding:2px 8px;">
+                                                                            <span x-text="showResult ? '隐藏结果' : '查看结果'"></span>
+                                                                        </button>
+                                                                        <div x-show="showResult" x-transition style="margin-top:8px; padding:8px; background:var(--bg-secondary); border-radius:4px; font-size:0.85em; max-height:200px; overflow-y:auto; white-space:pre-wrap;">
+                                                                            <span x-text="tc.result"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <!-- Summary -->
+                                            <div style="margin-top:12px; padding:8px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius:6px; color:white; font-size:0.85em; display:flex; justify-content:space-around;">
+                                                <span>✅ <span x-text="msg.pipeline?.agent?.finished_reason"></span></span>
+                                                <span>📊 <span x-text="msg.pipeline?.agent?.total_steps"></span> 步</span>
+                                                <span>🔧 <span x-text="msg.pipeline?.agent?.total_tool_calls"></span> 次调用</span>
+                                            </div>
+                                        </div>
 
                                         <!-- CONTENT: Sources -->
                                         <div x-show="activeDetail === 'sources'">

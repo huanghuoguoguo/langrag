@@ -1,6 +1,7 @@
 from typing import Any
 from langrag.llm.base import BaseLLM
 from loguru import logger
+import os
 
 class LLMFactory:
     """
@@ -61,16 +62,19 @@ class LLMFactory:
                 ]
 
                 model_path = config.get("model_path")
+                if model_path:
+                    model_path = os.path.expanduser(model_path)
+
                 if not model_path:
                     # Try smaller model first, then fallback to larger model
-                    import os
                     for path in DEFAULT_MODEL_PATHS:
-                        if os.path.exists(path):
-                            model_path = path
+                        expanded_path = os.path.expanduser(path)
+                        if os.path.exists(expanded_path):
+                            model_path = expanded_path
                             break
                     else:
                         # No model found, use first default and let it fail with clear error
-                        model_path = DEFAULT_MODEL_PATHS[0]
+                        model_path = os.path.expanduser(DEFAULT_MODEL_PATHS[0])
                         logger.warning(f"No local model found, will try: {model_path}")
 
                 logger.info(f"Loading local LLM from: {model_path}")

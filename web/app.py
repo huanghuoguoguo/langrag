@@ -46,21 +46,15 @@ async def lifespan(app: FastAPI):
     # Restore vector stores for existing knowledge bases
     logger.info("Restoring vector stores for existing knowledge bases...")
     from web.services.kb_service import KBService
-    from web.core.kb_retrieval_config import KBRetrievalConfig
 
     session_gen = get_session()
     session = next(session_gen)
     try:
         kbs = KBService.list_kbs(session)
         for kb in kbs:
-            # 恢复向量存储
+            # Restore vector store
             rag_kernel.create_vector_store(kb.kb_id, kb.collection_name, kb.vdb_type, name=kb.name)
             logger.info(f"Restored vector store for KB: {kb.kb_id} (type: {kb.vdb_type})")
-            
-            # 恢复 KB 级别的检索配置
-            retrieval_config = KBRetrievalConfig.from_kb_model(kb)
-            rag_kernel.set_kb_retrieval_config(retrieval_config)
-            logger.info(f"Restored retrieval config for KB: {kb.kb_id} (reranker={kb.reranker_enabled}, rewriter={kb.rewriter_enabled})")
 
         # Restore active Embedder
         from web.services.embedder_service import EmbedderService

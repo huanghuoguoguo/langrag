@@ -1,8 +1,41 @@
 """
 LangRAG - A modular Retrieval-Augmented Generation framework.
+
+High-Level API:
+    import langrag
+
+    # Index a document (one line)
+    result = await langrag.index_document("doc.pdf", store, embedder)
+
+    # Search with runtime model override
+    results = await langrag.search(
+        "What is RAG?",
+        [store],
+        embedder,
+        reranker=my_reranker  # Runtime injection
+    )
+
+    # Full RAG
+    answer = await langrag.rag("Question?", [store], llm, embedder)
 """
 
 __version__ = "0.2.0"
+
+# High-Level API (the main interface)
+from .api import (
+    # Async functions
+    index_document,
+    search,
+    rag,
+    # Sync wrappers
+    index_document_sync,
+    search_sync,
+    rag_sync,
+    # Result types
+    IndexResult,
+    RetrievalResult,
+    RAGResult,
+)
 
 # Entities
 from .datasource.service import RetrievalService
@@ -73,10 +106,25 @@ from .index_processor.splitter.providers.recursive_character import RecursiveCha
 from .llm.embedder.base import BaseEmbedder
 from .llm.embedder.factory import EmbedderFactory
 
+# Agent
+from . import agent
+
+
 # Retrieval Components
 from .retrieval.workflow import RetrievalWorkflow
 
 __all__ = [
+    # High-Level API
+    "index_document",
+    "search",
+    "rag",
+    "index_document_sync",
+    "search_sync",
+    "rag_sync",
+    "IndexResult",
+    "RetrievalResult",
+    "RAGResult",
+
     # Entities
     "Document",
     "DocumentType",
@@ -149,6 +197,9 @@ __all__ = [
     # LLM
     "BaseEmbedder",
     "EmbedderFactory",
+
+    # Agent
+    "agent",
 
     # Data Source
     "BaseVector",

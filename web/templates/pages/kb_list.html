@@ -33,10 +33,8 @@
                         <span class="badge success" x-show="kb.embedder_name" x-text="kb.embedder_name"></span>
                         <span class="badge" x-show="!kb.embedder_name">无 Embedder</span>
                         <span class="badge" x-text="'Chunk: ' + kb.chunk_size"></span>
-                        <!-- 检索配置标签 -->
-                        <span class="badge info" x-text="kb.search_mode || 'hybrid'"></span>
-                        <span class="badge warning" x-show="kb.reranker && kb.reranker.enabled">Rerank</span>
-                        <span class="badge warning" x-show="kb.rewriter && kb.rewriter.enabled">Rewrite</span>
+                        <span class="badge info" x-text="getIndexingName(kb.indexing_technique)"></span>
+                        <span class="badge warning" x-show="kb.indexing_llm_name" x-text="'LLM: ' + kb.indexing_llm_name"></span>
                     </div>
                 </div>
             </template>
@@ -45,7 +43,7 @@
 
     <!-- Create KB Modal -->
     <div class="modal" :class="{ active: showModal }" @click.self="showModal = false">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
                 <h2>创建知识库</h2>
                 <span class="modal-close" @click="showModal = false">&times;</span>
@@ -61,6 +59,12 @@
                     <label>描述</label>
                     <textarea x-model="form.description" rows="2" placeholder="关于该数据集的描述..."></textarea>
                 </div>
+
+                <!-- 离线/索引配置 -->
+                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">⚙️ 索引配置</h3>
+                <p class="form-hint" style="margin-bottom: 1rem;">
+                    ⚠️ 以下配置创建后不可修改，请谨慎选择
+                </p>
                 <div class="form-group">
                     <label>向量数据库 *</label>
                     <select x-model="form.vdb_type">
@@ -70,8 +74,7 @@
                         <option value="web_search">🌐 互联网搜索（实时联网）</option>
                     </select>
                     <p class="form-hint">
-                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文）<br>
-                        🌐 <strong>互联网搜索</strong> 使用 DuckDuckGo 实时搜索
+                        💡 <strong>SeekDB</strong> 支持混合检索（向量+全文）
                     </p>
                 </div>
                 <div class="form-group" x-show="!isWebSearch">
@@ -83,7 +86,38 @@
                             </option>
                         </template>
                     </select>
+                    <p class="form-hint">决定向量维度，创建后不可更改</p>
                 </div>
+
+                <!-- 索引策略 -->
+                <div class="form-group" x-show="!isWebSearch">
+                    <label>索引策略 *</label>
+                    <select x-model="form.indexing_technique">
+                        <option value="paragraph">📄 段落索引（默认）- 直接切分文档</option>
+                        <option value="qa">❓ QA 索引 - 生成问答对，需要 LLM</option>
+                        <option value="raptor">🌳 RAPTOR 索引 - 层级摘要，需要 LLM</option>
+                    </select>
+                    <p class="form-hint">
+                        💡 <strong>QA 索引</strong>：用 LLM 生成问答对，提高问答准确性<br>
+                        💡 <strong>RAPTOR 索引</strong>：构建层级摘要树，适合长文档理解
+                    </p>
+                </div>
+
+                <!-- LLM 选择（QA/RAPTOR 需要） -->
+                <div class="form-group" x-show="!isWebSearch && needsLLM" x-transition>
+                    <label>索引用 LLM *</label>
+                    <select x-model="form.indexing_llm_name">
+                        <option value="">请选择 LLM...</option>
+                        <template x-for="llm in llms" :key="llm.name">
+                            <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'">
+                            </option>
+                        </template>
+                    </select>
+                    <p class="form-hint">
+                        ⚠️ 用于离线生成问答对/摘要，会产生 LLM 调用费用
+                    </p>
+                </div>
+
                 <div class="form-row" x-show="!isWebSearch">
                     <div class="form-group">
                         <label>分块大小</label>
@@ -95,83 +129,9 @@
                     </div>
                 </div>
 
-                <!-- 检索配置 -->
-                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">🔍 检索配置</h3>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>搜索模式</label>
-                        <select x-model="form.search_mode">
-                            <option value="hybrid">混合搜索 (Hybrid)</option>
-                            <option value="vector">向量搜索 (Vector)</option>
-                            <option value="keyword">关键词搜索 (Keyword)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>返回结果数 (Top-K)</label>
-                        <input type="number" x-model.number="form.top_k" min="1" max="50" step="1">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>分数阈值 (0-1)</label>
-                    <input type="number" x-model.number="form.score_threshold" min="0" max="1" step="0.1">
-                    <p class="form-hint">低于此分数的结果将被过滤，0 表示不过滤</p>
-                </div>
-
-                <!-- Reranker 配置 -->
-                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
-                    🎯 Reranker 配置
-                    <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
-                        <input type="checkbox" x-model="form.reranker.enabled"> 启用
-                    </label>
-                </h3>
-                <div x-show="form.reranker.enabled" x-transition>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Reranker 类型</label>
-                            <select x-model="form.reranker.reranker_type">
-                                <option value="">请选择...</option>
-                                <option value="cohere">Cohere</option>
-                                <option value="qwen">Qwen (通义千问)</option>
-                                <option value="noop">NoOp (不重排)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>模型名称</label>
-                            <input type="text" x-model="form.reranker.model" placeholder="例如：rerank-english-v3.0">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>API Key</label>
-                            <input type="password" x-model="form.reranker.api_key" placeholder="Reranker API Key">
-                        </div>
-                        <div class="form-group">
-                            <label>Rerank Top-K</label>
-                            <input type="number" x-model.number="form.reranker.top_k" min="1" max="50" placeholder="默认使用检索 Top-K">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Rewriter 配置 -->
-                <h3 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">
-                    ✏️ Query Rewriter 配置
-                    <label style="font-weight: normal; font-size: 0.9rem; margin-left: 1rem;">
-                        <input type="checkbox" x-model="form.rewriter.enabled"> 启用
-                    </label>
-                </h3>
-                <div x-show="form.rewriter.enabled" x-transition>
-                    <div class="form-group">
-                        <label>使用的 LLM</label>
-                        <select x-model="form.rewriter.llm_name">
-                            <option value="">请选择 LLM...</option>
-                            <template x-for="llm in llms" :key="llm.name">
-                                <option :value="llm.name" x-text="llm.name + ' (' + llm.model + ')'">
-                                </option>
-                            </template>
-                        </select>
-                        <p class="form-hint">Query Rewriter 会使用 LLM 重写用户查询以提高检索质量</p>
-                    </div>
-                </div>
+                <p class="form-hint" style="margin-top: 1rem; padding: 0.75rem; background: var(--surface-secondary); border-radius: 4px;">
+                    💡 <strong>检索配置</strong>（Reranker、Rewriter、Router）在聊天时动态选择，无需在此配置
+                </p>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="showModal = false">取消</button>

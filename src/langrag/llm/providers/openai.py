@@ -207,8 +207,6 @@ class OpenAILLM(BaseLLM):
         start_time = time.time()
         try:
             result = _do_chat()
-            elapsed = time.time() - start_time
-
             logger.info(
                 f"[{request_id}] Chat completed: "
                 f"elapsed={elapsed:.2f}s, response_length={len(result)}"
@@ -222,6 +220,66 @@ class OpenAILLM(BaseLLM):
                 f"{type(e).__name__}: {e}"
             )
             raise
+
+    def chat_dict(self, messages: list[dict], **kwargs: Any) -> dict:
+        """
+        Chat completion returning full message dict with tool calls.
+        """
+        request_id = f"chat_{int(time.time() * 1000) % 100000}"
+        
+        @retry_with_backoff(config=self._retry_config)
+        def _do_chat() -> dict:
+            return self._execute_chat_dict(messages, request_id, **kwargs)
+
+        try:
+            return _do_chat()
+        except Exception:
+            raise
+
+    def _execute_chat_dict(
+        self,
+        messages: list[dict],
+        request_id: str,
+        **kwargs: Any
+    ) -> dict:
+        """Execute chat request returning full dict."""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.0),
+        }
+
+        if "max_tokens" in kwargs:
+            payload["max_tokens"] = kwargs["max_tokens"]
+
+        if "tools" in kwargs:
+            payload["tools"] = kwargs["tools"]
+        
+        if "tool_choice" in kwargs:
+            payload["tool_choice"] = kwargs["tool_choice"]
+
+        try:
+            response = httpx.post(
+                f"{self.base_url}chat/completions",
+                json=payload,
+                headers=self._get_headers(),
+                timeout=self._build_timeout()
+            )
+
+            if response.status_code >= 400:
+                self._handle_http_error(response, f"[{request_id}] chat")
+
+            response.raise_for_status()
+            data = response.json()
+
+            # Return the full message object
+            return data["choices"][0]["message"]
+
+        except Exception as e:
+            # Error handling same as before
+            raise e
+
+
 
     def _execute_chat(
         self,
@@ -243,6 +301,12 @@ class OpenAILLM(BaseLLM):
 
         if "max_tokens" in kwargs:
             payload["max_tokens"] = kwargs["max_tokens"]
+
+        if "tools" in kwargs:
+            payload["tools"] = kwargs["tools"]
+        
+        if "tool_choice" in kwargs:
+            payload["tool_choice"] = kwargs["tool_choice"]
 
         try:
             response = httpx.post(

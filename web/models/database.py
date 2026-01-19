@@ -6,39 +6,31 @@ from sqlmodel import Field, SQLModel
 
 
 class KnowledgeBase(SQLModel, table=True):
-    """Knowledge Base Metadata Table"""
+    """Knowledge Base Metadata Table
+
+    Only stores **offline/indexing** configuration that cannot be changed after creation.
+    Retrieval configuration (reranker, rewriter, top_k, etc.) is passed dynamically at query time.
+    """
     __tablename__ = "knowledge_bases"
 
     id: int | None = Field(default=None, primary_key=True)
     kb_id: str = Field(index=True, unique=True)  # Business ID
     name: str
     description: str | None = None
+
+    # ========== Offline/Indexing Configuration (Immutable after creation) ==========
     vdb_type: str = "chroma"  # chroma, duckdb, seekdb
     embedder_name: str | None = None  # Associated embedder configuration name
     collection_name: str  # Vector store collection name
-    indexing_technique: str = "high_quality"
+
+    # Indexing strategy: paragraph (default), qa, raptor
+    indexing_technique: str = "paragraph"
+    # LLM for QA/RAPTOR indexing (selected from LLM pool)
+    indexing_llm_name: str | None = None
+
     chunk_size: int = 500
     chunk_overlap: int = 50
-    
-    # ========== 检索配置 (Retrieval Configuration) ==========
-    # 搜索模式: "hybrid", "vector", "keyword"
-    search_mode: str = "hybrid"
-    # 默认返回结果数量
-    top_k: int = 5
-    # 分数阈值，低于此分数的结果将被过滤
-    score_threshold: float = 0.0
-    
-    # Reranker 配置
-    reranker_enabled: bool = False
-    reranker_type: str | None = None  # "cohere", "qwen", "noop" 等
-    reranker_model: str | None = None  # 具体模型名，如 "rerank-english-v3.0"
-    reranker_api_key: str | None = None  # Reranker API Key
-    reranker_top_k: int | None = None  # Rerank 后返回的数量，None 表示使用 top_k
-    
-    # Query Rewriter 配置
-    rewriter_enabled: bool = False
-    rewriter_llm_name: str | None = None  # 使用的 LLM 配置名称
-    
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
