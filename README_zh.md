@@ -1,3 +1,7 @@
+<div align="center">
+  <a href="README.md">English</a> | <a href="README_zh.md">中文</a>
+</div>
+
 <p align="center">
   <img src="docs/logo.svg" alt="LangRAG Logo" width="300"/>
 </p>
