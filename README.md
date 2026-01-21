@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="LangRAG Logo" width="200"/>
+  <img src="docs/logo.svg" alt="LangRAG Logo" width="300"/>
 </p>
 
 <h1 align="center">LangRAG</h1>
@@ -206,37 +206,35 @@ Visit: [http://localhost:8000](http://localhost:8000) for local docs.
 - [x] **OpenTelemetry**: Distributed tracing integration
 - [x] **API Documentation**: MkDocs-based comprehensive documentation
 
-### 🚀 v0.3 (Planned)
+### 🚀 v0.3 (In Progress)
+- [x] **Agents**: Tool-use and multi-step reasoning framework
+- [x] **RAPTOR**: Recursive Abstractive Processing for Tree-Organized Retrieval
 - [ ] **Graph RAG**: Knowledge graph integration
 - [ ] **Adaptive Retrieval**: Dynamic strategy selection based on query type
-- [ ] **Multi-Tenant**: Full tenant isolation with namespace support
 - [ ] **Evaluation Benchmark**: Built-in eval datasets (BEIR, MTEB)
 
 ### Future
-- [ ] **Docker**: Official Docker image and Compose file
 - [ ] **Multi-Modal**: Image and audio document support
-- [ ] **Agents**: Tool-use and multi-step reasoning
 - [ ] **Cloud Connectors**: S3, GCS, Azure Blob for document ingestion
 
 ---
 
 ## Comparison with Other RAG Frameworks
 
-| Feature | LangRAG | LangChain | LlamaIndex | Haystack |
+| Feature | LangRAG | LangChain | LlamaIndex | PowerRAG |
 |---------|---------|-----------|------------|----------|
-| **Focus** | RAG Kernel | General LLM Framework | Data Framework | Production Pipelines |
-| **Philosophy** | Inject, Don't Manage | All-in-one | Index-centric | Component-based |
-| **Parent-Child Indexing** | ✅ Built-in | ✅ Supported | ✅ Supported | ⚠️ Manual |
-| **QA Indexing** | ✅ Built-in | ⚠️ Chains | ✅ Supported | ⚠️ Nodes |
-| **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Pipelines |
-| **Hybrid Search** | ✅ DuckDB, SeekDB | ✅ Ensemble | ✅ External | ✅ External |
-| **Multi-Stage LLM** | ✅ Built-in | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
+| **Focus** | RAG Kernel | General LLM Framework | Data Framework | Production Platform |
+| **Philosophy** | Inject, Don't Manage | All-in-one | Index-centric | Service-Oriented (DB-centric) |
+| **Storage** | Flexible (DuckDB/SeekDB) | Agnostic | Agnostic | OceanBase (SQL+Vector) |
+| **Agentic Router** | ✅ LLM-powered | ✅ Chains | ✅ Router | ✅ Conversational |
+| **Parent-Child Indexing** | ✅ Built-in | ✅ Supported | ✅ Supported | ✅ Supported |
+| **RAA/RAPTOR** | ✅ Built-in | ⚠️ Manual | ✅ Supported | ⚠️ Manual |
+| **Hybrid Search** | ✅ DuckDB, SeekDB | ✅ Ensemble | ✅ External | ✅ OceanBase |
 | **Semantic Cache** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
-| **LLM Judge Evaluation** | ✅ Built-in | ⚠️ Integration | ✅ Built-in | ⚠️ Integration |
-| **OpenTelemetry** | ✅ Native | ⚠️ Partial | ⚠️ Partial | ✅ Native |
-| **Streaming** | ✅ Native SSE | ✅ Callbacks | ✅ Streaming | ✅ Streaming |
-| **Web Search Integration** | ✅ Multi-provider | ✅ Tools | ✅ Tools | ✅ Nodes |
-| **Lightweight** | ✅ ~3k LOC core | ❌ Large | ❌ Large | ⚠️ Medium |
+| **LLM Judge Evaluation** | ✅ Built-in | ⚠️ Integration | ✅ Built-in | ✅ Integration (Langfuse) |
+| **OpenTelemetry** | ✅ Native | ⚠️ Partial | ⚠️ Partial | ⚠️ Integration |
+| **Web Search Integration** | ✅ Multi-provider | ✅ Tools | ✅ Tools | ✅ Tools |
+| **Lightweight** | ✅ ~3k LOC core | ❌ Large | ❌ Large | ❌ Heavy (Docker Compose) |
 | **Type Safety** | ✅ Pydantic | ⚠️ Partial | ✅ Pydantic | ✅ Pydantic |
 
 ### Why Choose LangRAG?
