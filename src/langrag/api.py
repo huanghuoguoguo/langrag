@@ -9,6 +9,7 @@ Key Design Principles:
 2. **Runtime injection**: Models can be passed at call time, not just init time
 3. **Sensible defaults**: Works out of the box, customizable when needed
 4. **No boundary checks in app layer**: All validation happens here
+5. **Async-first**: All operations are async, with sync wrappers for convenience
 
 Example Usage:
     import langrag
@@ -104,6 +105,16 @@ def _get_parser(file_path: Path):
         return ParserFactory.create("simple_text")
 
 
+def _normalize_score(score: float) -> float:
+    """Normalize score to [0, 1] range for SearchResult."""
+    if score < 0:
+        return 0.0
+    if score > 1:
+        # For scores > 1 (e.g., BM25), normalize using sigmoid-like transform
+        return 1.0 - (1.0 / (1.0 + score))
+    return score
+
+
 # =============================================================================
 # High-Level API Functions
 # =============================================================================
@@ -160,17 +171,17 @@ async def index_document(
         chunks = await asyncio.to_thread(chunker.split, documents)
         logger.info(f"[index_document] Created {len(chunks)} chunks")
 
-        # Step 3: Embed (if embedder provided)
+        # Step 3: Embed (if embedder provided) - use async method
         if embedder and chunks:
             texts = [c.page_content for c in chunks]
-            vectors = await asyncio.to_thread(embedder.embed, texts)
+            vectors = await embedder.embed_async(texts)
             for chunk, vector in zip(chunks, vectors):
                 chunk.vector = vector
             logger.info(f"[index_document] Embedded {len(chunks)} chunks")
 
-        # Step 4: Store
+        # Step 4: Store - use async method
         if chunks:
-            await asyncio.to_thread(vector_store.add_texts, chunks)
+            await vector_store.add_texts_async(chunks)
             logger.info(f"[index_document] Stored {len(chunks)} chunks")
 
         elapsed = time.perf_counter() - start
@@ -202,6 +213,7 @@ async def search(
     datasets: Optional[List["Dataset"]] = None,
     top_k: int = 10,
     rerank_top_k: Optional[int] = None,
+    search_type: str = "similarity",
 ) -> RetrievalResult:
     """
     Search across vector stores with optional reranking and routing.
@@ -220,6 +232,7 @@ async def search(
         datasets: Dataset metadata for router (required if router is provided).
         top_k: Number of results to return.
         rerank_top_k: Number of results after reranking (defaults to top_k).
+        search_type: Search type: "similarity", "keyword", or "hybrid".
 
     Returns:
         RetrievalResult with search results and pipeline metadata.
@@ -256,14 +269,15 @@ async def search(
         "rewriter": {"enabled": False},
         "router": {"enabled": False},
         "reranker": {"enabled": False},
+        "search_type": search_type,
     }
 
-    # Step 1: Rewrite query (if rewriter provided)
+    # Step 1: Rewrite query (if rewriter provided) - use async method
     if rewriter:
         pipeline_info["rewriter"]["enabled"] = True
         pipeline_info["rewriter"]["model"] = getattr(rewriter, "__class__", type(rewriter)).__name__
         try:
-            rewritten_query = await asyncio.to_thread(rewriter.rewrite, query)
+            rewritten_query = await rewriter.rewrite_async(query)
             if rewritten_query and rewritten_query != query:
                 logger.info(f"[search] Rewrote query: '{query}' -> '{rewritten_query}'")
                 query = rewritten_query
@@ -274,14 +288,14 @@ async def search(
             logger.warning(f"[search] Rewrite failed: {e}, using original query")
             pipeline_info["rewriter"]["error"] = str(e)
 
-    # Step 2: Route to select stores (if router provided)
+    # Step 2: Route to select stores (if router provided) - use async method
     selected_stores = vector_stores
     if router and datasets:
         pipeline_info["router"]["enabled"] = True
         pipeline_info["router"]["model"] = getattr(router, "__class__", type(router)).__name__
         pipeline_info["router"]["total_count"] = len(datasets)
         try:
-            selected_datasets = await asyncio.to_thread(router.route, query, datasets)
+            selected_datasets = await router.route_async(query, datasets)
             selected_ids = {d.id for d in selected_datasets}
             # Map selected datasets back to stores
             # Assumes datasets and vector_stores have same order or matching IDs
@@ -300,32 +314,32 @@ async def search(
             logger.warning(f"[search] Routing failed: {e}, using all stores")
             pipeline_info["router"]["error"] = str(e)
 
-    # Step 3: Get query embedding
+    # Step 3: Get query embedding - use async method
     query_vector = None
     if embedder:
         try:
-            vectors = await asyncio.to_thread(embedder.embed, [query])
+            vectors = await embedder.embed_async([query])
             query_vector = vectors[0] if vectors else None
         except Exception as e:
             logger.warning(f"[search] Embedding failed: {e}")
 
-    # Step 4: Search selected stores
+    # Step 4: Search selected stores - use async method
     retrieve_top_k = top_k * 2 if reranker else top_k
     all_results: List[SearchResult] = []
 
     for store in selected_stores:
         try:
-            docs = await asyncio.to_thread(
-                store.search,
+            docs = await store.search_async(
                 query=query,
                 query_vector=query_vector,
-                top_k=retrieve_top_k
+                top_k=retrieve_top_k,
+                search_type=search_type
             )
             for doc in docs:
+                raw_score = doc.metadata.get("score", 0.0)
                 all_results.append(SearchResult(
-                    document=doc,
-                    score=doc.metadata.get("score", 0.0),
-                    source=store.collection_name,
+                    chunk=doc,
+                    score=_normalize_score(raw_score),
                 ))
         except Exception as e:
             logger.warning(f"[search] Search failed for {store.collection_name}: {e}")
@@ -334,15 +348,14 @@ async def search(
     all_results.sort(key=lambda x: x.score, reverse=True)
     all_results = all_results[:retrieve_top_k]
 
-    # Step 5: Rerank (if reranker provided)
+    # Step 5: Rerank (if reranker provided) - use async method
     if reranker and all_results:
         pipeline_info["reranker"]["enabled"] = True
         pipeline_info["reranker"]["model"] = getattr(reranker, "__class__", type(reranker)).__name__
         pipeline_info["reranker"]["input_count"] = len(all_results)
         try:
             final_top_k = rerank_top_k or top_k
-            all_results = await asyncio.to_thread(
-                reranker.rerank,
+            all_results = await reranker.rerank_async(
                 query=query,
                 results=all_results,
                 top_k=final_top_k
@@ -372,6 +385,7 @@ async def rag(
     reranker: Optional[BaseReranker] = None,
     rewriter: Optional[BaseRewriter] = None,
     top_k: int = 5,
+    search_type: str = "similarity",
 ) -> RAGResult:
     """
     Full RAG: retrieve relevant documents and generate an answer.
@@ -386,6 +400,7 @@ async def rag(
         reranker: Reranker model (optional).
         rewriter: Query rewriter (optional).
         top_k: Number of documents to use for context.
+        search_type: Search type: "similarity", "keyword", or "hybrid".
 
     Returns:
         RAGResult with answer and sources.
@@ -410,15 +425,16 @@ async def rag(
         reranker=reranker,
         rewriter=rewriter,
         top_k=top_k,
+        search_type=search_type,
     )
 
     # Step 2: Build context
     context_parts = []
     for i, r in enumerate(search_result.results[:top_k], 1):
-        context_parts.append(f"[{i}] {r.document.page_content}")
+        context_parts.append(f"[{i}] {r.chunk.page_content}")
     context = "\n\n".join(context_parts)
 
-    # Step 3: Generate
+    # Step 3: Generate - use async method
     prompt = f"""Based on the following context, answer the question.
 
 Context:
@@ -428,8 +444,7 @@ Question: {query}
 
 Answer:"""
 
-    answer = await asyncio.to_thread(
-        llm.chat,
+    answer = await llm.chat_async(
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -470,10 +485,11 @@ def search_sync(
     datasets: Optional[List["Dataset"]] = None,
     top_k: int = 10,
     rerank_top_k: Optional[int] = None,
+    search_type: str = "similarity",
 ) -> RetrievalResult:
     """Synchronous version of search."""
     return asyncio.run(search(
-        query, vector_stores, embedder, reranker, rewriter, router, datasets, top_k, rerank_top_k
+        query, vector_stores, embedder, reranker, rewriter, router, datasets, top_k, rerank_top_k, search_type
     ))
 
 
@@ -484,8 +500,9 @@ def rag_sync(
     embedder: Optional[BaseEmbedder] = None,
     reranker: Optional[BaseReranker] = None,
     top_k: int = 5,
+    search_type: str = "similarity",
 ) -> RAGResult:
     """Synchronous version of rag."""
     return asyncio.run(rag(
-        query, vector_stores, llm, embedder, reranker, top_k=top_k
+        query, vector_stores, llm, embedder, reranker, top_k=top_k, search_type=search_type
     ))
