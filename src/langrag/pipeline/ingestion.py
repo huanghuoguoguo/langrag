@@ -26,6 +26,7 @@ from langrag.entities.document import Document
 from langrag.datasource.kv.base import BaseKVStore
 from langrag.llm.base import BaseLLM
 from langrag.index_processor.extractor.factory import ParserFactory
+from langrag.index_processor.processor.page_index import PageIndexProcessor
 from langrag.pipeline.base import BasePipeline
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,9 @@ class IngestionPipeline(BasePipeline):
         
         elif indexing_technique == "parent_child":
             return self._process_parent_child(raw_docs, chunk_size, chunk_overlap)
+            
+        elif indexing_technique == "page_index":
+            return self._process_page_index(raw_docs)
         
         else:
             return self._process_high_quality(raw_docs, chunk_size, chunk_overlap)
@@ -212,3 +216,22 @@ class IngestionPipeline(BasePipeline):
         )
         processor.process(self.vector_store.dataset, docs)
         return len(docs) * 4 # Estimation
+
+    def _process_page_index(
+        self,
+        docs: list[Document]
+    ) -> int:
+        if not self.llm:
+            raise ValueError("LLM required for PageIndex")
+        
+        # Embedder is optional in PageIndexProcessor (can use LLM), 
+        # but Pipeline usually has it.
+        
+        processor = PageIndexProcessor(
+            llm=self.llm,
+            embedder=self.embedder,
+            vector_manager=self.vector_store
+        )
+        
+        processor.process(self.vector_store.dataset, docs)
+        return len(docs) * 5 # Estimation (Tree nodes + summaries)
