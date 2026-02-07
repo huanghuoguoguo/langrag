@@ -5,10 +5,27 @@ from typing import Any
 from loguru import logger
 
 from .base import BaseReranker
-from .providers.cohere import CohereReranker
-from .providers.llm_template import LLMTemplateReranker
 from .providers.noop import NoOpReranker
-from .providers.qwen import QwenReranker
+
+# Optional providers
+try:
+    from .providers.cohere import CohereReranker
+    COHERE_AVAILABLE = True
+except ImportError:
+    COHERE_AVAILABLE = False
+
+try:
+    from .providers.qwen import QwenReranker
+    QWEN_AVAILABLE = True
+except ImportError:
+    QWEN_AVAILABLE = False
+
+try:
+    from .providers.llm_template import LLMTemplateReranker
+    LLM_TEMPLATE_AVAILABLE = True
+except ImportError:
+    LLM_TEMPLATE_AVAILABLE = False
+
 
 
 class RerankerFactory:
@@ -20,10 +37,14 @@ class RerankerFactory:
 
     _registry: dict[str, type[BaseReranker]] = {
         "noop": NoOpReranker,
-        "qwen": QwenReranker,
-        "cohere": CohereReranker,
-        "llm_template": LLMTemplateReranker,
     }
+
+    if COHERE_AVAILABLE:
+        _registry["cohere"] = CohereReranker
+    if QWEN_AVAILABLE:
+        _registry["qwen"] = QwenReranker
+    if LLM_TEMPLATE_AVAILABLE:
+        _registry["llm_template"] = LLMTemplateReranker
 
     @classmethod
     def create(cls, reranker_type: str, **params: Any) -> BaseReranker:
