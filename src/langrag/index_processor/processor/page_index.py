@@ -24,28 +24,64 @@ from langrag.llm.base import BaseLLM
 logger = logging.getLogger(__name__)
 
 
+# ==================== Prompt Templates ====================
+
+DEFAULT_SUMMARIZE_PROMPT = """You are a document structure analyzer. Summarize the content below.
+
+Requirements:
+1. Keep the summary concise (2-4 sentences).
+2. Preserve key entities, numbers, and terminology.
+3. If the content is in Chinese, respond in Chinese; otherwise respond in English.
+4. Focus on WHAT information is covered, not how.
+
+Content:
+{content}
+
+Summary:"""
+
+DEFAULT_SUMMARIZE_PROMPT_ZH = """你是一个文档结构分析助手。请对以下内容进行摘要总结。
+
+要求：
+1. 摘要简洁，2-4句话即可。
+2. 保留关键实体、数字和专业术语。
+3. 聚焦于"涵盖了什么信息"，而非"如何阐述"。
+
+内容：
+{content}
+
+摘要："""
+
+
 @dataclass
 class PageIndexConfig:
     """Configuration for PageIndex processing."""
 
-    summarize_prompt: str = field(default_factory=lambda: (
-        "You are a helpful assistant. Please summarize the following content concisely.\n"
-        "Capture the main topics and key entities.\n"
-        "Content:\n{content}\n\nSummary:"
-    ))
-    """Prompt template for summarizing nodes."""
+    summarize_prompt: str = field(default_factory=lambda: DEFAULT_SUMMARIZE_PROMPT)
+    """Prompt template for summarizing nodes. Use {content} placeholder."""
+    
+    summarize_prompt_zh: str = field(default_factory=lambda: DEFAULT_SUMMARIZE_PROMPT_ZH)
+    """Chinese prompt template for summarizing nodes."""
+    
+    auto_detect_language: bool = True
+    """Automatically detect content language and use appropriate prompt."""
 
     max_summary_tokens: int = 500
     """Maximum tokens for summary generation."""
 
     max_concurrency: int = 5
     """Max concurrent LLM calls for summarization."""
+    
+    min_content_length_for_summary: int = 500
+    """Only generate LLM summary if content exceeds this length."""
 
     header_patterns: List[Tuple[str, int]] = field(default_factory=lambda: [
         (r"^#\s+(.*)", 1),
         (r"^##\s+(.*)", 2),
         (r"^###\s+(.*)", 3),
         (r"^####\s+(.*)", 4),
+        # Chinese Markdown variants (full-width)
+        (r"^#\u3000+(.*)", 1),
+        (r"^##\u3000+(.*)", 2),
     ])
     """Regex patterns to identify headers and their levels."""
 

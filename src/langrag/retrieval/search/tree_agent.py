@@ -128,13 +128,27 @@ class TreeAgentRetriever:
 
     async def _check_relevance(self, query: str, doc: Document) -> bool:
         """Use LLM to check if a document summary is relevant."""
-        prompt = (
-            f"Query: {query}\n"
-            f"Section Summary: {doc.page_content}\n\n"
-            "Is this section likely to contain the answer? Reply YES or NO."
-        )
+        # Bilingual prompt for relevance checking
+        prompt = f"""Determine if the section below is relevant to answering the query.
+判断下面的章节摘要是否与查询相关。
+
+Query / 查询: {query}
+
+Section Title: {doc.metadata.get('title', 'Unknown')}
+Section Summary: {doc.page_content[:500]}
+
+Is this section likely to contain information needed to answer the query?
+该章节是否可能包含回答查询所需的信息？
+
+Reply with only: YES or NO
+只需回复: YES 或 NO"""
+
         try:
             response = await self.llm.chat_async([{"role": "user", "content": prompt}])
-            return "YES" in response.upper()
-        except:
-            return True # Conservative fallback
+            is_relevant = "YES" in response.upper()
+            logger.debug(f"Relevance check for '{doc.metadata.get('title', 'N/A')}': {is_relevant}")
+            return is_relevant
+        except Exception as e:
+            logger.warning(f"Relevance check failed: {e}, assuming relevant")
+            return True  # Conservative fallback
+
