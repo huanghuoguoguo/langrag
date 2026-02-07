@@ -210,6 +210,91 @@ delay = min(
 | 云端 VDB | 100-500 | 受网络和配额限制 |
 | 内存受限 | 100-200 | 减少内存占用 |
 
+### 7.3 不同 Embedding 模型的优化建议
+
+#### OpenAI text-embedding-3-*
+
+```python
+config = BatchConfig(
+    embedding_batch_size=100,      # OpenAI 推荐批量大小
+    max_retries=5,                 # 应对 Rate Limit
+    retry_delay=1.0,
+    retry_max_delay=60.0,
+)
+```
+
+**性能参考：**
+- `text-embedding-3-small`: ~62,500 tokens/min (Tier 1)
+- `text-embedding-3-large`: ~62,500 tokens/min (Tier 1)
+- 建议：监控 `X-RateLimit-*` 响应头动态调整
+
+#### 本地模型 (Ollama/vLLM)
+
+```python
+config = BatchConfig(
+    embedding_batch_size=32,       # GPU 内存敏感
+    storage_batch_size=500,        # 本地存储无网络开销
+    max_retries=1,                 # 本地模型很少失败
+)
+```
+
+**GPU 内存估算：**
+- 384-dim 模型: ~1MB/100 texts
+- 1536-dim 模型: ~6MB/100 texts
+- 建议：`batch_size = GPU_MEM_GB * 100 / dim * 100`
+
+#### 云端 Embedding 服务 (Azure, Cohere, etc.)
+
+```python
+config = BatchConfig(
+    embedding_batch_size=50,       # 保守值，避免超时
+    max_retries=3,
+    retry_delay=2.0,               # 云服务可能需要更长恢复时间
+    continue_on_error=True,        # 大批量处理时容错
+)
+```
+
+### 7.4 大规模数据处理优化
+
+对于 100K+ 文档的场景：
+
+```python
+# 推荐配置
+config = BatchConfig(
+    embedding_batch_size=100,
+    storage_batch_size=1000,
+    continue_on_error=True,        # 不因单个失败中断
+    show_progress=True,
+)
+
+# 分段处理，定期保存进度
+CHUNK_SIZE = 10000
+for i in range(0, len(documents), CHUNK_SIZE):
+    chunk = documents[i:i+CHUNK_SIZE]
+    stats = processor.process_documents(chunk)
+    save_checkpoint(i + len(chunk), stats)
+```
+
+### 7.5 内存优化
+
+对于内存受限环境：
+
+```python
+config = BatchConfig(
+    embedding_batch_size=50,       # 减少内存峰值
+    storage_batch_size=100,        # 及时释放已处理文档
+)
+
+# 使用生成器避免一次性加载所有文档
+def document_generator():
+    for file_path in file_paths:
+        yield parse_document(file_path)
+
+# 分批处理
+for batch in batched(document_generator(), 1000):
+    processor.process_documents(list(batch))
+```
+
 ## 8. 扩展性
 
 ### 8.1 Async 支持 (待实现)
