@@ -1191,6 +1191,7 @@ all = [
     { name = "llvmlite" },
     { name = "lxml" },
     { name = "markdown" },
+    { name = "networkx" },
     { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
@@ -1202,10 +1203,23 @@ all = [
     { name = "umap-learn" },
 ]
 dev = [
+    { name = "aiosqlite" },
+    { name = "beautifulsoup4" },
+    { name = "chardet" },
+    { name = "chromadb" },
+    { name = "duckdb" },
+    { name = "httpx" },
+    { name = "lxml" },
+    { name = "markdown" },
     { name = "mypy" },
+    { name = "openai" },
+    { name = "pypdf" },
+    { name = "pyseekdb" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "python-docx" },
     { name = "ruff" },
 ]
 docs = [
@@ -1224,6 +1238,7 @@ full = [
     { name = "llvmlite" },
     { name = "lxml" },
     { name = "markdown" },
+    { name = "networkx" },
     { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
@@ -1233,6 +1248,9 @@ full = [
     { name = "python-docx" },
     { name = "scikit-learn" },
     { name = "umap-learn" },
+]
+graph = [
+    { name = "networkx" },
 ]
 llm = [
     { name = "httpx" },
@@ -1309,7 +1327,8 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'websearch'", specifier = ">=0.28.1" },
     { name = "langrag", extras = ["full", "local-llm"], marker = "extra == 'all'" },
     { name = "langrag", extras = ["parsers", "vectorstores", "llm", "reranker"], marker = "extra == 'standard'" },
-    { name = "langrag", extras = ["parsers", "vectorstores", "websearch", "llm", "reranker", "ml", "observability"], marker = "extra == 'full'" },
+    { name = "langrag", extras = ["parsers", "vectorstores", "websearch", "llm", "reranker", "ml", "observability", "graph"], marker = "extra == 'full'" },
+    { name = "langrag", extras = ["standard"], marker = "extra == 'dev'" },
     { name = "llama-cpp-python", marker = "extra == 'local-llm'", specifier = ">=0.2.23" },
     { name = "llvmlite", marker = "extra == 'ml'", specifier = ">=0.43.0" },
     { name = "loguru", specifier = ">=0.7.3" },
@@ -1319,6 +1338,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "networkx", marker = "extra == 'graph'", specifier = ">=3.2.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=2.14.0" },
     { name = "opentelemetry-api", marker = "extra == 'observability'", specifier = ">=1.20.0" },
@@ -1331,13 +1351,14 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12.0" },
     { name = "python-docx", marker = "extra == 'parsers'", specifier = ">=1.2.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.4.0" },
     { name = "umap-learn", marker = "extra == 'ml'", specifier = ">=0.5.7" },
 ]
-provides-extras = ["parsers", "vectorstores", "websearch", "llm", "reranker", "ml", "observability", "local-llm", "standard", "full", "all", "dev", "docs"]
+provides-extras = ["parsers", "vectorstores", "websearch", "llm", "reranker", "ml", "graph", "observability", "local-llm", "standard", "full", "all", "dev", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1945,6 +1966,15 @@ source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/a2/6e/371856a3fb9d31ca8dac321cda606860fa4548858c0cc45d9d1d4ca2628b/mypy_extensions-1.1.0.tar.gz", hash = "sha256:52e68efc3284861e772bbcd66823fde5ae21fd2fdb51c62a211403730b916558", size = 6343, upload-time = "2025-04-22T14:54:24.164Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl", hash = "sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505", size = 4963, upload-time = "2025-04-22T14:54:22.983Z" },
+]
+
+[[package]]
+name = "networkx"
+version = "3.6.1"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
 ]
 
 [[package]]
@@ -2882,6 +2912,18 @@ dependencies = [
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5e/f7/c933acc76f5208b3b00089573cf6a2bc26dc80a8aece8f52bb7d6b1855ca/pytest_cov-7.0.0.tar.gz", hash = "sha256:33c97eda2e049a0c5298e91f519302a1334c26ac65c1a483d6206fd458361af1", size = 54328, upload-time = "2025-09-09T10:57:02.113Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/ee/49/1377b49de7d0c1ce41292161ea0f721913fa8722c19fb9c1e3aa0367eecb/pytest_cov-7.0.0-py3-none-any.whl", hash = "sha256:3b8e9558b16cc1479da72058bdecf8073661c7f57f7d3c5f22a1c23507f2d861", size = 22424, upload-time = "2025-09-09T10:57:00.695Z" },
+]
+
+[[package]]
+name = "pytest-mock"
+version = "3.15.1"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/68/14/eb014d26be205d38ad5ad20d9a80f7d201472e08167f0bb4361e251084a9/pytest_mock-3.15.1.tar.gz", hash = "sha256:1849a238f6f396da19762269de72cb1814ab44416fa73a8686deac10b0d87a0f", size = 34036, upload-time = "2025-09-16T16:37:27.081Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5a/cc/06253936f4a7fa2e0f48dfe6d851d9c56df896a9ab09ac019d70b760619c/pytest_mock-3.15.1-py3-none-any.whl", hash = "sha256:0a25e2eb88fe5168d535041d09a4529a188176ae608a6d249ee65abc0949630d", size = 10095, upload-time = "2025-09-16T16:37:25.734Z" },
 ]
 
 [[package]]
