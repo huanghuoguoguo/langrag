@@ -60,6 +60,11 @@ ml = [
     "llvmlite>=0.43.0",
 ]
 
+# Graph RAG support
+graph = [
+    "networkx>=3.2.0",
+]
+
 # Observability (OpenTelemetry)
 observability = [
     "opentelemetry-api>=1.20.0",
@@ -80,7 +85,7 @@ standard = [
 
 # Full installation (all features except web)
 full = [
-    "langrag[parsers,vectorstores,websearch,llm,reranker,ml,observability]",
+    "langrag[parsers,vectorstores,websearch,llm,reranker,ml,observability,graph]",
 ]
 
 # Complete installation (everything including local_llm)
