@@ -1,5 +1,7 @@
 """Document entity representing a source document or a chunk."""
+
 from enum import StrEnum
+
 from typing import Any
 from uuid import uuid4
 
